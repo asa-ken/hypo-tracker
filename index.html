@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>仮説トラッカー プロトタイプ</title>
+<style>
+  :root{
+    --bg:#eef0f2; --app:#f7f8f9; --card:#ffffff; --line:#e2e5e8; --line2:#cbd0d5;
+    --ink:#1e2933; --ink2:#5a6672; --ink3:#8b95a1;
+    --navy:#123a5e; --navy-bg:#e8eff5; --navy-tx:#123a5e;
+    --amber-bg:#fbf0da; --amber-tx:#8a5a12;
+    --green-bg:#e5f1df; --green-tx:#356124;
+    --red-bg:#fbe6e4; --red-tx:#9c3329;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); font-family:"Hiragino Sans","Yu Gothic",system-ui,sans-serif; color:var(--ink); line-height:1.6;}
+  .phone{max-width:430px; margin:0 auto; min-height:100vh; background:var(--app); position:relative; display:flex; flex-direction:column;}
+  /* header */
+  .top{position:sticky; top:0; z-index:20; background:var(--app); border-bottom:1px solid var(--line); padding:14px 16px 10px; display:flex; align-items:center; justify-content:space-between;}
+  .top h1{font-size:17px; font-weight:700; margin:0; letter-spacing:.01em;}
+  .top .sub{font-size:11px; color:var(--ink3); font-weight:400;}
+  .top .act{font-size:13px; color:var(--navy); font-weight:600; cursor:pointer; border:none; background:none;}
+  /* scroll body */
+  .body{flex:1; overflow-y:auto; padding:14px 16px 90px;}
+  /* bottom tab */
+  .tabbar{position:sticky; bottom:0; z-index:20; background:var(--card); border-top:1px solid var(--line); display:flex; padding:6px 4px 8px;}
+  .tabbar button{flex:1; border:none; background:none; display:flex; flex-direction:column; align-items:center; gap:2px; padding:4px; cursor:pointer; color:var(--ink3); font-size:10px; font-weight:600;}
+  .tabbar button.on{color:var(--navy);}
+  .tabbar .ic{width:22px; height:22px; display:block;}
+  /* components */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:13px 14px; margin-bottom:11px;}
+  .card.tap{cursor:pointer;} .card.tap:active{background:#fafbfc;}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .chip{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:9px; white-space:nowrap;}
+  .chip.navy{background:var(--navy-bg); color:var(--navy-tx);}
+  .chip.amber{background:var(--amber-bg); color:var(--amber-tx);}
+  .chip.green{background:var(--green-bg); color:var(--green-tx);}
+  .chip.red{background:var(--red-bg); color:var(--red-tx);}
+  .chip.gray{background:var(--bg); color:var(--ink2); border:1px solid var(--line);}
+  .muted{color:var(--ink3); font-size:12px;}
+  .lbl{font-size:11px; color:var(--ink3); font-weight:600; text-transform:none; letter-spacing:.02em; margin:16px 0 7px;}
+  .lbl:first-child{margin-top:2px;}
+  h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--line2); background:var(--card); color:var(--ink); border-radius:9px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; width:100%;}
+  .btn:active{background:#f0f2f4;}
+  .btn.pri{background:var(--navy); border-color:var(--navy); color:#fff;}
+  .btn.sm{padding:7px 11px; font-size:12px; width:auto;}
+  .btn.ghost{border-color:transparent; color:var(--ink3);}
+  .btn.danger{color:var(--red-tx); border-color:var(--red-bg);}
+  input,textarea,select{width:100%; border:1px solid var(--line2); border-radius:9px; padding:10px 12px; font-size:14px; font-family:inherit; color:var(--ink); background:var(--card); margin-top:4px;}
+  textarea{resize:vertical; min-height:60px;}
+  textarea.mono{font-family:var(--mono); font-size:12px; line-height:1.6;}
+  label.fld{display:block; margin-bottom:11px;}
+  label.fld .t{font-size:12px; color:var(--ink2); font-weight:600;}
+  .seg{display:flex; border:1px solid var(--line2); border-radius:9px; overflow:hidden; margin-top:4px;}
+  .seg button{flex:1; border:none; background:var(--card); padding:8px; font-size:13px; color:var(--ink2); cursor:pointer; font-family:inherit; font-weight:600;}
+  .seg button.on{background:var(--navy); color:#fff;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:4px;}
+  th{text-align:left; font-size:10px; color:var(--ink3); font-weight:600; padding:4px 6px; border-bottom:1px solid var(--line);}
+  td{padding:6px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.5;}
+  .val-up{color:var(--green-tx); font-weight:700;}
+  .val-dn{color:var(--red-tx); font-weight:700;}
+  .val-old{color:var(--ink3); text-decoration:line-through;}
+  tr.newrow td{background:var(--green-bg);}
+  .metric{display:grid; grid-template-columns:1fr 1fr 1fr; gap:7px;}
+  .metric .m{background:var(--app); border:1px solid var(--line); border-radius:9px; padding:8px 9px;}
+  .metric .m .k{font-size:10px; color:var(--ink3);}
+  .metric .m .v{font-size:16px; font-weight:700; margin-top:1px;}
+  .metric .m .d{font-size:9px; color:var(--ink3); margin-top:1px;}
+  .metric .m.stale{background:var(--amber-bg); border-color:var(--amber-bg);}
+  .metric .m.stale .k,.metric .m.stale .v,.metric .m.stale .d{color:var(--amber-tx);}
+  .sec{border:1px solid var(--line); border-radius:9px; margin-bottom:7px; overflow:hidden;}
+  .sec .h{display:flex; justify-content:space-between; align-items:center; padding:9px 11px; cursor:pointer; font-size:13px; font-weight:600; background:var(--card);}
+  .sec .h .m{font-size:10px; color:var(--ink3); font-weight:400;}
+  .sec .b{display:none; padding:0 11px 10px; font-size:13px; color:var(--ink2);}
+  .sec.open .b{display:block;}
+  .mine{border-left:3px solid var(--navy); background:var(--navy-bg); border-radius:0 8px 8px 0; padding:9px 11px; margin-top:4px;}
+  .mine .row2{font-size:12px; color:var(--navy-tx);} .mine .ts{font-size:10px; color:var(--navy); opacity:.7;}
+  .empty{text-align:center; padding:40px 20px; color:var(--ink3);}
+  .empty .big{font-size:15px; font-weight:600; color:var(--ink2); margin-bottom:6px;}
+  /* modal */
+  .scrim{position:fixed; inset:0; background:rgba(20,30,40,.4); z-index:40; display:none; align-items:flex-end; justify-content:center;}
+  .scrim.show{display:flex;}
+  .sheet{background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto;}
+  .sheet h3{font-size:15px; font-weight:700; margin:2px 0 12px; text-align:center;}
+  .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:12.5px; padding:9px 16px; border-radius:20px; z-index:60; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90%; text-align:center;}
+  .toast.show{opacity:1;}
+  .hint{font-size:11px; color:var(--ink3); margin-top:4px; line-height:1.5;}
+  .failbox{background:var(--amber-bg); border-radius:9px; padding:9px 11px; margin-top:8px;}
+  .failbox .t{font-size:12px; color:var(--amber-tx); font-weight:700;}
+  .failbox .l{font-family:var(--mono); font-size:11px; color:var(--amber-tx); margin-top:3px; word-break:break-all;}
+  .pill-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;}
+  .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
+  .del{color:var(--red-tx); font-size:12px; cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="top">
+    <div><h1 id="topTitle">ホーム</h1><div class="sub" id="topSub"></div></div>
+    <button class="act" id="topAct" style="display:none"></button>
+  </div>
+  <div class="body" id="view"></div>
+  <div class="tabbar">
+    <button data-tab="home" class="on" onclick="go('home')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>ホーム</button>
+    <button data-tab="analysis" onclick="go('analysis')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3-4 3 2 4-6"/></svg>分析</button>
+    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>取込</button>
+    <button data-tab="reminder" onclick="go('reminder')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>リマインダー</button>
+  </div>
+</div>
+<div class="scrim" id="scrim" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+//////////////////// storage & seed ////////////////////
+const KEY='hypo_tracker_proto_v1';
+function load(){ try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null} }
+function save(){ localStorage.setItem(KEY, JSON.stringify(DB)); }
+function seed(){
+  return {
+    metricsMaster:{
+      snap:['PER(予想)','PBR','時価総額','配当利回り(予想)','信用倍率','目標株価コンセンサス'],
+      trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true}]
+    },
+    stocks:[
+      {id:'5803', name:'フジクラ', code:'5803', kind:'保有',
+       metrics:{'PER(予想)':{v:'36.2',unit:'',d:'2026/7/13',src:'銘柄スカウター',conf:'高'},
+                'PBR':{v:'14.79',unit:'',d:'2026/7/13',src:'銘柄スカウター',conf:'高'},
+                '時価総額':{v:'88883',unit:'百万円',d:'2026/7/13',src:'株予報Pro',conf:'高'},
+                '信用倍率':{v:'23.41',unit:'',d:'2026/7/10',src:'株探',conf:'中'}},
+       trend:{'売上高':{'25年3月期':'979375','26年3月期':'1182358','27年3月期(予)':'1462000',unit:'百万円'},
+              '営業利益':{'25年3月期':'135519','26年3月期':'188707','27年3月期(予)':'310000',unit:'百万円'},
+              'EPS':{'25年3月期':'55.1','26年3月期':'94.9','27年3月期(予)':'138.3',unit:'円'}},
+       sections:{'事業・ビジネスモデル':{t:'情報通信向け光ファイバ・ケーブル、自動車用電装品、電力ケーブルをグローバルに製造販売する非鉄メーカー。',d:'2026/7/13',src:'株予報Pro'},
+                 '成長ドライバー':{t:'データセンター・5G向け光通信需要、自動車電動化のワイヤハーネス、情報通信セグメント比率拡大とROE向上。',d:'2026/7/13',src:'株予報Pro'},
+                 'リスク要因':{t:'光ファイバ価格・原材料市況の変動、設備投資負担、為替・世界景気減速による需要調整。',d:'2026/7/13',src:'株予報Pro'},
+                 '競合ポジション':null},
+       mine:[{ts:'2026/7/12',t:'DC向け光ケーブルの需給が本丸。古河電工とのペアで見る。'}]
+      }
+    ],
+    hypotheses:[
+      {id:'h1', stockId:'5803', ver:2, text:'データセンター向け光ケーブル需要で高値更新が続く',
+       points:['DC事業者のCAPEX拡大継続','情報通信セグメントの利益率改善','古河電工との相対強さ'],
+       eventType:'date', eventDate:'2026/8/7', eventNote:'1Q決算', state:'検証待ち', judgeLog:[]}
+    ],
+    reminders:[
+      {id:'r1', stockId:'5803', title:'フジクラ需給・AI関連ニュース監視', comment:'決算後の需給変化とAI・DC関連報道を毎日チェック',
+       cat:'報道確認', freq:'平日', times:['09:15','15:30'], count:'60', paused:false,
+       changes:[{cond:'1Q決算 2026/8/7 になったら', freq:'毎日', times:'08:30,12:30,18:00', count:'30'}],
+       prompt:'フジクラ(5803)について、光ファイバ需給/AI・DC関連ニュース/信用残・出来高/同業(古河電工・住友電工)動向を重要度順に3〜6点で要約し、最後に注目度(高/中/低)を付けてください。',
+       src:'GPT', srcDate:'2026/7/13', log:[{d:'2026/7/11',type:'変化なし'}], nextFire:'2026/7/14 09:15'}
+    ]
+  };
+}
+let DB = load() || seed();
+
+//////////////////// helpers ////////////////////
+const $=(s,r=document)=>r.querySelector(s);
+const el=(h)=>{const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild;};
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function today(){return new Date();}
+function parseD(s){ if(!s)return null; const m=String(s).match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/); if(!m)return null; return new Date(+m[1],+m[2]-1,+m[3]); }
+function daysSince(s){ const d=parseD(s); if(!d)return 999; return Math.floor((today()-d)/86400000); }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function stock(id){return DB.stocks.find(s=>s.id===id);}
+function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
+function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
+function staleCount(s){ let n=0; DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m) n++; else if(daysSince(m.d)>30) n++;}); Object.keys(s.sections).forEach(k=>{const v=s.sections[k]; if(!v) n++; else if(daysSince(v.d)>90) n++;}); return n; }
+
+//////////////////// router ////////////////////
+let STATE={tab:'home', stockId:null};
+function go(tab){ STATE.tab=tab; STATE.stockId=null; document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab)); render(); $('#view').scrollTop=0; }
+function openStock(id){ STATE.stockId=id; render(); $('#view').scrollTop=0; }
+
+function render(){
+  const v=$('#view'); const act=$('#topAct'); act.style.display='none'; $('#topSub').textContent='';
+  if(STATE.stockId){ renderStockDetail(v); return; }
+  ({home:renderHome, analysis:renderAnalysis, import:renderImport, reminder:renderReminder}[STATE.tab])(v);
+}
+
+//////////////////// HOME ////////////////////
+function renderHome(v){
+  $('#topTitle').textContent='ホーム';
+  const act=$('#topAct'); act.style.display='block'; act.textContent='⚙ バックアップ'; act.onclick=sheetBackup;
+  const judge=DB.hypotheses.filter(h=>h.state==='判定待ち');
+  const risk=DB.hypotheses.filter(h=>h.state!=='決着' && h.warn);
+  const todayRem=DB.reminders.filter(r=>!r.paused);
+  const stale=DB.stocks.filter(s=>staleCount(s)>0);
+  let h='';
+  h+='<div class="lbl">対応が必要</div>';
+  if(risk.length) h+=`<div class="card tap" onclick="openStock('${risk[0].stockId}')"><div class="row"><span class="chip red">要注意の仮説 ${risk.length}</span></div><div style="margin-top:5px;font-size:13px">${esc(risk[0].text)}</div></div>`;
+  if(judge.length) h+=`<div class="card tap" onclick="go('analysis')"><div class="row"><span class="chip amber">判定待ち ${judge.length}</span></div><div style="margin-top:5px;font-size:13px">${esc(judge[0].text)}</div></div>`;
+  if(todayRem.length) h+=`<div class="card"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">☀ ブリーフをコピー</button></div><div style="margin-top:5px;font-size:13px">${esc(todayRem[0].title)} ほか</div></div>`;
+  if(stale.length) h+=`<div class="card tap" onclick="go('analysis')"><div class="row"><span class="chip gray">鮮度切れ ${stale.length}銘柄</span></div><div class="muted" style="margin-top:4px">そろそろ更新: ${stale.map(s=>esc(s.name)).join('、')}</div></div>`;
+  if(!risk.length&&!judge.length&&!todayRem.length&&!stale.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
+  // timeline
+  const items=[];
+  DB.reminders.filter(r=>!r.paused&&r.nextFire).forEach(r=>{const d=parseD(r.nextFire); if(d)items.push({d,label:r.title,type:'リマインダー',id:r.stockId});});
+  DB.hypotheses.forEach(hh=>{ if(hh.eventType==='date'&&hh.eventDate){const d=parseD(hh.eventDate); if(d)items.push({d,label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'検証イベント'),type:'検証イベント',id:hh.stockId});} });
+  items.sort((a,b)=>a.d-b.d);
+  h+='<div class="lbl">今週の予定</div>';
+  if(!items.length) h+='<div class="muted">予定はありません</div>';
+  items.slice(0,6).forEach(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
+    h+=`<div class="card tap" onclick="openStock('${it.id}')"><div class="row"><span style="font-size:13px;font-weight:600">${esc(it.label)}</span><span class="muted">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div><div class="muted" style="margin-top:2px">${it.type}</div></div>`; });
+  v.innerHTML=h;
+}
+
+//////////////////// ANALYSIS list ////////////////////
+let anaTab='保有';
+function renderAnalysis(v){
+  $('#topTitle').textContent='企業分析';
+  const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
+  let h=`<div class="seg">${['保有','ウォッチ'].map(k=>`<button class="${anaTab===k?'on':''}" onclick="anaTab='${k}';render()">${k}</button>`).join('')}</div>`;
+  const list=DB.stocks.filter(s=>s.kind===anaTab);
+  if(!list.length) h+=`<div class="empty"><div class="big">${anaTab}の銘柄はありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`;
+  list.forEach(s=>{ const sc=staleCount(s); const hy=hyposOf(s).filter(x=>x.state!=='決着').length; const jw=hyposOf(s).filter(x=>x.state==='判定待ち').length;
+    h+=`<div class="card tap" onclick="openStock('${s.id}')">
+      <div class="row"><h2 class="blk">${esc(s.name)}</h2>${sc?`<span class="chip amber">要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}</div>
+      <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span>${hy?`<span class="chip navy">仮説 ${hy}</span>`:''}</div>
+      ${jw?`<div class="muted" style="margin-top:4px;color:var(--amber-tx)">判定待ち ${jw}</div>`:''}
+    </div>`; });
+  v.innerHTML=h;
+}
+
+//////////////////// STOCK DETAIL ////////////////////
+function renderStockDetail(v){
+  const s=stock(STATE.stockId); if(!s){go('analysis');return;}
+  $('#topTitle').textContent=s.name;
+  $('#topSub').textContent=s.code+' · '+s.kind;
+  const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=()=>{STATE.stockId=null;render();};
+  const sc=staleCount(s); const hy=hyposOf(s);
+  let h='';
+  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}<span class="chip navy">仮説 ${hy.filter(x=>x.state!=='決着').length}</span></div>`;
+  // metrics
+  h+='<div class="metric">';
+  DB.metricsMaster.snap.slice(0,6).forEach(k=>{ const m=s.metrics[k]; const stale=m&&daysSince(m.d)>30; const miss=!m;
+    h+=`<div class="m ${stale||miss?'stale':''}"><div class="k">${esc(k)}</div><div class="v">${miss?'—':esc(m.v)+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.slice(5))+(stale?' 要更新':'')}</div></div>`; });
+  h+='</div>';
+  // trend
+  h+='<div class="lbl">業績推移</div>';
+  h+=renderTrend(s);
+  // sections
+  h+='<div class="lbl">分析</div>';
+  Object.keys(s.sections).forEach((k,i)=>{ const val=s.sections[k];
+    h+=`<div class="sec" id="sec${i}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(k)}</span><span class="m">${val?esc(val.d.slice(5))+' · '+esc(val.src):'未取得'}</span></div><div class="b">${val?esc(val.t):'<span style="color:var(--ink3)">未取得。発注プロンプトで取得できます。</span>'}</div></div>`; });
+  // mine
+  h+='<div class="lbl">自分の見解</div>';
+  h+='<div class="card" style="padding:11px">';
+  (s.mine||[]).forEach(m=>h+=`<div class="mine" style="margin-bottom:6px"><div class="ts">${esc(m.ts)}</div><div class="row2">${esc(m.t)}</div></div>`);
+  h+=`<button class="btn sm" style="margin-top:4px" onclick="sheetAddMine('${s.id}')">＋ 見解を追記</button></div>`;
+  // links
+  h+=`<button class="btn" style="margin-top:6px" onclick="openHypoList('${s.id}')">仮説カード (${hy.length})</button>`;
+  h+=`<button class="btn" style="margin-top:8px" onclick="STATE.remFilter='${s.id}';go('reminder')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
+  h+=`<button class="btn pri" style="margin-top:8px" onclick="sheetOrder('${s.id}')">発注プロンプトを生成</button>`;
+  v.innerHTML=h;
+}
+function renderTrend(s){
+  const tr=s.trend; const inds=DB.metricsMaster.trend.filter(t=>t.graph&&tr[t.name]);
+  const years=new Set(); Object.values(tr).forEach(o=>Object.keys(o).forEach(k=>{if(k!=='unit')years.add(k);}));
+  const ys=[...years];
+  let h='<div class="card" style="padding:11px 12px">';
+  // simple bar chart on first graph indicator
+  if(inds.length){ const first=tr[inds[0].name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
+    h+='<div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px">';
+    ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
+      h+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('年','\n年').split('\n')[0])}</div></div>`; });
+    h+='</div>'; h+=`<div class="muted" style="font-size:10px;margin-bottom:6px">${esc(inds[0].name)}(${esc(first.unit||'')}) · 点線=予想</div>`; }
+  // table
+  h+='<table><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
+  DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name]; if(!o)return;
+    h+=`<tr><td>${esc(t.name)}</td>`+ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(o[y]):'—'}</td>`).join('')+'</tr>'; });
+  h+='</table></div>';
+  return h;
+}
+
+//////////////////// IMPORT (parser) ////////////////////
+function renderImport(v){
+  $('#topTitle').textContent='取り込み';
+  let h='<div class="banner">外部AIで発注 → 回答を貼り付け → 検収して取り込み。まず「分析」で銘柄を開き発注プロンプトを生成してください。</div>';
+  h+='<label class="fld"><span class="t">外部AIのmd出力を貼り付け</span><textarea id="mdIn" class="mono" placeholder="# 銘柄: フジクラ (5803)&#10;## 指標&#10;- PER(予想): 36.2 | 2026/7/13 | 出典 | 高 ..." oninput="parseAndPreview()"></textarea></label>';
+  h+='<div id="parseOut"></div>';
+  v.innerHTML=h;
+}
+function parseMd(text){
+  // returns {stock:{name,code}, rows:[{block,key,value,d,src,conf,kind}], failed:[], type}
+  const lines=text.split(/\r?\n/); let block=null; const rows=[]; const failed=[]; let stk=null; let type='analysis';
+  for(let raw of lines){
+    let line=raw.replace(/\*\*/g,'').trim();
+    if(!line) continue;
+    let m;
+    if(m=line.match(/^#\s*銘柄[:：]\s*(.+?)\s*[\(（]([A-Za-z0-9]+)[\)）]/)){ stk={name:m[1].trim(),code:m[2].trim()}; continue; }
+    if(m=line.match(/^##\s*(.+)$/)){ const b=m[1].trim(); block=b; if(/リマインダー/.test(b))type='reminder'; continue; }
+    if(line.startsWith('#')) continue;
+    if(line.startsWith('-')){
+      let body=line.replace(/^-\s*/,'');
+      // key: value | d | src | conf   (labels like 出典: 確信度: tolerated)
+      let km=body.match(/^([^:：]+)[:：]\s*(.*)$/);
+      if(!km){ failed.push(raw.trim()); continue; }
+      let key=km[1].trim(); let rest=km[2].trim();
+      let parts=rest.split('|').map(x=>x.trim());
+      let value=parts[0]||'';
+      let d='',src='',conf='',unit='';
+      parts.slice(1).forEach(p=>{
+        if(/月期/.test(p)&&p.includes('=')){ value+=' | '+p; return; }
+        p=p.replace(/^(出典|確信度|基準日|単位)[:：]\s*/,'');
+        if(/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(p)||/^\d{1,2}\/\d{1,2}$/.test(p)) d=p;
+        else if(/^(高|中|低)$/.test(p)) conf=p;
+        else if(/^単位/.test(parts.find(x=>x.includes(p))||'')||/円|USD|ドル|\$|%/.test(p)&&p.length<8) unit=p.replace(/単位[:：]/,'');
+        else src=src?src+' / '+p:p;
+      });
+      // unit split from value like "36.2倍" -> keep number
+      let um=value.match(/^([\d,\.\-]+)\s*(億円|百万円|百万USD|円|倍|%|USD|\$[BM]?)?/);
+      if(um&&um[2]&&!unit){ unit=um[2]; value=um[1]; }
+      // date-ok check
+      if(d&&!parseD(d.length<=5?('2026/'+d):d) && !/^\d{1,2}\/\d{1,2}$/.test(d)){ /* keep */ }
+      rows.push({block,key,value,d,src,conf,unit, raw:raw.trim()});
+    } else { failed.push(raw.trim()); }
+  }
+  return {stock:stk, rows, failed, type};
+}
+function parseAndPreview(){
+  const text=$('#mdIn').value; const out=$('#parseOut');
+  if(!text.trim()){ out.innerHTML=''; return; }
+  const p=parseMd(text);
+  let h='';
+  if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で取り込んでください(このプロトタイプでは分析取込のみ実装)。</div>'; return; }
+  if(p.stock){ const known=stock(p.stock.code);
+    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?'銘柄: '+esc(p.stock.name)+' を検出':'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
+    if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>新規銘柄として登録</button>`; }
+  } else { h+='<div class="pill-row" style="margin:4px 0 8px"><span class="chip red">銘柄を特定できません(先頭に # 銘柄: 名称 (コード) が必要)</span></div>'; }
+  // diff table
+  if(p.rows.length){
+    const s=p.stock?stock(p.stock.code):null;
+    h+='<div class="lbl">取り込みプレビュー</div><table><tr><th>項目</th><th>更新前</th><th>更新後</th></tr>';
+    p.rows.forEach((r,i)=>{
+      let before='—';
+      if(s){ if(r.block&&/指標/.test(r.block)&&s.metrics[r.key]) before=s.metrics[r.key].v;
+             else if(r.block&&/分析/.test(r.block)&&s.sections[r.key]) before='(既存)'; }
+      const isNew=before==='—';
+      const cls=isNew?'newrow':'';
+      let after=esc(r.value)+(r.unit?` <span class="muted">${esc(r.unit)}</span>`:'');
+      let confb=r.conf==='低'?' <span class="chip gray" style="font-size:9px">低</span>':'';
+      h+=`<tr class="${cls}"><td>${esc(r.key)}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}</div></td><td class="val-old">${esc(before)}</td><td>${after}</td></tr>`;
+    });
+    h+='</table>';
+    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${p.rows.length}件を取り込む</button>`;
+    window._parsed=p;
+  }
+  if(p.failed.length){
+    h+=`<div class="failbox"><div class="t">読めなかった行 (${p.failed.length})</div>`;
+    p.failed.forEach(l=>h+=`<div class="l">${esc(l)}</div>`);
+    h+=`<button class="btn sm" style="margin-top:8px" onclick="copyReformat()">整形しなおすプロンプトをコピー</button></div>`;
+    window._failed=p.failed;
+  }
+  out.innerHTML=h;
+}
+function commitImport(){
+  const p=window._parsed; if(!p||!p.stock){toast('銘柄が特定できません');return;}
+  const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
+  let hyp=null;
+  p.rows.forEach(r=>{
+    if(/指標/.test(r.block||'')){ s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'}; }
+    else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o; }
+    else if(/分析/.test(r.block||'')){ s.sections[r.key]={t:r.value,d:normD(r.d),src:r.src||'AI'}; }
+    else if(/仮説/.test(r.block||'')){ if(r.key==='仮説'){hyp=hyp||{}; hyp.text=r.value;} if(/検証ポイント/.test(r.key)){hyp=hyp||{}; hyp.points=r.value.split('|').map(x=>x.trim());} if(/検証イベント/.test(r.key)){hyp=hyp||{}; hyp.event=r.value;} }
+  });
+  save();
+  toast(p.rows.length+'件を取り込みました');
+  $('#mdIn').value=''; $('#parseOut').innerHTML='';
+  openStock(s.id);
+}
+function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
+function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
+function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null},mine:[]}); save(); toast('登録しました'); parseAndPreview(); }
+
+//////////////////// REMINDER ////////////////////
+function renderReminder(v){
+  $('#topTitle').textContent='リマインダー';
+  const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 登録'; act.onclick=sheetAddReminder;
+  const filt=STATE.remFilter; STATE.remFilter=null;
+  let list=DB.reminders; if(filt) list=list.filter(r=>r.stockId===filt);
+  let h='';
+  if(filt) h+=`<div class="banner">${esc(stock(filt)?.name||'')} のリマインダーを表示中 · <span style="text-decoration:underline;cursor:pointer" onclick="go('reminder')">すべて表示</span></div>`;
+  const active=list.filter(r=>!r.paused), paused=list.filter(r=>r.paused);
+  if(active.length){ h+='<div class="lbl">有効</div>';
+    active.forEach(r=>{ h+=remCard(r); }); }
+  if(!list.length) h+='<div class="empty"><div class="big">リマインダーはありません</div><div>右上の「＋ 登録」から作成できます。</div></div>';
+  if(paused.length){ h+='<div class="lbl">休止中</div>'; paused.forEach(r=>h+=remCard(r)); }
+  v.innerHTML=h;
+}
+function remCard(r){
+  const cat={'テクニカル':'navy','報道確認':'gray','決算プレビュー':'amber','需給確認':'red'}[r.cat]||'gray';
+  return `<div class="card tap" onclick="openReminder('${r.id}')">
+    <div class="row"><span class="chip ${cat}">${esc(r.cat)}</span><span class="muted">${esc(r.freq)} ${esc((r.times||[]).join(','))}</span></div>
+    <h2 class="blk" style="margin-top:5px">${esc(r.title)}</h2>
+    <div class="muted" style="margin-top:2px">${esc(stock(r.stockId)?.name||'')} · ${r.paused?'休止中':'次回 '+esc(r.nextFire||'—')}</div>
+  </div>`;
+}
+function openReminder(id){
+  const r=DB.reminders.find(x=>x.id===id);
+  let h=`<h3>${esc(r.title)}</h3>`;
+  h+=`<div class="card"><div class="pill-row"><span class="chip navy">${esc(r.cat)}</span><span class="chip gray">${esc(stock(r.stockId)?.name||'')}</span></div>
+    <div class="muted" style="margin-top:6px">${esc(r.freq)} ${esc((r.times||[]).join(', '))} · 回数 ${esc(r.count||'上限なし')}</div>
+    ${(r.changes||[]).map(c=>`<div class="muted" style="margin-top:3px">頻度変更: ${esc(c.cond)} → ${esc(c.freq)} ${esc(c.times||'')}</div>`).join('')}
+    <div class="muted" style="margin-top:3px">作: ${esc(r.src||'手動')} ${esc(r.srcDate||'')}</div></div>`;
+  if(r.prompt){ h+=`<div class="card"><div class="lbl" style="margin-top:0">リマインド時に外部AIへ指示するプロンプト</div><div class="muted mono" style="font-size:11px;white-space:pre-wrap">${esc(r.prompt.slice(0,80))}…</div><button class="btn sm" style="margin-top:8px" onclick='copy(${JSON.stringify(r.prompt)},"プロンプトをコピーしました")'>⧉ コピー</button></div>`; }
+  h+='<div class="lbl">経過の記録</div><div class="row" style="gap:8px">';
+  h+=`<button class="btn" onclick="logRem('${r.id}','変化なし')">変化なし(記録)</button><button class="btn" onclick="toast('プロトタイプでは結果貼付は簡略化')">結果を貼り付け</button></div>`;
+  h+='<div class="lbl">経過履歴</div><div class="card" style="padding:11px">'+(r.log||[]).map(l=>`<div class="muted">${esc(l.d)} · ${esc(l.type)}</div>`).join('')+'</div>';
+  h+='<div class="row" style="gap:8px;margin-top:10px">';
+  h+=`<button class="btn sm" onclick="togglePause('${r.id}')">${r.paused?'再開':'休止'}</button><button class="btn sm danger" onclick="delReminder('${r.id}')">削除</button></div>`;
+  openSheet(h);
+}
+function logRem(id,type){ const r=DB.reminders.find(x=>x.id===id); r.log.unshift({d:fmtToday(),type}); save(); closeSheet(); toast('記録しました'); }
+function togglePause(id){ const r=DB.reminders.find(x=>x.id===id); r.paused=!r.paused; save(); closeSheet(); render(); toast(r.paused?'休止しました':'再開しました'); }
+function delReminder(id){ if(!confirm('削除しますか?経過履歴も削除されます'))return; DB.reminders=DB.reminders.filter(x=>x.id!==id); save(); closeSheet(); render(); toast('削除しました'); }
+function fmtToday(){ const d=today(); return `2026/${d.getMonth()+1}/${d.getDate()}`; }
+
+//////////////////// HYPO ////////////////////
+function openHypoList(sid){
+  const list=hyposOf(sid);
+  let h='<h3>仮説カード</h3>';
+  if(!list.length) h+='<div class="empty"><div class="big">仮説はまだありません</div><div>外部AIの分析から取り込むか、手動で作成できます。</div></div>';
+  list.forEach(hh=>{ const stcls={'検証待ち':'navy','判定待ち':'amber','決着':'gray'}[hh.state]||'navy';
+    h+=`<div class="card"><div class="row"><span class="chip gray">v${hh.ver}</span><span class="chip ${stcls}">${esc(hh.state)}</span></div>
+      <div style="margin-top:6px;font-size:14px;font-weight:600">${esc(hh.text)}</div>
+      <div class="lbl" style="margin:8px 0 4px">検証ポイント</div>
+      ${hh.points.map(p=>`<div class="muted">・${esc(p)}</div>`).join('')}
+      <div class="muted" style="margin-top:6px">イベント: ${esc(hh.eventDate||hh.eventNote||'—')} ${hh.eventNote?'('+esc(hh.eventNote)+')':''}</div>
+      ${hh.state==='判定待ち'?`<button class="btn sm pri" style="margin-top:8px" onclick="toast('判定登録は簡略化(結果種別+検証テキスト)')">判定を登録</button>`:''}
+    </div>`; });
+  h+='<button class="btn" style="margin-top:6px" onclick="toast(\'仮説作成は簡略化\')">＋ 仮説を作成</button>';
+  openSheet(h);
+}
+
+//////////////////// SHEETS ////////////////////
+function openSheet(html){ $('#sheet').innerHTML=html; $('#scrim').classList.add('show'); }
+function closeSheet(){ $('#scrim').classList.remove('show'); }
+function sheetAddStock(){
+  openSheet(`<h3>銘柄を追加</h3>
+    <label class="fld"><span class="t">銘柄名</span><input id="as_name" placeholder="例: 古河電気工業"></label>
+    <label class="fld"><span class="t">ティッカー / 証券コード</span><input id="as_code" placeholder="例: 5801 / PLTR"></label>
+    <label class="fld"><span class="t">区分</span><div class="seg"><button class="on" id="as_hold" onclick="this.classList.add('on');this.nextElementSibling.classList.remove('on')">保有</button><button id="as_watch" onclick="this.classList.add('on');this.previousElementSibling.classList.remove('on')">ウォッチ</button></div></label>
+    <button class="btn pri" onclick="doAddStock(true)">追加して発注プロンプトを生成</button>
+    <button class="btn" style="margin-top:8px" onclick="doAddStock(false)">追加のみ</button>`);
+}
+function doAddStock(order){
+  const name=$('#as_name').value.trim(), code=$('#as_code').value.trim();
+  if(!name||!code){toast('銘柄名とコードは必須です');return;}
+  if(stock(code)){toast('このコードは登録済みです');return;}
+  const kind=$('#as_hold').classList.contains('on')?'保有':'ウォッチ';
+  DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null},mine:[]});
+  save(); closeSheet(); anaTab=kind; 
+  if(order){ openStock(code); sheetOrder(code); } else { openStock(code); }
+  toast('追加しました');
+}
+function sheetAddMine(sid){
+  openSheet(`<h3>見解を追記</h3><label class="fld"><span class="t">自分の判断・違和感・次に見るポイント</span><textarea id="mine_t" placeholder="AI分析とは分けて保存されます"></textarea></label><button class="btn pri" onclick="doAddMine('${sid}')">追記する</button>`);
+}
+function doAddMine(sid){ const t=$('#mine_t').value.trim(); if(!t){toast('内容を入力してください');return;} const s=stock(sid); s.mine.unshift({ts:fmtToday(),t}); save(); closeSheet(); render(); toast('見解を追記しました'); }
+function sheetOrder(sid){
+  const s=stock(sid); const need=[];
+  DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
+  Object.keys(s.sections).forEach(k=>{if(!s.sections[k])need.push(k);});
+  const prompt=buildOrderPrompt(s,need);
+  openSheet(`<h3>発注プロンプト</h3><div class="muted" style="margin-bottom:8px">要更新・未取得の ${need.length}項目を外部AIに発注します。</div>
+    <textarea class="mono" style="min-height:200px" readonly>${esc(prompt)}</textarea>
+    <button class="btn pri" style="margin-top:10px" onclick='copy(${JSON.stringify(prompt)},"発注プロンプトをコピーしました")'>コピーして外部AIへ</button>`);
+}
+function buildOrderPrompt(s,need){
+  const snapNeed=need.filter(k=>DB.metricsMaster.snap.includes(k));
+  const secNeed=need.filter(k=>!DB.metricsMaster.snap.includes(k));
+  let p=`以下の項目を調査し、指定フォーマットで回答してください。\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。1キーにつき1行。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ。金額の単位は「単位:◯◯」欄に開示慣行の単位で明記(時価総額など金額指標も)\n・決算期は「yy年mm月期」表記、予想は(予)\n\n# 銘柄: ${s.name} (${s.code})\n`;
+  if(snapNeed.length){ p+='\n## 指標\n'+snapNeed.map(k=>`- ${k}: `).join('\n'); }
+  p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(t=>t.name).join(' / ')+' を年度ごとに。';
+  if(secNeed.length){ p+='\n\n## 分析\n'+secNeed.map(k=>`- ${k}: `).join('\n'); }
+  p+='\n\n## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
+  return p;
+}
+function sheetAddReminder(){
+  openSheet(`<h3>リマインダー登録</h3>
+    <div class="muted" style="margin-bottom:10px">外部AIに設計させる場合は登録用プロンプトをコピーし、回答を貼り付けます。</div>
+    <label class="fld"><span class="t">対象銘柄</span><select id="rm_stock">${DB.stocks.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
+    <label class="fld"><span class="t">補足メモ(任意)</span><textarea id="rm_memo" placeholder="監視の狙い・保有状況・警戒条件など"></textarea></label>
+    <button class="btn" onclick="copyRegPrompt()">登録用プロンプトをコピー</button>
+    <label class="fld" style="margin-top:12px"><span class="t">外部AIの出力(md)を貼り付け</span><textarea id="rm_md" class="mono" placeholder="## リマインダー ..."></textarea></label>
+    <button class="btn pri" onclick="parseReminder()">解析して登録</button>`);
+}
+function copyRegPrompt(){
+  const sid=$('#rm_stock').value; const s=stock(sid); const memo=$('#rm_memo').value.trim();
+  const p=`投資監視リマインダーを設計してください。\n対象: ${s.name} (${s.code})\n補足: ${memo||'なし'}\n\n本アプリで設定可能な項目:\n- 頻度: 毎日/平日/土日/週次/月次/単発\n- 時間: HH:MM(複数可) / 回数上限\n- 頻度変更(最大2・条件は「イベント名 YYYY/M/D になったら」形式で日付必須)\n\n次のmd形式のみで出力(コードブロックで囲む):\n## リマインダー\n- タイトル: \n- コメント: \n- カテゴリ: (テクニカル/報道確認/決算プレビュー/決算レビュー/指標更新/需給確認/マクロ)\n- 頻度: \n- 時間: \n- 回数: \n## 頻度変更1\n- 条件: \n- 変更後頻度: \n- 変更後時間: \n## 実行プロンプト\n(リマインド時に貼る監視指示文)`;
+  copy(p,'登録用プロンプトをコピーしました');
+}
+function parseReminder(){
+  const md=$('#rm_md').value; const sid=$('#rm_stock').value;
+  if(!md.trim()){toast('mdを貼り付けてください');return;}
+  const lines=md.split(/\r?\n/); let block=null; const r={id:'r'+Date.now(),stockId:sid,times:[],changes:[],log:[],paused:false,src:'外部AI',srcDate:fmtToday()}; let cur=null; let promptLines=[]; let inPrompt=false;
+  for(let raw of lines){ let line=raw.replace(/\*\*/g,'').trim(); if(!line)continue;
+    let m;
+    if(m=line.match(/^##\s*(.+)$/)){ block=m[1].trim(); if(/実行プロンプト/.test(block)){inPrompt=true;continue;} if(/頻度変更/.test(block)){cur={};r.changes.push(cur);} inPrompt=false; continue; }
+    if(inPrompt){ promptLines.push(raw.trim()); continue; }
+    if(line.startsWith('-')){ let b=line.replace(/^-\s*/,''); let km=b.match(/^([^:：]+)[:：]\s*(.*)$/); if(!km)continue; let k=km[1].trim(),val=km[2].trim();
+      if(/頻度変更/.test(block||'')&&cur){ if(/条件/.test(k))cur.cond=val; else if(/頻度/.test(k))cur.freq=val; else if(/時間/.test(k))cur.times=val; else if(/回数/.test(k))cur.count=val; }
+      else { if(/タイトル/.test(k))r.title=val; else if(/コメント/.test(k))r.comment=val; else if(/カテゴリ/.test(k))r.cat=val; else if(/頻度/.test(k))r.freq=val; else if(/時間/.test(k))r.times=val.split(',').map(x=>x.trim()); else if(/回数/.test(k))r.count=val; }
+    }
+  }
+  r.prompt=promptLines.join('\n').trim();
+  // validate freq changes date
+  let bad=r.changes.find(c=>c.cond&&!/\d{4}\/\d{1,2}\/\d{1,2}/.test(c.cond));
+  if(!r.title){toast('タイトルが解析できません');return;}
+  r.nextFire='2026/7/14 '+(r.times[0]||'09:00');
+  DB.reminders.push(r); save(); closeSheet(); go('reminder');
+  toast(bad?'登録しました(日付なし頻度変更は要確認)':'登録しました');
+}
+
+//////////////////// util ////////////////////
+function copy(text,msg){ navigator.clipboard?.writeText(text).then(()=>toast(msg||'コピーしました'),()=>{fallbackCopy(text);toast(msg||'コピーしました');}); }
+function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); }
+function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&r.prompt); if(!rs.length){toast('今日のリマインダーはありません');return;} let p='今日の確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${r.prompt}`).join('\n\n'); copy(p,'モーニングブリーフをコピーしました'); }
+
+// reset for testing
+function resetDB(){ if(confirm('全データを初期化しますか?')){ DB=seed(); save(); go('home'); toast('初期化しました'); } }
+
+//////////////////// export / import (backup) ////////////////////
+function exportData(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const d=today();
+  a.href=url; a.download=`hypo_tracker_backup_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('バックアップを書き出しました');
+}
+function importData(input){
+  const f=input.files&&input.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const obj=JSON.parse(r.result);
+      if(!obj.stocks||!obj.metricsMaster){ toast('形式が違うファイルです'); return; }
+      if(!confirm('現在のデータを、読み込んだバックアップで置き換えます。よろしいですか?')) return;
+      DB=obj; save(); go('home'); toast('バックアップを読み込みました');
+    }catch(e){ toast('ファイルを読み込めませんでした'); }
+  };
+  r.readAsText(f);
+}
+function sheetBackup(){
+  openSheet(`<h3>バックアップ</h3>
+    <div class="muted" style="margin-bottom:12px">端末内のデータを書き出し・読み込みします。機種変更やデータ消失に備えて、ときどき書き出しておくと安心です。</div>
+    <button class="btn pri" onclick="exportData()">データを書き出す(バックアップ)</button>
+    <label class="btn" style="margin-top:10px;cursor:pointer">データを読み込む(復元)
+      <input type="file" accept="application/json,.json" style="display:none" onchange="importData(this)">
+    </label>
+    <button class="btn danger" style="margin-top:16px" onclick="resetDB()">全データを初期化</button>
+    <div class="hint" style="margin-top:10px">書き出したファイルはダウンロードフォルダに保存されます。復元すると現在のデータは上書きされます。</div>`);
+}
+
+render();
+</script>
+</body>
+</html>
