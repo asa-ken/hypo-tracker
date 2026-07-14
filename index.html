@@ -105,8 +105,8 @@
   <div class="body" id="view"></div>
   <div class="tabbar">
     <button data-tab="home" class="on" onclick="go('home')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>ホーム</button>
-    <button data-tab="analysis" onclick="go('analysis')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3-4 3 2 4-6"/></svg>分析</button>
-    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>取込</button>
+    <button data-tab="analysis" onclick="go('analysis')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3-4 3 2 4-6"/></svg>企業分析</button>
+    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>読み込み</button>
     <button data-tab="reminder" onclick="go('reminder')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>リマインダー</button>
   </div>
 </div>
@@ -136,7 +136,7 @@ function seed(){
        sections:{'事業・ビジネスモデル':{t:'情報通信向け光ファイバ・ケーブル、自動車用電装品、電力ケーブルをグローバルに製造販売する非鉄メーカー。',d:'2026/7/13',src:'株予報Pro'},
                  '成長ドライバー':{t:'データセンター・5G向け光通信需要、自動車電動化のワイヤハーネス、情報通信セグメント比率拡大とROE向上。',d:'2026/7/13',src:'株予報Pro'},
                  'リスク要因':{t:'光ファイバ価格・原材料市況の変動、設備投資負担、為替・世界景気減速による需要調整。',d:'2026/7/13',src:'株予報Pro'},
-                 '競合ポジション':null},
+                 '競合ポジション':null,'技術':null},
        mine:[{ts:'2026/7/12',t:'DC向け光ケーブルの需給が本丸。古河電工とのペアで見る。'}]
       }
     ],
@@ -236,15 +236,18 @@ function renderStockDetail(v){
   // metrics
   h+='<div class="metric">';
   DB.metricsMaster.snap.slice(0,6).forEach(k=>{ const m=s.metrics[k]; const stale=m&&daysSince(m.d)>30; const miss=!m;
-    h+=`<div class="m ${stale||miss?'stale':''}"><div class="k">${esc(k)}</div><div class="v">${miss?'—':esc(m.v)+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.slice(5))+(stale?' 要更新':'')}</div></div>`; });
+    h+=`<div class="m ${stale||miss?'stale':''}"><div class="k">${esc(k)}</div><div class="v">${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.slice(5))+(stale?' 要更新':'')}</div></div>`; });
   h+='</div>';
   // trend
   h+='<div class="lbl">業績推移</div>';
   h+=renderTrend(s);
   // sections
   h+='<div class="lbl">分析</div>';
-  Object.keys(s.sections).forEach((k,i)=>{ const val=s.sections[k];
-    h+=`<div class="sec" id="sec${i}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(k)}</span><span class="m">${val?esc(val.d.slice(5))+' · '+esc(val.src):'未取得'}</span></div><div class="b">${val?esc(val.t):'<span style="color:var(--ink3)">未取得。発注プロンプトで取得できます。</span>'}</div></div>`; });
+  Object.keys(s.sections).forEach((k,i)=>{ const val=s.sections[k]; const det=(val&&val.details)||[];
+    h+=`<div class="sec" id="sec${i}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(k)}${det.length?` <span class="chip gray" style="font-size:9px">詳細 ${det.length}</span>`:''}</span><span class="m">${val?esc(val.d.slice(5))+' · '+esc(val.src):'未取得'}</span></div><div class="b">${val?esc(val.t):'<span style="color:var(--ink3)">未取得。「AIに聞く」で取得できます。</span>'}
+      ${det.map(dd=>`<div class="mine" style="margin-top:8px"><div class="ts">${esc(dd.ts)}${dd.title?' · '+esc(dd.title):''}</div><div class="row2" style="white-space:pre-wrap">${esc(dd.t)}</div></div>`).join('')}
+      <button class="btn sm" style="margin-top:8px" onclick="sheetAddDetail('${s.id}','${k}')">＋ 詳細を追記(深掘り)</button>
+    </div></div>`; });
   // mine
   h+='<div class="lbl">自分の見解</div>';
   h+='<div class="card" style="padding:11px">';
@@ -253,7 +256,7 @@ function renderStockDetail(v){
   // links
   h+=`<button class="btn" style="margin-top:6px" onclick="openHypoList('${s.id}')">仮説カード (${hy.length})</button>`;
   h+=`<button class="btn" style="margin-top:8px" onclick="STATE.remFilter='${s.id}';go('reminder')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
-  h+=`<button class="btn pri" style="margin-top:8px" onclick="sheetOrder('${s.id}')">発注プロンプトを生成</button>`;
+  h+=`<button class="btn pri" style="margin-top:8px" onclick="sheetOrder('${s.id}')">AIに聞く(質問文を生成)</button>`;
   v.innerHTML=h;
 }
 function renderTrend(s){
@@ -268,17 +271,17 @@ function renderTrend(s){
       h+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('年','\n年').split('\n')[0])}</div></div>`; });
     h+='</div>'; h+=`<div class="muted" style="font-size:10px;margin-bottom:6px">${esc(inds[0].name)}(${esc(first.unit||'')}) · 点線=予想</div>`; }
   // table
-  h+='<table><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
+  h+='<div style="overflow-x:auto"><table style="white-space:nowrap"><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
   DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name]; if(!o)return;
-    h+=`<tr><td>${esc(t.name)}</td>`+ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(o[y]):'—'}</td>`).join('')+'</tr>'; });
-  h+='</table></div>';
+    h+=`<tr><td>${esc(t.name)}</td>`+ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')+'</tr>'; });
+  h+='</table></div></div>';
   return h;
 }
 
 //////////////////// IMPORT (parser) ////////////////////
 function renderImport(v){
-  $('#topTitle').textContent='取り込み';
-  let h='<div class="banner">外部AIで発注 → 回答を貼り付け → 検収して取り込み。まず「分析」で銘柄を開き発注プロンプトを生成してください。</div>';
+  $('#topTitle').textContent='読み込み';
+  let h='<div class="banner">AIに聞く → 回答を貼り付け → 確認して読み込み。まず「企業分析」で銘柄を開き「AIに聞く」から質問文を作れます。</div>';
   h+='<label class="fld"><span class="t">外部AIのmd出力を貼り付け</span><textarea id="mdIn" class="mono" placeholder="# 銘柄: フジクラ (5803)&#10;## 指標&#10;- PER(予想): 36.2 | 2026/7/13 | 出典 | 高 ..." oninput="parseAndPreview()"></textarea></label>';
   h+='<div id="parseOut"></div>';
   v.innerHTML=h;
@@ -325,7 +328,7 @@ function parseAndPreview(){
   if(!text.trim()){ out.innerHTML=''; return; }
   const p=parseMd(text);
   let h='';
-  if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で取り込んでください(このプロトタイプでは分析取込のみ実装)。</div>'; return; }
+  if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で読み込んでください(このプロトタイプでは企業分析の読み込みのみ実装)。</div>'; return; }
   if(p.stock){ const known=stock(p.stock.code);
     h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?'銘柄: '+esc(p.stock.name)+' を検出':'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>新規銘柄として登録</button>`; }
@@ -333,7 +336,7 @@ function parseAndPreview(){
   // diff table
   if(p.rows.length){
     const s=p.stock?stock(p.stock.code):null;
-    h+='<div class="lbl">取り込みプレビュー</div><table><tr><th>項目</th><th>更新前</th><th>更新後</th></tr>';
+    h+='<div class="lbl">読み込みプレビュー</div><table><tr><th>項目</th><th>更新前</th><th>更新後</th></tr>';
     p.rows.forEach((r,i)=>{
       let before='—';
       if(s){ if(r.block&&/指標/.test(r.block)&&s.metrics[r.key]) before=s.metrics[r.key].v;
@@ -345,7 +348,7 @@ function parseAndPreview(){
       h+=`<tr class="${cls}"><td>${esc(r.key)}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}</div></td><td class="val-old">${esc(before)}</td><td>${after}</td></tr>`;
     });
     h+='</table>';
-    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${p.rows.length}件を取り込む</button>`;
+    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${p.rows.length}件を読み込む</button>`;
     window._parsed=p;
   }
   if(p.failed.length){
@@ -363,17 +366,17 @@ function commitImport(){
   p.rows.forEach(r=>{
     if(/指標/.test(r.block||'')){ s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'}; }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o; }
-    else if(/分析/.test(r.block||'')){ s.sections[r.key]={t:r.value,d:normD(r.d),src:r.src||'AI'}; }
+    else if(/分析/.test(r.block||'')){ const prev=s.sections[r.key]; s.sections[r.key]={t:r.value,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; }
     else if(/仮説/.test(r.block||'')){ if(r.key==='仮説'){hyp=hyp||{}; hyp.text=r.value;} if(/検証ポイント/.test(r.key)){hyp=hyp||{}; hyp.points=r.value.split('|').map(x=>x.trim());} if(/検証イベント/.test(r.key)){hyp=hyp||{}; hyp.event=r.value;} }
   });
   save();
-  toast(p.rows.length+'件を取り込みました');
+  toast(p.rows.length+'件を読み込みました');
   $('#mdIn').value=''; $('#parseOut').innerHTML='';
   openStock(s.id);
 }
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
 function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
-function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null},mine:[]}); save(); toast('登録しました'); parseAndPreview(); }
+function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null,'技術':null},mine:[]}); save(); toast('登録しました'); parseAndPreview(); }
 
 //////////////////// REMINDER ////////////////////
 function renderReminder(v){
@@ -416,6 +419,7 @@ function openReminder(id){
 function logRem(id,type){ const r=DB.reminders.find(x=>x.id===id); r.log.unshift({d:fmtToday(),type}); save(); closeSheet(); toast('記録しました'); }
 function togglePause(id){ const r=DB.reminders.find(x=>x.id===id); r.paused=!r.paused; save(); closeSheet(); render(); toast(r.paused?'休止しました':'再開しました'); }
 function delReminder(id){ if(!confirm('削除しますか?経過履歴も削除されます'))return; DB.reminders=DB.reminders.filter(x=>x.id!==id); save(); closeSheet(); render(); toast('削除しました'); }
+function fmtNum(v){ const s=String(v).replace(/,/g,''); if(!/^-?\d+(\.\d+)?$/.test(s)) return v; const p=s.split('.'); return Number(p[0]).toLocaleString('en-US')+(p[1]?'.'+p[1]:''); }
 function fmtToday(){ const d=today(); return `2026/${d.getMonth()+1}/${d.getDate()}`; }
 
 //////////////////// HYPO ////////////////////
@@ -451,11 +455,20 @@ function doAddStock(order){
   if(!name||!code){toast('銘柄名とコードは必須です');return;}
   if(stock(code)){toast('このコードは登録済みです');return;}
   const kind=$('#as_hold').classList.contains('on')?'保有':'ウォッチ';
-  DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null},mine:[]});
+  DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null,'技術':null},mine:[]});
   save(); closeSheet(); anaTab=kind; 
   if(order){ openStock(code); sheetOrder(code); } else { openStock(code); }
   toast('追加しました');
 }
+function sheetAddDetail(sid,sec){
+  openSheet(`<h3>${esc(sec)} の詳細</h3>
+    <label class="fld"><span class="t">タイトル(任意)</span><input id="dt_title" placeholder="例: 光ファイバの技術優位性"></label>
+    <label class="fld"><span class="t">内容(手書きでも、AIの深掘り回答の貼り付けでもOK)</span><textarea id="dt_t" style="min-height:180px"></textarea></label>
+    <button class="btn sm" style="margin-bottom:10px" onclick="copyDeep('${sid}','${sec}')">深掘り質問文をコピー</button>
+    <button class="btn pri" onclick="doAddDetail('${sid}','${sec}')">保存する</button>`);
+}
+function copyDeep(sid,sec){ const s=stock(sid); copy(s.name+'('+s.code+')の「'+sec+'」についてさらに深掘りして解説してください。前提: 私は個別株投資家で、投資判断に効く具体性(数値・競合比較・持続性)を重視します。装飾なしの文章で回答してください。','深掘り質問文をコピーしました'); }
+function doAddDetail(sid,sec){ const t2=$('#dt_t').value.trim(); if(!t2){toast('内容を入力してください');return;} const s=stock(sid); if(!s.sections[sec]) s.sections[sec]={t:'(サマリ未取得)',d:fmtToday(),src:'—',details:[]}; if(!s.sections[sec].details) s.sections[sec].details=[]; s.sections[sec].details.unshift({ts:fmtToday(),title:$('#dt_title').value.trim(),t:t2}); save(); closeSheet(); render(); toast('詳細を保存しました'); }
 function sheetAddMine(sid){
   openSheet(`<h3>見解を追記</h3><label class="fld"><span class="t">自分の判断・違和感・次に見るポイント</span><textarea id="mine_t" placeholder="AI分析とは分けて保存されます"></textarea></label><button class="btn pri" onclick="doAddMine('${sid}')">追記する</button>`);
 }
@@ -465,10 +478,11 @@ function sheetOrder(sid){
   DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
   Object.keys(s.sections).forEach(k=>{if(!s.sections[k])need.push(k);});
   const prompt=buildOrderPrompt(s,need);
-  openSheet(`<h3>発注プロンプト</h3><div class="muted" style="margin-bottom:8px">要更新・未取得の ${need.length}項目を外部AIに発注します。</div>
+  openSheet(`<h3>AIへの質問文</h3><div class="muted" style="margin-bottom:8px">要更新・未取得の ${need.length}項目をAIに聞きます。</div>
     <textarea class="mono" style="min-height:200px" readonly>${esc(prompt)}</textarea>
-    <button class="btn pri" style="margin-top:10px" onclick='copy(${JSON.stringify(prompt)},"発注プロンプトをコピーしました")'>コピーして外部AIへ</button>`);
+    <button class="btn pri" style="margin-top:10px" onclick='copyOrder(${JSON.stringify(prompt)})'>質問文をコピーしてAIへ</button>`);
 }
+function copyOrder(p){ copy(p,'質問文をコピーしました。AIの回答は「読み込み」へ'); closeSheet(); go('import'); }
 function buildOrderPrompt(s,need){
   const snapNeed=need.filter(k=>DB.metricsMaster.snap.includes(k));
   const secNeed=need.filter(k=>!DB.metricsMaster.snap.includes(k));
