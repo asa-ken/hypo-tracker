@@ -106,7 +106,7 @@
   <div class="tabbar">
     <button data-tab="home" class="on" onclick="go('home')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>ホーム</button>
     <button data-tab="analysis" onclick="go('analysis')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3-4 3 2 4-6"/></svg>企業分析</button>
-    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>読み込み</button>
+    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>AIに聞く</button>
     <button data-tab="reminder" onclick="go('reminder')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>リマインダー</button>
   </div>
 </div>
@@ -281,6 +281,10 @@ function renderStockDetail(v){
   const sc=staleCount(s); const hy=hyposOf(s);
   let h='';
   h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}<span class="chip navy">仮説 ${hy.filter(x=>x.state!=='決着').length}</span></div>`;
+  const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+  h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
+    <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
+    <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(AIに聞くときの観点を決められます)'}</div></div>`;
   // metrics
   h+='<div class="metric">';
   DB.metricsMaster.snap.slice(0,6).forEach(k=>{ const m=s.metrics[k]; const stale=m&&daysSince(m.d)>30; const miss=!m;
@@ -309,10 +313,18 @@ function renderStockDetail(v){
   // links
   h+=`<button class="btn" style="margin-top:6px" onclick="openHypoList('${s.id}')">仮説カード (${hy.length})</button>`;
   h+=`<button class="btn" style="margin-top:8px" onclick="STATE.remFilter='${s.id}';go('reminder')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
-  h+=`<button class="btn pri" style="margin-top:8px" onclick="sheetOrder('${s.id}')">AIに聞く(質問文を生成)</button>`;
+  h+=`<button class="btn pri" style="margin-top:8px" onclick="STATE.askStockId='${s.id}';go('import')">AIに聞く・取り込む</button>`;
   h+=`<button class="btn danger" style="margin-top:22px" onclick="delStock('${s.id}')">この銘柄を削除</button>`;
   v.innerHTML=h;
 }
+function sheetTheme(sid){
+  const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[sid]||'';
+  openSheet(`<h3>注目テーマ</h3>
+    <div class="muted" style="margin-bottom:10px">この銘柄を見るときの切り口。「AIに聞く」の質問文に反映されます。</div>
+    <label class="fld"><span class="t">テーマ</span><input id="th_in" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術"></label>
+    <button class="btn pri" onclick="doSaveTheme('${sid}')">保存</button>`);
+}
+function doSaveTheme(sid){ const v=$('#th_in').value.trim(); if(!DB.askPrefs.themes)DB.askPrefs.themes={}; DB.askPrefs.themes[sid]=v; save(); closeSheet(); render(); toast(v?'テーマを保存しました':'テーマを削除しました'); }
 function delStock(sid){
   const s=stock(sid); const hy=hyposOf(sid).length, rm=remOf(sid).length;
   let msg=`「${s.name}」を削除します。`;
@@ -346,9 +358,29 @@ function renderTrend(s){
 
 //////////////////// IMPORT (parser) ////////////////////
 function renderImport(v){
-  $('#topTitle').textContent='読み込み';
-  let h='<div class="banner">AIに聞く → 回答を貼り付け → 確認して読み込み。まず「企業分析」で銘柄を開き「AIに聞く」から質問文を作れます。</div>';
-  h+='<label class="fld"><span class="t">外部AIのmd出力を貼り付け</span><textarea id="mdIn" class="mono" placeholder="# 銘柄: フジクラ (5803)&#10;## 指標&#10;- PER(予想): 36.2 | 2026/7/13 | 出典 | 高 ..." oninput="parseAndPreview()"></textarea></label>';
+  $('#topTitle').textContent='AIに聞く・取り込む';
+  const sel=STATE.askStockId||(DB.stocks[0]&&DB.stocks[0].id)||'';
+  STATE.askStockId=sel;
+  const s=sel?stock(sel):null;
+  let h='';
+  if(!DB.stocks.length){ v.innerHTML='<div class="empty"><div class="big">銘柄がありません</div><div>「企業分析」の右上「＋ 追加」から登録してください。</div></div>'; return; }
+  // 銘柄選択
+  h+=`<label class="fld"><span class="t">対象の銘柄</span>
+    <select onchange="STATE.askStockId=this.value;render()">${DB.stocks.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.name)} (${esc(x.code)})</option>`).join('')}</select></label>`;
+  if(s){
+    const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+    h+=`<div class="card tap" style="padding:8px 11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
+      <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
+      <div style="font-size:12.5px;font-weight:600;margin-top:2px;${th?'':'color:var(--ink3);font-weight:400'}">${th?esc(th):'未設定'}</div></div>`;
+  }
+  // STEP1 質問文を作る
+  h+='<div class="lbl">STEP 1 · AIに聞く質問文を作る</div>';
+  h+=`<button class="btn" onclick="sheetOrder('${sel}')">① 新規に調べる(項目を選ぶ)</button>`;
+  h+=`<button class="btn" style="margin-top:8px" onclick="pickMode('${sel}','org')">② 手持ちの分析を整理する</button>`;
+  h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。</div>';
+  // STEP2 貼り付け
+  h+='<div class="lbl">STEP 2 · AIの回答を貼り付ける</div>';
+  h+='<textarea id="mdIn" class="mono" placeholder="AIの回答をここに貼り付け(分割された回答は、続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
   v.innerHTML=h;
 }
@@ -358,12 +390,15 @@ function parseMd(text){
   for(let raw of lines){
     let line=raw.replace(/\*\*/g,'').trim();
     if(!line) continue;
+    if(/^```/.test(line)) continue;                                  // コードブロック境界
+    if(/^\[[0-9A-F-]{8,}\]\(https?:\/\//i.test(line)) continue;    // citationリンク行
+    if(/^(PR TIMES|\+\d+)\s*`*$/i.test(line)) continue;            // 出典フッタ
     let m;
     if(m=line.match(/^#\s*銘柄[:：]\s*(.+?)\s*[\(（]([A-Za-z0-9]+)[\)）]/)){ stk={name:m[1].trim(),code:m[2].trim()}; continue; }
     if(m=line.match(/^##\s*(.+)$/)){ const b=m[1].trim(); block=b; if(/リマインダー/.test(b))type='reminder'; continue; }
     if(line.startsWith('#')) continue;
-    if(line.startsWith('-')){
-      let body=line.replace(/^-\s*/,'');
+    if(/^[-•*・‣▪]\s*/.test(line)){
+      let body=line.replace(/^[-•*・‣▪]\s*/,'');
       // key: value | d | src | conf   (labels like 出典: 確信度: tolerated)
       let km=body.match(/^([^:：]+)[:：]\s*(.*)$/);
       if(!km){ failed.push(raw.trim()); continue; }
@@ -379,15 +414,37 @@ function parseMd(text){
         else if(/^単位/.test(parts.find(x=>x.includes(p))||'')||/円|USD|ドル|\$|%/.test(p)&&p.length<8) unit=p.replace(/単位[:：]/,'');
         else src=src?src+' / '+p:p;
       });
-      // unit split from value like "36.2倍" -> keep number
-      let um=value.match(/^([\d,\.\-]+)\s*(億円|百万円|百万USD|円|倍|%|USD|\$[BM]?)?/);
-      if(um&&um[2]&&!unit){ unit=um[2]; value=um[1]; }
+      src=shortSrc(src);
+      // 年度セグメントを含む業績推移行は各セグメントを個別に正規化
+      if(/[年][0-9]{1,2}月期/.test(value)&&value.includes('=')){
+        const segs=value.split('|').map(x=>x.trim()).filter(Boolean);
+        const outs=[]; let segUnit='';
+        segs.forEach(sg=>{ const mm=sg.split('='); if(mm.length!==2){outs.push(sg);return;}
+          const nv=normalizeValueUnit(mm[1].trim(), '');
+          if(nv.unit&&!segUnit) segUnit=nv.unit;
+          outs.push(mm[0].trim()+'='+nv.v); });
+        value=outs.join(' | ');
+        if(segUnit&&(!unit||unit==='円')) unit=segUnit;
+      } else {
+        const nv=normalizeValueUnit(value, unit);
+        value=nv.v; if(nv.unit) unit=nv.unit;
+      }
       // date-ok check
       if(d&&!parseD(d.length<=5?('2026/'+d):d) && !/^\d{1,2}\/\d{1,2}$/.test(d)){ /* keep */ }
       rows.push({block,key,value,d,src,conf,unit, raw:raw.trim()});
     } else { failed.push(raw.trim()); }
   }
-  return {stock:stk, rows, failed, type};
+  // 見出しが無い行の行き先をキーから推定(GPTの分割出力対策)
+  rows.forEach(r=>{
+    if(r.block) return;
+    if(DB.metricsMaster.snap.includes(r.key)) r.block='指標';
+    else if(/[年][0-9]{1,2}月期\s*(\(予\))?\s*=/.test(r.value)||/FY\d{2}\s*=/.test(r.value)) r.block='業績推移';
+    else if(resolveSection(r.key,r.value).sub) r.block='分析';
+  });
+  // 重複除外(同じキーで同じ値が複数回=AIの再出力)
+  const seen=new Set(); const dups=[];
+  const uniq=rows.filter(r=>{ const sig=r.key+'|'+String(r.value).slice(0,80); if(seen.has(sig)){ dups.push(r); return false; } seen.add(sig); return true; });
+  return {stock:stk, rows:uniq, failed, type, dups};
 }
 function parseAndPreview(){
   const text=$('#mdIn').value; const out=$('#parseOut');
@@ -398,6 +455,7 @@ function parseAndPreview(){
   if(p.stock){ const known=stock(p.stock.code);
     h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?'銘柄: '+esc(p.stock.name)+' を検出':'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>新規銘柄として登録</button>`; }
+    if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
   } else { h+='<div class="pill-row" style="margin:4px 0 8px"><span class="chip red">銘柄を特定できません(先頭に # 銘柄: 名称 (コード) が必要)</span></div>'; }
   // diff table
   if(p.rows.length){
@@ -489,6 +547,32 @@ function resolveSection(rawKey, rawValue){
   }
   return {sub:key, layer:layer||'サマリ', value};
 }
+function shortSrc(s){
+  if(!s) return '';
+  let x=String(s);
+  x=x.replace(/\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, (m,label,url)=>{
+    try{ const h=url.match(/^https?:\/\/([^\/\?]+)/); return (h?h[1].replace(/^www\./,''):(label||'')); }catch(e){ return label||''; }
+  });
+  x=x.replace(/https?:\/\/\S+/g,'').replace(/\s{2,}/g,' ').replace(/\s*\/\s*$/,'').trim();
+  // 重複ドメインの除去
+  const parts=[...new Set(x.split(/[\/、,]\s*/).map(y=>y.trim()).filter(Boolean))];
+  x=parts.join(' / ');
+  return x.length>40?x.slice(0,40)+'…':x;
+}
+// 日本語の位取り単位を正規化: 「1兆3425億円」→ {v:13425, unit:'億円'} 等
+function normalizeValueUnit(value, unit){
+  let v=String(value).trim(); let u=String(unit||'').trim();
+  const jp=v.match(/^([\d,\.]*)?\s*(兆)?\s*([\d,\.]+)?\s*(億|万)?\s*(円|USD|ドル)?\s*$/);
+  if(/兆|億|万/.test(v)){
+    let total=0; let m;
+    if(m=v.match(/([\d,\.]+)\s*兆/)) total+=parseFloat(m[1].replace(/,/g,''))*10000;   // 兆→億換算
+    if(m=v.match(/([\d,\.]+)\s*億/)) total+=parseFloat(m[1].replace(/,/g,''));
+    if(total>0){ return {v:String(Math.round(total*100)/100), unit:'億円'}; }
+  }
+  const um=v.match(/^([\-\d,\.]+)\s*(億円|百万円|百万USD|万円|円|倍|%|USD|\$[BM]?)$/);
+  if(um){ return {v:um[1].replace(/,/g,''), unit:um[2]}; }
+  return {v:v.replace(/,/g,''), unit:u};
+}
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
 function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
 function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{},mine:[]}); save(); toast('登録しました'); parseAndPreview(); }
@@ -559,6 +643,7 @@ function openSheet(html){ $('#sheet').innerHTML=html; $('#scrim').classList.add(
 function closeSheet(){ $('#scrim').classList.remove('show'); }
 function sheetAddStock(){
   openSheet(`<h3>銘柄を追加</h3>
+    <div class="banner" style="margin-bottom:12px">登録後、「AIに聞く」で分析を集めます。<b>一度に聞く項目は5つまで</b>がおすすめです(多いとAIの回答が不安定になります)。あとから何度でも追加できます。</div>
     <label class="fld"><span class="t">銘柄名</span><input id="as_name" placeholder="例: 古河電気工業"></label>
     <label class="fld"><span class="t">ティッカー / 証券コード</span><input id="as_code" placeholder="例: 5801 / PLTR"></label>
     <label class="fld"><span class="t">区分</span><div class="seg"><button class="on" id="as_hold" onclick="this.classList.add('on');this.nextElementSibling.classList.remove('on')">保有</button><button id="as_watch" onclick="this.classList.add('on');this.previousElementSibling.classList.remove('on')">ウォッチ</button></div></label>
@@ -605,11 +690,22 @@ function pickMode(sid,mode){ DB.askPrefs.mode=mode; save(); if(mode==='new') she
 function sheetOrderNew(sid){
   const s=stock(sid); const pk=DB.askPrefs.picks||{};
   const th=(DB.askPrefs.themes||{})[sid]||'';
+  const cnt=Object.values(pk).filter(x=>x&&x!=='off').length;
+  const deepCnt=Object.values(pk).filter(x=>x==='deep').length;
   let h=`<h3>調べる項目を選ぶ</h3>
+    <div class="banner" style="margin-bottom:10px">
+      <b>一度に聞く項目は5つまでがおすすめです。</b><br>
+      項目が多いとAIの回答が不安定になったり、分割出力されて取り込みにくくなります。<br>
+      あとから何度でも追加で聞けるので、テーマを絞って少しずつ育てるのがおすすめです。
+    </div>
     <label class="fld"><span class="t">深掘りテーマ(任意)</span>
       <input id="ord_theme" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術">
       <div class="hint">入力すると、各項目をこのテーマの観点で調べます。</div></label>
-    <div class="muted" style="margin:10px 0">ボタンを押すたび 選択 → 要点のみ → 深掘り → 解除 と切り替わります。</div>`;
+    <div class="row" style="margin:10px 0 4px">
+      <span class="muted">ボタンを押すたび 選択 → 要点のみ → 深掘り → 解除</span>
+      <span class="chip ${cnt>5?'red':cnt?'navy':'gray'}">選択 ${cnt}</span>
+    </div>
+    ${cnt>5?`<div class="failbox" style="background:var(--amber-bg);margin-bottom:6px"><div class="t">⚠ 項目が多すぎます (${cnt}件)</div><div class="muted" style="font-size:11px;color:var(--amber-tx)">AIが分割出力する可能性が高く、書式も乱れやすくなります。5件以下に絞ることを強くおすすめします。${deepCnt>3?'<br>特に「深掘り」は文字数が多いため、3件以下が安全です。':''}</div></div>`:''}`;
   DB.sectionMaster.filter(c=>c.on).forEach((c,ci)=>{
     h+=`<div class="lbl" style="margin:12px 0 4px">${esc(c.cat)}</div>`;
     c.subs.forEach(su=>{ const st=pk[su]||'off';
@@ -644,7 +740,7 @@ function genOrderNew(sid){
   const theme=((DB.askPrefs.themes||{})[sid]||'').trim();
   let p=`以下の項目を調査し、指定フォーマットで回答してください。\n`;
   if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
-  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ。金額の単位は「単位:◯◯」欄に開示慣行の単位で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n\n# 銘柄: ${s.name} (${s.code})\n`;
+  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典はサイト名のみ(URLやリンク記法は書かない)\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「# 銘柄: ${s.name} (${s.code})」と該当する「## 見出し」を付ける\n\n# 銘柄: ${s.name} (${s.code})\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
   p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
   if(sums.length||deeps.length){
@@ -677,7 +773,7 @@ function sheetSectionMaster(sid){
   h+=`<button class="btn" style="margin-top:12px" onclick="sheetOrderNew('${sid}')">← 戻る</button>`;
   openSheet(h);
 }
-function copyOrder(p){ copy(p,'質問文をコピーしました。AIの回答は「読み込み」へ'); closeSheet(); go('import'); }
+function copyOrder(p){ copy(p,'質問文をコピーしました。AIに貼り付けて、回答をSTEP2へ'); closeSheet(); if(STATE.tab!=='import') go('import'); else render(); }
 const RULES='■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。1キーにつき1行。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・数値は値のみ、金額は「単位:◯◯」欄に開示慣行の単位で明記。決算期は「yy年mm月期」表記、予想は(予)';
 const FMT='## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。深掘り指定の項目は「- キー(詳細): 長文…」の行も追加。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
 function genNewPrompt(sid){
