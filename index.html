@@ -94,6 +94,11 @@
   .pill-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;}
   .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
   .del{color:var(--red-tx); font-size:12px; cursor:pointer;}
+  .clip3{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45;}
+  .clip3.open{-webkit-line-clamp:unset; overflow:visible;}
+  .dbody.open2{display:block !important;}
+  .swipe{position:relative; overflow:hidden;}
+  .swipe .del-btn{position:absolute; right:0; top:0; bottom:0; width:64px; background:var(--red-tx); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; border:none;}
 </style>
 </head>
 <body>
@@ -195,6 +200,7 @@ function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;'
 function today(){return new Date();}
 function parseD(s){ if(!s)return null; const m=String(s).match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/); if(!m)return null; return new Date(+m[1],+m[2]-1,+m[3]); }
 function daysSince(s){ const d=parseD(s); if(!d)return 999; return Math.floor((today()-d)/86400000); }
+function showCell(td){ const d=td.querySelector('.clip3'); if(d) d.classList.toggle('open'); }
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
 function stock(id){return DB.stocks.find(s=>s.id===id);}
 function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
@@ -205,7 +211,15 @@ function filledCatCount(s,cat){ const c=DB.sectionMaster.find(x=>x.cat===cat); i
 
 //////////////////// router ////////////////////
 let STATE={tab:'home', stockId:null};
-function go(tab){ STATE.tab=tab; STATE.stockId=null; document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab)); render(); $('#view').scrollTop=0; }
+function go(tab){
+  // タブから直接開いた場合、AIに聞く画面の対象銘柄をリセット(企業分析からの遷移時は openAsk が設定済み)
+  if(tab==='import' && !STATE._askFromStock) STATE.askStockId=null;
+  STATE._askFromStock=false;
+  STATE.tab=tab; STATE.stockId=null;
+  document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  render(); $('#view').scrollTop=0;
+}
+function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
 function openStock(id){ STATE.stockId=id; render(); $('#view').scrollTop=0; }
 
 function render(){
@@ -300,7 +314,15 @@ function renderStockDetail(v){
     h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:9px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:4px 8px 8px">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sec" style="margin:6px 0"><div class="h" style="padding:7px 9px;font-size:12px" onclick="event.stopPropagation();this.parentNode.classList.toggle('open')"><span>${esc(su)}${det.length?` <span class="chip gray" style="font-size:9px">詳細${det.length}</span>`:''}</span><span class="m">${val?esc(val.d.slice(5)):''}</span></div><div class="b" style="font-size:12.5px">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}
-        ${det.map(dd=>`<div class="mine" style="margin-top:6px"><div class="ts">${esc(dd.ts)}${dd.title?' · '+esc(dd.title):''}</div><div class="row2" style="white-space:pre-wrap">${esc(dd.t)}</div></div>`).join('')}
+        ${det.length?`<div class="lbl" style="margin:8px 0 4px;font-size:10px">AI深掘り・詳細メモ (${det.length})</div>`:''}
+        ${det.map((dd,di)=>`<div class="mine" style="margin-top:6px;padding:0">
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer" onclick="event.stopPropagation();this.parentNode.querySelector('.dbody').classList.toggle('open2')">
+            <span class="ts" style="flex:1">${esc(dd.ts)}${dd.title?' · '+esc(dd.title):''}</span>
+            <span class="ts" style="font-size:9px">開閉</span>
+            <button class="del" style="border:none;background:none;padding:2px 4px" onclick="event.stopPropagation();delDetail('${s.id}','${esc(su)}',${di})">削除</button>
+          </div>
+          <div class="dbody row2" style="white-space:pre-wrap;padding:0 8px 7px;display:none">${esc(dd.t)}</div>
+        </div>`).join('')}
         <button class="btn sm" style="margin-top:6px" onclick="event.stopPropagation();sheetAddDetail('${s.id}','${esc(su)}')">＋ 詳細を追記</button>
       </div></div>`; });
     h+=`</div></div>`;
@@ -313,7 +335,7 @@ function renderStockDetail(v){
   // links
   h+=`<button class="btn" style="margin-top:6px" onclick="openHypoList('${s.id}')">仮説カード (${hy.length})</button>`;
   h+=`<button class="btn" style="margin-top:8px" onclick="STATE.remFilter='${s.id}';go('reminder')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
-  h+=`<button class="btn pri" style="margin-top:8px" onclick="STATE.askStockId='${s.id}';go('import')">AIに聞く・取り込む</button>`;
+  h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">AIに聞く・取り込む</button>`;
   h+=`<button class="btn danger" style="margin-top:22px" onclick="delStock('${s.id}')">この銘柄を削除</button>`;
   v.innerHTML=h;
 }
@@ -359,14 +381,15 @@ function renderTrend(s){
 //////////////////// IMPORT (parser) ////////////////////
 function renderImport(v){
   $('#topTitle').textContent='AIに聞く・取り込む';
-  const sel=STATE.askStockId||(DB.stocks[0]&&DB.stocks[0].id)||'';
-  STATE.askStockId=sel;
+  const sel=STATE.askStockId||'';
   const s=sel?stock(sel):null;
   let h='';
   if(!DB.stocks.length){ v.innerHTML='<div class="empty"><div class="big">銘柄がありません</div><div>「企業分析」の右上「＋ 追加」から登録してください。</div></div>'; return; }
   // 銘柄選択
   h+=`<label class="fld"><span class="t">対象の銘柄</span>
-    <select onchange="STATE.askStockId=this.value;render()">${DB.stocks.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.name)} (${esc(x.code)})</option>`).join('')}</select></label>`;
+    <select onchange="STATE.askStockId=this.value||null;render()">
+      <option value="" ${!sel?'selected':''}>— 銘柄を選択 —</option>
+      ${DB.stocks.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.name)} (${esc(x.code)})</option>`).join('')}</select></label>`;
   if(s){
     const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
     h+=`<div class="card tap" style="padding:8px 11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
@@ -375,12 +398,19 @@ function renderImport(v){
   }
   // STEP1 質問文を作る
   h+='<div class="lbl">STEP 1 · AIに聞く質問文を作る</div>';
-  h+=`<button class="btn" onclick="sheetOrder('${sel}')">① 新規に調べる(項目を選ぶ)</button>`;
-  h+=`<button class="btn" style="margin-top:8px" onclick="pickMode('${sel}','org')">② 手持ちの分析を整理する</button>`;
-  h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。</div>';
+  if(!sel){ h+='<div class="muted" style="padding:6px 2px">まず上で銘柄を選んでください。</div>'; }
+  else{
+    h+=`<button class="btn" onclick="pickMode('${sel}','new')">① 新規に調べる(項目を選ぶ)</button>`;
+    h+=`<button class="btn" style="margin-top:8px" onclick="pickMode('${sel}','org')">② 手持ちの分析を整理する</button>`;
+    h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。</div>';
+  }
   // STEP2 貼り付け
   h+='<div class="lbl">STEP 2 · AIの回答を貼り付ける</div>';
-  h+='<textarea id="mdIn" class="mono" placeholder="AIの回答をここに貼り付け(分割された回答は、続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
+  h+=`<div class="row" style="gap:8px;margin-bottom:6px">
+    <button class="btn pri" style="flex:1" onclick="pasteFromClipboard()">📋 貼り付ける</button>
+    <button class="btn" style="flex:0 0 88px" onclick="clearPaste()">クリア</button>
+  </div>`;
+  h+='<textarea id="mdIn" class="mono" placeholder="「貼り付ける」を押すか、ここに直接ペースト(分割された回答は、続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
   v.innerHTML=h;
 }
@@ -448,6 +478,22 @@ function parseMd(text){
   const uniq=rows.filter(r=>{ const sig=r.key+'|'+String(r.value).slice(0,80); if(seen.has(sig)){ dups.push(r); return false; } seen.add(sig); return true; });
   return {stock:stk, rows:uniq, failed, type, dups};
 }
+async function pasteFromClipboard(){
+  const ta=$('#mdIn'); if(!ta) return;
+  try{
+    const txt=await navigator.clipboard.readText();
+    if(!txt||!txt.trim()){ toast('クリップボードが空です'); return; }
+    // 既に内容があれば追記(分割出力を続けて貼るケース)
+    ta.value = ta.value.trim() ? (ta.value.replace(/\s+$/,'')+'\n\n'+txt) : txt;
+    parseAndPreview();
+    toast('貼り付けました');
+  }catch(e){
+    // 権限が無い/未対応の場合は手動ペーストへ誘導
+    ta.focus();
+    toast('端末の設定により自動貼り付けできません。入力欄を長押しして「ペースト」してください');
+  }
+}
+function clearPaste(){ const ta=$('#mdIn'); if(!ta) return; ta.value=''; $('#parseOut').innerHTML=''; window._parsed=null; window._orphans=null; toast('クリアしました'); }
 function parseAndPreview(){
   const text=$('#mdIn').value; const out=$('#parseOut');
   if(!text.trim()){ out.innerHTML=''; return; }
@@ -476,18 +522,27 @@ function parseAndPreview(){
       orphans.forEach((r,i)=>{ h+=`<div style="display:flex;gap:7px;align-items:flex-start;padding:4px 0"><input type="checkbox" style="width:auto;margin:3px 0 0 0" id="orp${i}"><label for="orp${i}" class="l" style="flex:1;cursor:pointer">${esc(r.key)}: ${esc(r.value.slice(0,60))}…</label></div>`; });
       h+='</div>';
     }
-    h+='<div class="lbl">読み込みプレビュー</div><table><tr><th>項目</th><th>更新前</th><th>更新後</th></tr>';
+    h+='<div class="lbl">読み込みプレビュー</div><div class="hint" style="margin:-4px 0 6px">セルをタップすると全文を表示します。</div>';
+    h+='<div style="overflow-x:auto"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
-      let before='—'; let label=esc(r.key);
+      let before='—'; let label=esc(r.key); let isSame=false;
+      const afterRaw=(r._res?r._res.value:r.value);
       if(s){ if(r.block&&/指標/.test(r.block)&&s.metrics[r.key]) before=s.metrics[r.key].v;
-             else if(r._res&&r._res.sub){ label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:9px">詳細</span>':''); if(s.sections[r._res.sub]) before='(既存)'; } }
+             else if(r._res&&r._res.sub){
+               label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:9px">詳細</span>':'');
+               const cur=s.sections[r._res.sub];
+               if(cur){ before = (r._res.layer==='詳細') ? ((cur.details&&cur.details[0]&&cur.details[0].t)||'—') : (cur.t||'—'); }
+             } }
+      isSame = (before!=='—' && String(before).trim()===String(afterRaw).trim());
       const isNew=before==='—';
       const cls=isNew?'newrow':'';
-      let after=esc((r._res?r._res.value:r.value))+(r.unit?` <span class="muted">${esc(r.unit)}</span>`:'');
       let confb=r.conf==='低'?' <span class="chip gray" style="font-size:9px">低</span>':'';
-      h+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}</div></td><td class="val-old">${esc(before)}</td><td>${after}</td></tr>`;
+      const cell=(txt,cls2)=>`<td class="${cls2||''}" style="cursor:pointer" onclick="showCell(this)" data-full="${esc(String(txt))}"><div class="clip3">${esc(String(txt))}</div></td>`;
+      h+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}${isSame?' · <span style="color:var(--ink3)">変更なし</span>':''}</div></td>
+        ${cell(before,'val-old')}
+        ${cell(afterRaw+(r.unit?' '+r.unit:''))}</tr>`;
     });
-    h+='</table>';
+    h+='</table></div>';
     window._orphans=orphans;
     h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${okRows.length}件を読み込む</button>`;
     window._parsed=p;
@@ -676,6 +731,12 @@ function doAddStock(order){
   save(); closeSheet(); 
   if(order){ openStock(code); sheetOrder(code); } else { openStock(code); }
   toast('追加しました');
+}
+function delDetail(sid,sec,idx){
+  const s=stock(sid); const sc=s&&s.sections[sec]; if(!sc||!sc.details) return;
+  const d=sc.details[idx]; if(!d) return;
+  if(!confirm('この詳細メモを削除しますか?\n\n'+(d.title?d.title+'\n':'')+d.t.slice(0,60)+'…')) return;
+  sc.details.splice(idx,1); save(); render(); toast('詳細メモを削除しました');
 }
 function sheetAddDetail(sid,sec){
   openSheet(`<h3>${esc(sec)} の詳細</h3>
