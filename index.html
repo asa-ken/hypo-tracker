@@ -415,8 +415,10 @@ function parseMd(text){
         else src=src?src+' / '+p:p;
       });
       src=shortSrc(src);
-      // 年度セグメントを含む業績推移行は各セグメントを個別に正規化
-      if(/[年][0-9]{1,2}月期/.test(value)&&value.includes('=')){
+      // 数値項目(指標・業績推移)のみ単位を正規化する。分析セクションの本文は一切加工しない。
+      const isTrendRow = /[年][0-9]{1,2}月期/.test(value) && value.includes('=');
+      const isAnalysisRow = /分析/.test(block||'') || /[（(](サマリ|要点のみ|詳細)[）)]/.test(key);
+      if(isTrendRow){
         const segs=value.split('|').map(x=>x.trim()).filter(Boolean);
         const outs=[]; let segUnit='';
         segs.forEach(sg=>{ const mm=sg.split('='); if(mm.length!==2){outs.push(sg);return;}
@@ -425,7 +427,7 @@ function parseMd(text){
           outs.push(mm[0].trim()+'='+nv.v); });
         value=outs.join(' | ');
         if(segUnit&&(!unit||unit==='円')) unit=segUnit;
-      } else {
+      } else if(!isAnalysisRow && isNumericValue(value)){
         const nv=normalizeValueUnit(value, unit);
         value=nv.v; if(nv.unit) unit=nv.unit;
       }
@@ -452,11 +454,15 @@ function parseAndPreview(){
   const p=parseMd(text);
   let h='';
   if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で読み込んでください(このプロトタイプでは企業分析の読み込みのみ実装)。</div>'; return; }
+  // md内に銘柄行が無ければ、画面で選択中の銘柄を使う(分割出力の2回目以降を想定)
+  let fallback=false;
+  if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0){ p.stock={name:sc0.name, code:sc0.code}; fallback=true; } }
   if(p.stock){ const known=stock(p.stock.code);
-    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?'銘柄: '+esc(p.stock.name)+' を検出':'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
+    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'選択中の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
+    if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、画面上部で選択中の銘柄に取り込みます。違う場合は上部で銘柄を切り替えてください。</div>';
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>新規銘柄として登録</button>`; }
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
-  } else { h+='<div class="pill-row" style="margin:4px 0 8px"><span class="chip red">銘柄を特定できません(先頭に # 銘柄: 名称 (コード) が必要)</span></div>'; }
+  } else { h+='<div class="pill-row" style="margin:4px 0 8px"><span class="chip red">銘柄を特定できません(上部で銘柄を選ぶか、先頭に # 銘柄: 名称 (コード) を付けてください)</span></div>'; }
   // diff table
   if(p.rows.length){
     const s=p.stock?stock(p.stock.code):null;
@@ -495,7 +501,9 @@ function parseAndPreview(){
   out.innerHTML=h;
 }
 function commitImport(){
-  const p=window._parsed; if(!p||!p.stock){toast('銘柄が特定できません');return;}
+  const p=window._parsed; if(!p){toast('読み込む内容がありません');return;}
+  if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0) p.stock={name:sc0.name, code:sc0.code}; }
+  if(!p.stock){toast('銘柄が特定できません');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
   let hyp=null;
   // 該当なし行: チェックされたものだけ「その他」カテゴリへ
@@ -559,8 +567,17 @@ function shortSrc(s){
   x=parts.join(' / ');
   return x.length>40?x.slice(0,40)+'…':x;
 }
+// 値が「単独の数値(+単位)」に見えるか。文章は false。
+function isNumericValue(v){
+  const s=String(v).trim();
+  if(s.length>24) return false;                       // 長い=文章
+  if(/[。、！？]/.test(s)) return false;               // 句読点=文章
+  if(/[ぁ-んァ-ヶ]{3,}/.test(s)) return false;         // かな連続=文章
+  return /^[\-\d,.,]+\s*(兆|億|万)?\s*[\d,.]*\s*(億円|百万円|百万USD|万円|円|倍|%|USD|ドル|\$[BM]?)?\s*$/.test(s);
+}
 // 日本語の位取り単位を正規化: 「1兆3425億円」→ {v:13425, unit:'億円'} 等
 function normalizeValueUnit(value, unit){
+  if(!isNumericValue(value)) return {v:String(value), unit:String(unit||'')};   // 文章は加工しない
   let v=String(value).trim(); let u=String(unit||'').trim();
   const jp=v.match(/^([\d,\.]*)?\s*(兆)?\s*([\d,\.]+)?\s*(億|万)?\s*(円|USD|ドル)?\s*$/);
   if(/兆|億|万/.test(v)){
