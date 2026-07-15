@@ -124,6 +124,17 @@ function seed(){
       snap:['PER(予想)','PBR','時価総額','配当利回り(予想)','信用倍率','目標株価コンセンサス'],
       trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true}]
     },
+    sectionMaster:[
+      {cat:'ビジネスモデル', on:true, subs:['収益モデル','顧客セグメント','提供価値','事業構造','収益の安定性']},
+      {cat:'財務', on:true, subs:['実績財務(PL/BS/CF)','財務健全性・効率性']},
+      {cat:'市場環境', on:true, subs:['市場規模(TAM/SAM/SOM)','市場成長率','産業構造','技術トレンド','マクロ要因']},
+      {cat:'競争環境', on:true, subs:['主要競合','競争優位性・差別化']},
+      {cat:'技術', on:true, subs:['技術力','技術ロードマップ','模倣困難性','生産・オペレーション技術','技術依存リスク','技術トレンド整合性']},
+      {cat:'ガバナンス', on:false, subs:['経営陣の質','取締役会構成','インセンティブ設計','ESG']},
+      {cat:'リスク要因', on:true, subs:['事業リスク','財務リスク','市場リスク','オペレーションリスク','法務リスク']},
+      {cat:'株主還元', on:false, subs:['配当方針','自社株買い','総還元性向','資本政策']}
+    ],
+    askPrefs:{mode:'new', level:'標準', picks:{}},
     stocks:[
       {id:'5803', name:'フジクラ', code:'5803', kind:'保有',
        metrics:{'PER(予想)':{v:'36.2',unit:'',d:'2026/7/13',src:'銘柄スカウター',conf:'高'},
@@ -133,10 +144,10 @@ function seed(){
        trend:{'売上高':{'25年3月期':'979375','26年3月期':'1182358','27年3月期(予)':'1462000',unit:'百万円'},
               '営業利益':{'25年3月期':'135519','26年3月期':'188707','27年3月期(予)':'310000',unit:'百万円'},
               'EPS':{'25年3月期':'55.1','26年3月期':'94.9','27年3月期(予)':'138.3',unit:'円'}},
-       sections:{'事業・ビジネスモデル':{t:'情報通信向け光ファイバ・ケーブル、自動車用電装品、電力ケーブルをグローバルに製造販売する非鉄メーカー。',d:'2026/7/13',src:'株予報Pro'},
-                 '成長ドライバー':{t:'データセンター・5G向け光通信需要、自動車電動化のワイヤハーネス、情報通信セグメント比率拡大とROE向上。',d:'2026/7/13',src:'株予報Pro'},
-                 'リスク要因':{t:'光ファイバ価格・原材料市況の変動、設備投資負担、為替・世界景気減速による需要調整。',d:'2026/7/13',src:'株予報Pro'},
-                 '競合ポジション':null,'技術':null},
+       sections:{'事業構造':{t:'情報通信向け光ファイバ・ケーブル、自動車用電装品、電力ケーブルをグローバルに製造販売する非鉄メーカー。',d:'2026/7/13',src:'株予報Pro',details:[]},
+                 '市場成長率':{t:'データセンター・5G向け光通信需要が拡大。AI・DCのCAPEX増が追い風。',d:'2026/7/13',src:'株予報Pro',details:[]},
+                 '事業リスク':{t:'光ファイバ価格・原材料市況の変動、設備投資負担、為替・世界景気減速による需要調整。',d:'2026/7/13',src:'株予報Pro',details:[]},
+                 '主要競合':{t:'古河電工、住友電工と光ケーブルで競合。DC向けで相対優位を主張。',d:'2026/7/13',src:'株予報Pro',details:[]}},
        mine:[{ts:'2026/7/12',t:'DC向け光ケーブルの需給が本丸。古河電工とのペアで見る。'}]
       }
     ],
@@ -167,7 +178,9 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('sh
 function stock(id){return DB.stocks.find(s=>s.id===id);}
 function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
 function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
-function staleCount(s){ let n=0; DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m) n++; else if(daysSince(m.d)>30) n++;}); Object.keys(s.sections).forEach(k=>{const v=s.sections[k]; if(!v) n++; else if(daysSince(v.d)>90) n++;}); return n; }
+function staleCount(s){ let n=0; DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m) n++; else if(daysSince(m.d)>30) n++;}); Object.values(s.sections).forEach(v=>{ if(v&&daysSince(v.d)>90) n++; }); return n; }
+function allSubs(){ const a=[]; DB.sectionMaster.forEach(c=>{ if(c.on) c.subs.forEach(su=>a.push({cat:c.cat,sub:su})); }); return a; }
+function filledCatCount(s,cat){ const c=DB.sectionMaster.find(x=>x.cat===cat); if(!c)return 0; return c.subs.filter(su=>s.sections[su]).length; }
 
 //////////////////// router ////////////////////
 let STATE={tab:'home', stockId:null};
@@ -241,13 +254,18 @@ function renderStockDetail(v){
   // trend
   h+='<div class="lbl">業績推移</div>';
   h+=renderTrend(s);
-  // sections
+  // sections (8 categories, 2-level accordion)
   h+='<div class="lbl">分析</div>';
-  Object.keys(s.sections).forEach((k,i)=>{ const val=s.sections[k]; const det=(val&&val.details)||[];
-    h+=`<div class="sec" id="sec${i}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(k)}${det.length?` <span class="chip gray" style="font-size:9px">詳細 ${det.length}</span>`:''}</span><span class="m">${val?esc(val.d.slice(5))+' · '+esc(val.src):'未取得'}</span></div><div class="b">${val?esc(val.t):'<span style="color:var(--ink3)">未取得。「AIに聞く」で取得できます。</span>'}
-      ${det.map(dd=>`<div class="mine" style="margin-top:8px"><div class="ts">${esc(dd.ts)}${dd.title?' · '+esc(dd.title):''}</div><div class="row2" style="white-space:pre-wrap">${esc(dd.t)}</div></div>`).join('')}
-      <button class="btn sm" style="margin-top:8px" onclick="sheetAddDetail('${s.id}','${k}')">＋ 詳細を追記(深掘り)</button>
-    </div></div>`; });
+  DB.sectionMaster.filter(c=>c.on).forEach((c,ci)=>{
+    const filled=filledCatCount(s,c.cat);
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:9px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:4px 8px 8px">`;
+    c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
+      h+=`<div class="sec" style="margin:6px 0"><div class="h" style="padding:7px 9px;font-size:12px" onclick="event.stopPropagation();this.parentNode.classList.toggle('open')"><span>${esc(su)}${det.length?` <span class="chip gray" style="font-size:9px">詳細${det.length}</span>`:''}</span><span class="m">${val?esc(val.d.slice(5)):''}</span></div><div class="b" style="font-size:12.5px">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}
+        ${det.map(dd=>`<div class="mine" style="margin-top:6px"><div class="ts">${esc(dd.ts)}${dd.title?' · '+esc(dd.title):''}</div><div class="row2" style="white-space:pre-wrap">${esc(dd.t)}</div></div>`).join('')}
+        <button class="btn sm" style="margin-top:6px" onclick="event.stopPropagation();sheetAddDetail('${s.id}','${esc(su)}')">＋ 詳細を追記</button>
+      </div></div>`; });
+    h+=`</div></div>`;
+  });
   // mine
   h+='<div class="lbl">自分の見解</div>';
   h+='<div class="card" style="padding:11px">';
@@ -340,7 +358,7 @@ function parseAndPreview(){
     p.rows.forEach((r,i)=>{
       let before='—';
       if(s){ if(r.block&&/指標/.test(r.block)&&s.metrics[r.key]) before=s.metrics[r.key].v;
-             else if(r.block&&/分析/.test(r.block)&&s.sections[r.key]) before='(既存)'; }
+             else if(r.block&&/分析/.test(r.block)){ const kk=r.key.replace(/[(（](詳細|サマリ)[)）]/,'').trim(); if(s.sections[kk]) before='(既存)'; } }
       const isNew=before==='—';
       const cls=isNew?'newrow':'';
       let after=esc(r.value)+(r.unit?` <span class="muted">${esc(r.unit)}</span>`:'');
@@ -366,7 +384,7 @@ function commitImport(){
   p.rows.forEach(r=>{
     if(/指標/.test(r.block||'')){ s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'}; }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o; }
-    else if(/分析/.test(r.block||'')){ const prev=s.sections[r.key]; s.sections[r.key]={t:r.value,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; }
+    else if(/分析/.test(r.block||'')){ let key=r.key, isDetail=/[(（]詳細[)）]/.test(key); key=key.replace(/[(（](詳細|サマリ)[)）]/,'').trim(); const prev=s.sections[key]; if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(サマリ未取得)',d:normD(r.d),src:r.src||'AI',details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:r.value}); } else { s.sections[key]={t:r.value,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; } }
     else if(/仮説/.test(r.block||'')){ if(r.key==='仮説'){hyp=hyp||{}; hyp.text=r.value;} if(/検証ポイント/.test(r.key)){hyp=hyp||{}; hyp.points=r.value.split('|').map(x=>x.trim());} if(/検証イベント/.test(r.key)){hyp=hyp||{}; hyp.event=r.value;} }
   });
   save();
@@ -376,7 +394,7 @@ function commitImport(){
 }
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
 function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
-function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null,'技術':null},mine:[]}); save(); toast('登録しました'); parseAndPreview(); }
+function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{},mine:[]}); save(); toast('登録しました'); parseAndPreview(); }
 
 //////////////////// REMINDER ////////////////////
 function renderReminder(v){
@@ -447,7 +465,7 @@ function sheetAddStock(){
     <label class="fld"><span class="t">銘柄名</span><input id="as_name" placeholder="例: 古河電気工業"></label>
     <label class="fld"><span class="t">ティッカー / 証券コード</span><input id="as_code" placeholder="例: 5801 / PLTR"></label>
     <label class="fld"><span class="t">区分</span><div class="seg"><button class="on" id="as_hold" onclick="this.classList.add('on');this.nextElementSibling.classList.remove('on')">保有</button><button id="as_watch" onclick="this.classList.add('on');this.previousElementSibling.classList.remove('on')">ウォッチ</button></div></label>
-    <button class="btn pri" onclick="doAddStock(true)">追加して発注プロンプトを生成</button>
+    <button class="btn pri" onclick="doAddStock(true)">追加してAIに聞く</button>
     <button class="btn" style="margin-top:8px" onclick="doAddStock(false)">追加のみ</button>`);
 }
 function doAddStock(order){
@@ -455,7 +473,7 @@ function doAddStock(order){
   if(!name||!code){toast('銘柄名とコードは必須です');return;}
   if(stock(code)){toast('このコードは登録済みです');return;}
   const kind=$('#as_hold').classList.contains('on')?'保有':'ウォッチ';
-  DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{'事業・ビジネスモデル':null,'成長ドライバー':null,'リスク要因':null,'競合ポジション':null,'技術':null},mine:[]});
+  DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{},mine:[]});
   save(); closeSheet(); anaTab=kind; 
   if(order){ openStock(code); sheetOrder(code); } else { openStock(code); }
   toast('追加しました');
@@ -473,25 +491,109 @@ function sheetAddMine(sid){
   openSheet(`<h3>見解を追記</h3><label class="fld"><span class="t">自分の判断・違和感・次に見るポイント</span><textarea id="mine_t" placeholder="AI分析とは分けて保存されます"></textarea></label><button class="btn pri" onclick="doAddMine('${sid}')">追記する</button>`);
 }
 function doAddMine(sid){ const t=$('#mine_t').value.trim(); if(!t){toast('内容を入力してください');return;} const s=stock(sid); s.mine.unshift({ts:fmtToday(),t}); save(); closeSheet(); render(); toast('見解を追記しました'); }
+let currentSid=null;
 function sheetOrder(sid){
-  const s=stock(sid); const need=[];
-  DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
-  Object.keys(s.sections).forEach(k=>{if(!s.sections[k])need.push(k);});
-  const prompt=buildOrderPrompt(s,need);
-  openSheet(`<h3>AIへの質問文</h3><div class="muted" style="margin-bottom:8px">要更新・未取得の ${need.length}項目をAIに聞きます。</div>
-    <textarea class="mono" style="min-height:200px" readonly>${esc(prompt)}</textarea>
-    <button class="btn pri" style="margin-top:10px" onclick='copyOrder(${JSON.stringify(prompt)})'>質問文をコピーしてAIへ</button>`);
+  const p=DB.askPrefs||{mode:'new',level:'標準',picks:{}};
+  openSheet(`<h3>AIに聞く</h3>
+    <div class="muted" style="margin-bottom:12px">どちらの聞き方をしますか?</div>
+    <div class="card tap ${p.mode==='new'?'':''}" style="${p.mode==='new'?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="pickMode('${sid}','new')">
+      <div style="font-size:14px;font-weight:700">① 新規に調べる</div>
+      <div class="muted" style="margin-top:3px">これから深掘りする。調べる項目を選んでAIに聞きます。</div></div>
+    <div class="card tap" style="${p.mode==='org'?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="pickMode('${sid}','org')">
+      <div style="font-size:14px;font-weight:700">② 手持ちの分析を整理する</div>
+      <div class="muted" style="margin-top:3px">すでにAIと深掘り済み。手元の分析を指定した粒度で構造化し直します。</div></div>`);
+}
+function pickMode(sid,mode){ DB.askPrefs.mode=mode; save(); if(mode==='new') sheetOrderNew(sid); else sheetOrderOrg(sid); }
+
+function sheetOrderNew(sid){
+  const s=stock(sid); const pk=DB.askPrefs.picks||{};
+  let h=`<h3>調べる項目を選ぶ</h3><div class="muted" style="margin-bottom:10px">チェック=取り込む / 「深掘り」=詳細レイヤー用の長文も取得</div>`;
+  DB.sectionMaster.filter(c=>c.on).forEach((c,ci)=>{
+    h+=`<div class="lbl" style="margin:12px 0 4px">${esc(c.cat)}</div>`;
+    c.subs.forEach(su=>{ const st=pk[su]||'off';
+      h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
+        <span style="flex:1;font-size:13px">${esc(su)}${s.sections[su]?' <span class="chip gray" style="font-size:9px">取得済</span>':''}</span>
+        <button class="btn sm" style="width:auto;padding:4px 9px;font-size:11px;${st!=='off'?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="cyclePick('${sid}','${esc(su)}')">${st==='off'?'選択':st==='sum'?'サマリ':'深掘り'}</button>
+      </div>`; });
+  });
+  h+=`<button class="btn pri" style="margin-top:14px" onclick="genOrderNew('${sid}')">この内容で質問文を生成</button>
+      <button class="btn" style="margin-top:8px" onclick="sheetSectionMaster('${sid}')">セクションを管理(表示/非表示)</button>`;
+  openSheet(h);
+}
+function cyclePick(sid,su){ const pk=DB.askPrefs.picks||(DB.askPrefs.picks={}); const cur=pk[su]||'off'; pk[su]= cur==='off'?'sum': cur==='sum'?'deep':'off'; save(); sheetOrderNew(sid); }
+
+function sheetOrderOrg(sid){
+  const lv=DB.askPrefs.level||'標準';
+  const opts=[['要点のみ','サマリだけに凝縮。ざっと俯瞰したいとき。'],['標準','サマリ+主要な詳細を残す。'],['できるだけ残す','情報の欠落を最小化し、詳細レイヤーに厚く格納。']];
+  let h=`<h3>残す情報の程度</h3><div class="muted" style="margin-bottom:10px">手元の分析を、8カテゴリの体系に沿ってAIに整理させます。</div>`;
+  opts.forEach(([k,d])=>{ h+=`<div class="card tap" style="${lv===k?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="DB.askPrefs.level='${k}';save();sheetOrderOrg('${sid}')"><div style="font-size:14px;font-weight:700">${k}</div><div class="muted" style="margin-top:3px">${d}</div></div>`; });
+  h+=`<div class="banner" style="margin-top:10px">生成後、この整理プロンプトと一緒に、手元の分析(AIとのチャットログ等)をAIチャットに貼り付けてください。</div>
+      <button class="btn pri" style="margin-top:8px" onclick="genOrderOrg('${sid}')">整理プロンプトを生成</button>`;
+  openSheet(h);
+}
+
+function catOf(su){ const c=DB.sectionMaster.find(x=>x.subs.includes(su)); return c?c.cat:''; }
+function genOrderNew(sid){
+  const s=stock(sid); const pk=DB.askPrefs.picks||{};
+  const sums=Object.keys(pk).filter(k=>pk[k]==='sum'), deeps=Object.keys(pk).filter(k=>pk[k]==='deep');
+  const need=[]; DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
+  if(!sums.length&&!deeps.length&&!need.length){ toast('項目を選んでください'); return; }
+  let p=`以下の項目を調査し、指定フォーマットで回答してください。\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ。金額の単位は「単位:◯◯」欄に開示慣行の単位で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n\n# 銘柄: ${s.name} (${s.code})\n`;
+  if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
+  p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
+  if(sums.length||deeps.length){
+    p+='\n\n## 分析\n以下の項目について回答。「サマリ」は2〜3文で簡潔に。「詳細」は深掘りした長文(投資判断に効く具体性=数値・競合比較・持続性を重視)。\n';
+    sums.forEach(k=>{ p+=`- ${k}(サマリ): \n`; });
+    deeps.forEach(k=>{ p+=`- ${k}(サマリ): \n- ${k}(詳細): \n`; });
+  }
+  p+='\n\n## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。分析は「- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度」「- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度」の2種で回答。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
+  showPrompt(p);
+}
+function genOrderOrg(sid){
+  const s=stock(sid); const lv=DB.askPrefs.level||'標準';
+  const detail={'要点のみ':'各項目サマリのみ(2〜3文)。詳細は出力しない。','標準':'各項目サマリ(2〜3文)+重要な項目には詳細も出力。','できるだけ残す':'各項目サマリ+詳細を可能な限り厚く。元の情報の欠落を最小化し、数値・固有名詞・根拠を落とさない。'}[lv];
+  const cats=DB.sectionMaster.filter(c=>c.on).map(c=>`${c.cat}: ${c.subs.join(' / ')}`).join('\n');
+  let p=`これから貼り付ける私の分析(AIとのやり取り等)を、下記の体系に沿って整理し直してください。\n\n■粒度: ${lv}\n${detail}\n\n■体系(該当する項目のみ埋める。情報がない項目は出力しない)\n${cats}\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各行に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す。元情報に日付がなければ本日の日付、出典は「手持ち分析」\n\n# 銘柄: ${s.name} (${s.code})\n## 分析\n- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度\n- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度\n\n--- 以下に私の分析を貼り付けます ---`;
+  showPrompt(p);
+}
+function showPrompt(p){
+  openSheet(`<h3>AIへの質問文</h3>
+    <textarea class="mono" style="min-height:220px" readonly>${esc(p)}</textarea>
+    <button class="btn pri" style="margin-top:10px" onclick='copyOrder(${JSON.stringify(p)})'>質問文をコピーしてAIへ</button>`);
+}
+function sheetSectionMaster(sid){
+  let h='<h3>セクションの管理</h3><div class="muted" style="margin-bottom:10px">大カテゴリの表示/非表示を切り替えます。</div>';
+  DB.sectionMaster.forEach((c,i)=>{
+    h+=`<div class="row" style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--line)">
+      <span style="flex:1;font-size:13px">${esc(c.cat)}<div class="muted" style="font-size:10px">${esc(c.subs.join('・'))}</div></span>
+      <button class="btn sm" style="width:auto;padding:4px 10px;font-size:11px;${c.on?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="DB.sectionMaster[${i}].on=!DB.sectionMaster[${i}].on;save();sheetSectionMaster('${sid}')">${c.on?'表示':'非表示'}</button>
+    </div>`; });
+  h+=`<button class="btn" style="margin-top:12px" onclick="sheetOrderNew('${sid}')">← 戻る</button>`;
+  openSheet(h);
 }
 function copyOrder(p){ copy(p,'質問文をコピーしました。AIの回答は「読み込み」へ'); closeSheet(); go('import'); }
-function buildOrderPrompt(s,need){
-  const snapNeed=need.filter(k=>DB.metricsMaster.snap.includes(k));
-  const secNeed=need.filter(k=>!DB.metricsMaster.snap.includes(k));
-  let p=`以下の項目を調査し、指定フォーマットで回答してください。\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。1キーにつき1行。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ。金額の単位は「単位:◯◯」欄に開示慣行の単位で明記(時価総額など金額指標も)\n・決算期は「yy年mm月期」表記、予想は(予)\n\n# 銘柄: ${s.name} (${s.code})\n`;
-  if(snapNeed.length){ p+='\n## 指標\n'+snapNeed.map(k=>`- ${k}: `).join('\n'); }
-  p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(t=>t.name).join(' / ')+' を年度ごとに。';
-  if(secNeed.length){ p+='\n\n## 分析\n'+secNeed.map(k=>`- ${k}: `).join('\n'); }
-  p+='\n\n## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
-  return p;
+const RULES='■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。1キーにつき1行。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・数値は値のみ、金額は「単位:◯◯」欄に開示慣行の単位で明記。決算期は「yy年mm月期」表記、予想は(予)';
+const FMT='## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。深掘り指定の項目は「- キー(詳細): 長文…」の行も追加。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
+function genNewPrompt(sid){
+  const s=stock(sid); const picks=DB.askPrefs.picks;
+  const chosen=Object.keys(picks).filter(k=>picks[k].on);
+  if(!chosen.length){ toast('項目を1つ以上選んでください'); return; }
+  // also add missing/stale snapshot metrics
+  const snapNeed=DB.metricsMaster.snap.filter(k=>{const m=s.metrics[k];return !m||daysSince(m.d)>30;});
+  let p=`以下を調査し、指定フォーマットで回答してください。\n\n${RULES}\n\n# 銘柄: ${s.name} (${s.code})\n`;
+  if(snapNeed.length) p+='\n## 指標\n'+snapNeed.map(k=>`- ${k}: `).join('\n')+'\n';
+  p+='\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(t=>t.name).join(' / ')+' を年度ごとに。\n';
+  p+='\n## 分析\n'+chosen.map(k=>`- ${k}: ${picks[k].deep?'(サマリ+詳細の両方を。詳細は具体的な数値・競合比較・持続性を厚めに)':'(要点を簡潔に)'}`).join('\n');
+  p+='\n\n'+FMT;
+  DB.askPrefs.picks=picks; save();
+  copyOrder(p);
+}
+function genOrgPrompt(sid){
+  const s=stock(sid); const lv=DB.askPrefs.level;
+  const cats=DB.sectionMaster.filter(c=>c.on).map(c=>c.cat+'('+c.subs.join('・')+')').join('\n');
+  const grain={'要点のみ':'各項目を要点のみ簡潔に。','標準':'各項目のサマリと主要な詳細を残す。','できるだけ残す':'情報の欠落を最小化し、詳細を厚く残す。'}[lv];
+  let p=`私がこの後貼り付ける${s.name}(${s.code})の分析を、次の体系に沿って整理し直してください。\n粒度: ${grain}\n\n${RULES}\n\n【整理の体系】\n${cats}\n\n# 銘柄: ${s.name} (${s.code})\n## 分析\n(該当する項目のみ「- サブ項目名: サマリ | 基準日 | 出典 | 確信度」で。厚く残す指定なら「- サブ項目名(詳細): 長文」も)\n\n${FMT}\n\n--- 以下に私の分析を貼り付けます ---`;
+  copyOrder(p);
 }
 function sheetAddReminder(){
   openSheet(`<h3>リマインダー登録</h3>
