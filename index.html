@@ -134,7 +134,7 @@ function seed(){
       {cat:'リスク要因', on:true, subs:['事業リスク','財務リスク','市場リスク','オペレーションリスク','法務リスク']},
       {cat:'株主還元', on:false, subs:['配当方針','自社株買い','総還元性向','資本政策']}
     ],
-    askPrefs:{mode:'new', level:'標準', picks:{}},
+    askPrefs:{mode:'new', level:'標準', picks:{}, themes:{}},
     stocks:[
       {id:'5803', name:'フジクラ', code:'5803', kind:'保有',
        metrics:{'PER(予想)':{v:'36.2',unit:'',d:'2026/7/13',src:'銘柄スカウター',conf:'高'},
@@ -165,7 +165,28 @@ function seed(){
     ]
   };
 }
-let DB = load() || seed();
+let DB = migrate(load()) || seed();
+function migrate(db){
+  if(!db) return null;
+  const s0=seed();
+  // 新フィールドの補完
+  if(!db.sectionMaster) db.sectionMaster=s0.sectionMaster;
+  if(!db.askPrefs) db.askPrefs={mode:'new', level:'標準', picks:{}, themes:{}};
+  if(!db.askPrefs.themes) db.askPrefs.themes={};
+  if(!db.metricsMaster) db.metricsMaster=s0.metricsMaster;
+  // 旧セクション名 → 新体系サブ項目への読み替え
+  const MAP={'事業・ビジネスモデル':'事業構造','成長ドライバー':'市場成長率','リスク要因':'事業リスク','競合ポジション':'主要競合','技術':'技術力'};
+  (db.stocks||[]).forEach(st=>{
+    if(!st.sections) st.sections={};
+    Object.keys(st.sections).forEach(k=>{
+      const v=st.sections[k];
+      if(v===null){ delete st.sections[k]; return; }           // 旧「未取得」プレースホルダは削除
+      if(MAP[k]){ const nk=MAP[k]; if(!st.sections[nk]) st.sections[nk]=v; delete st.sections[k]; }
+      if(v&&!v.details) v.details=[];
+    });
+  });
+  return db;
+}
 
 //////////////////// helpers ////////////////////
 const $=(s,r=document)=>r.querySelector(s);
@@ -221,19 +242,33 @@ function renderHome(v){
 }
 
 //////////////////// ANALYSIS list ////////////////////
-let anaTab='保有';
+let anaSort='保有優先';
 function renderAnalysis(v){
   $('#topTitle').textContent='企業分析';
   const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
-  let h=`<div class="seg">${['保有','ウォッチ'].map(k=>`<button class="${anaTab===k?'on':''}" onclick="anaTab='${k}';render()">${k}</button>`).join('')}</div>`;
-  const list=DB.stocks.filter(s=>s.kind===anaTab);
-  if(!list.length) h+=`<div class="empty"><div class="big">${anaTab}の銘柄はありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`;
-  list.forEach(s=>{ const sc=staleCount(s); const hy=hyposOf(s).filter(x=>x.state!=='決着').length; const jw=hyposOf(s).filter(x=>x.state==='判定待ち').length;
-    h+=`<div class="card tap" onclick="openStock('${s.id}')">
+  const sorts=['保有優先','鮮度が古い順','名前順'];
+  let h=`<div class="seg">${sorts.map(k=>`<button class="${anaSort===k?'on':''}" onclick="anaSort='${k}';render()">${k}</button>`).join('')}</div>`;
+  if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
+  const card=(s)=>{ const sc=staleCount(s); const hy=hyposOf(s.id).filter(x=>x.state!=='決着').length; const jw=hyposOf(s.id).filter(x=>x.state==='判定待ち').length;
+    return `<div class="card tap" onclick="openStock('${s.id}')">
       <div class="row"><h2 class="blk">${esc(s.name)}</h2>${sc?`<span class="chip amber">要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}</div>
       <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span>${hy?`<span class="chip navy">仮説 ${hy}</span>`:''}</div>
       ${jw?`<div class="muted" style="margin-top:4px;color:var(--amber-tx)">判定待ち ${jw}</div>`:''}
-    </div>`; });
+    </div>`; };
+  if(anaSort==='保有優先'){
+    [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
+      const list=DB.stocks.filter(s=>s.kind===k);
+      h+=`<div class="lbl">${label} (${list.length})</div>`;
+      if(!list.length) h+='<div class="muted" style="padding:2px 2px 8px">なし</div>';
+      list.forEach(s=>h+=card(s));
+    });
+  } else {
+    let list=[...DB.stocks];
+    if(anaSort==='鮮度が古い順') list.sort((a,b)=>staleCount(b)-staleCount(a));
+    else list.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    h+=`<div class="lbl">すべて (${list.length})</div>`;
+    list.forEach(s=>h+=card(s));
+  }
   v.innerHTML=h;
 }
 
@@ -275,7 +310,20 @@ function renderStockDetail(v){
   h+=`<button class="btn" style="margin-top:6px" onclick="openHypoList('${s.id}')">仮説カード (${hy.length})</button>`;
   h+=`<button class="btn" style="margin-top:8px" onclick="STATE.remFilter='${s.id}';go('reminder')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
   h+=`<button class="btn pri" style="margin-top:8px" onclick="sheetOrder('${s.id}')">AIに聞く(質問文を生成)</button>`;
+  h+=`<button class="btn danger" style="margin-top:22px" onclick="delStock('${s.id}')">この銘柄を削除</button>`;
   v.innerHTML=h;
+}
+function delStock(sid){
+  const s=stock(sid); const hy=hyposOf(sid).length, rm=remOf(sid).length;
+  let msg=`「${s.name}」を削除します。`;
+  if(hy||rm) msg+=`\n\n関連する 仮説${hy}件・リマインダー${rm}件 も削除されます。`;
+  msg+='\n\nこの操作は取り消せません。';
+  if(!confirm(msg)) return;
+  DB.stocks=DB.stocks.filter(x=>x.id!==sid);
+  DB.hypotheses=DB.hypotheses.filter(x=>x.stockId!==sid);
+  DB.reminders=DB.reminders.filter(x=>x.stockId!==sid);
+  if(DB.askPrefs&&DB.askPrefs.themes) delete DB.askPrefs.themes[sid];
+  save(); STATE.stockId=null; go('analysis'); toast('削除しました');
 }
 function renderTrend(s){
   const tr=s.trend; const inds=DB.metricsMaster.trend.filter(t=>t.graph&&tr[t.name]);
@@ -354,19 +402,30 @@ function parseAndPreview(){
   // diff table
   if(p.rows.length){
     const s=p.stock?stock(p.stock.code):null;
+    // 分析行の行き先を判定し、該当なしを分離
+    const orphans=[];
+    p.rows.forEach(r=>{ if(/分析/.test(r.block||'')){ const res=resolveSection(r.key,r.value); r._res=res; if(!res.sub) orphans.push(r); } });
+    const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
+    if(orphans.length){
+      h+=`<div class="failbox" style="background:var(--red-bg)"><div class="t" style="color:var(--red-tx)">⚠ 該当セクションが見つからない行 (${orphans.length})</div>
+        <div class="muted" style="font-size:11px;color:var(--red-tx);margin:3px 0 6px">下記はどのセクションにも紐づきません。取り込むにはチェックしてください(取り込む場合は「その他」として保存されます)。</div>`;
+      orphans.forEach((r,i)=>{ h+=`<div style="display:flex;gap:7px;align-items:flex-start;padding:4px 0"><input type="checkbox" style="width:auto;margin:3px 0 0 0" id="orp${i}"><label for="orp${i}" class="l" style="flex:1;cursor:pointer">${esc(r.key)}: ${esc(r.value.slice(0,60))}…</label></div>`; });
+      h+='</div>';
+    }
     h+='<div class="lbl">読み込みプレビュー</div><table><tr><th>項目</th><th>更新前</th><th>更新後</th></tr>';
-    p.rows.forEach((r,i)=>{
-      let before='—';
+    okRows.forEach((r,i)=>{
+      let before='—'; let label=esc(r.key);
       if(s){ if(r.block&&/指標/.test(r.block)&&s.metrics[r.key]) before=s.metrics[r.key].v;
-             else if(r.block&&/分析/.test(r.block)){ const kk=r.key.replace(/[(（](詳細|サマリ)[)）]/,'').trim(); if(s.sections[kk]) before='(既存)'; } }
+             else if(r._res&&r._res.sub){ label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:9px">詳細</span>':''); if(s.sections[r._res.sub]) before='(既存)'; } }
       const isNew=before==='—';
       const cls=isNew?'newrow':'';
-      let after=esc(r.value)+(r.unit?` <span class="muted">${esc(r.unit)}</span>`:'');
+      let after=esc((r._res?r._res.value:r.value))+(r.unit?` <span class="muted">${esc(r.unit)}</span>`:'');
       let confb=r.conf==='低'?' <span class="chip gray" style="font-size:9px">低</span>':'';
-      h+=`<tr class="${cls}"><td>${esc(r.key)}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}</div></td><td class="val-old">${esc(before)}</td><td>${after}</td></tr>`;
+      h+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}</div></td><td class="val-old">${esc(before)}</td><td>${after}</td></tr>`;
     });
     h+='</table>';
-    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${p.rows.length}件を読み込む</button>`;
+    window._orphans=orphans;
+    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${okRows.length}件を読み込む</button>`;
     window._parsed=p;
   }
   if(p.failed.length){
@@ -381,16 +440,54 @@ function commitImport(){
   const p=window._parsed; if(!p||!p.stock){toast('銘柄が特定できません');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
   let hyp=null;
+  // 該当なし行: チェックされたものだけ「その他」カテゴリへ
+  (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),src:r.src||'AI',details:[]}; } });
   p.rows.forEach(r=>{
+    if(r._res&&!r._res.sub) return;
     if(/指標/.test(r.block||'')){ s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'}; }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o; }
-    else if(/分析/.test(r.block||'')){ let key=r.key, isDetail=/[(（]詳細[)）]/.test(key); key=key.replace(/[(（](詳細|サマリ)[)）]/,'').trim(); const prev=s.sections[key]; if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(サマリ未取得)',d:normD(r.d),src:r.src||'AI',details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:r.value}); } else { s.sections[key]={t:r.value,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; } }
+    else if(/分析/.test(r.block||'')){
+      const res=resolveSection(r.key, r.value);
+      if(!res.sub) return;
+      const key=res.sub, isDetail=res.layer==='詳細', val=res.value;
+      const prev=s.sections[key];
+      if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),src:r.src||'AI',details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val}); }
+      else { s.sections[key]={t:val,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; }
+    }
     else if(/仮説/.test(r.block||'')){ if(r.key==='仮説'){hyp=hyp||{}; hyp.text=r.value;} if(/検証ポイント/.test(r.key)){hyp=hyp||{}; hyp.points=r.value.split('|').map(x=>x.trim());} if(/検証イベント/.test(r.key)){hyp=hyp||{}; hyp.event=r.value;} }
   });
   save();
   toast(p.rows.length+'件を読み込みました');
   $('#mdIn').value=''; $('#parseOut').innerHTML='';
   openStock(s.id);
+}
+function knownSubs(){ const a=[]; DB.sectionMaster.forEach(c=>c.subs.forEach(su=>a.push(su))); return a; }
+// 「主要競合(サマリ)」「競争環境: 主要競合(サマリ)」「競争環境: 主要競合(詳細): 本文」いずれも解決する
+function resolveSection(rawKey, rawValue){
+  let key=String(rawKey||'').trim(), value=String(rawValue||'').trim();
+  let layer=null;
+  const pick=(s)=>{ const m=s.match(/^(.*?)[（(](サマリ|要点のみ|詳細)[）)]\s*$/); if(m) return {base:m[1].trim(), lay:(m[2]==='詳細'?'詳細':'サマリ')}; return null; };
+  // ケースA: キー自体にレイヤー表記がある
+  let p=pick(key);
+  if(p){ key=p.base; layer=p.lay; }
+  // ケースB: キーがカテゴリ名で、値の先頭が「サブ項目(レイヤー): 本文」
+  const cats=DB.sectionMaster.map(c=>c.cat);
+  if(cats.includes(key)){
+    const m=value.match(/^([^:：]+)[:：]\s*([\s\S]*)$/);
+    if(m){ const p2=pick(m[1].trim()); if(p2){ key=p2.base; layer=p2.lay; value=m[2].trim(); } else { key=m[1].trim(); value=m[2].trim(); } }
+  }
+  // キー内に「カテゴリ: サブ項目」が同居している場合
+  if(key.includes(':')||key.includes('：')){
+    const parts=key.split(/[:：]/).map(x=>x.trim()).filter(Boolean);
+    const last=parts[parts.length-1]; const p3=pick(last);
+    if(p3){ key=p3.base; layer=p3.lay; } else { key=last; }
+  }
+  const subs=knownSubs();
+  if(!subs.includes(key)){
+    const hit=subs.find(su=>key.includes(su)||su.includes(key));
+    if(hit) key=hit; else return {sub:null, layer:layer||'サマリ', value};
+  }
+  return {sub:key, layer:layer||'サマリ', value};
 }
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
 function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
@@ -474,7 +571,7 @@ function doAddStock(order){
   if(stock(code)){toast('このコードは登録済みです');return;}
   const kind=$('#as_hold').classList.contains('on')?'保有':'ウォッチ';
   DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{},mine:[]});
-  save(); closeSheet(); anaTab=kind; 
+  save(); closeSheet(); 
   if(order){ openStock(code); sheetOrder(code); } else { openStock(code); }
   toast('追加しました');
 }
@@ -507,20 +604,26 @@ function pickMode(sid,mode){ DB.askPrefs.mode=mode; save(); if(mode==='new') she
 
 function sheetOrderNew(sid){
   const s=stock(sid); const pk=DB.askPrefs.picks||{};
-  let h=`<h3>調べる項目を選ぶ</h3><div class="muted" style="margin-bottom:10px">チェック=取り込む / 「深掘り」=詳細レイヤー用の長文も取得</div>`;
+  const th=(DB.askPrefs.themes||{})[sid]||'';
+  let h=`<h3>調べる項目を選ぶ</h3>
+    <label class="fld"><span class="t">深掘りテーマ(任意)</span>
+      <input id="ord_theme" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術">
+      <div class="hint">入力すると、各項目をこのテーマの観点で調べます。</div></label>
+    <div class="muted" style="margin:10px 0">ボタンを押すたび 選択 → 要点のみ → 深掘り → 解除 と切り替わります。</div>`;
   DB.sectionMaster.filter(c=>c.on).forEach((c,ci)=>{
     h+=`<div class="lbl" style="margin:12px 0 4px">${esc(c.cat)}</div>`;
     c.subs.forEach(su=>{ const st=pk[su]||'off';
       h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
         <span style="flex:1;font-size:13px">${esc(su)}${s.sections[su]?' <span class="chip gray" style="font-size:9px">取得済</span>':''}</span>
-        <button class="btn sm" style="width:auto;padding:4px 9px;font-size:11px;${st!=='off'?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="cyclePick('${sid}','${esc(su)}')">${st==='off'?'選択':st==='sum'?'サマリ':'深掘り'}</button>
+        <button class="btn sm" style="width:auto;padding:4px 9px;font-size:11px;${st!=='off'?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="cyclePick('${sid}','${esc(su)}')">${st==='off'?'選択':st==='sum'?'要点のみ':'深掘り'}</button>
       </div>`; });
   });
-  h+=`<button class="btn pri" style="margin-top:14px" onclick="genOrderNew('${sid}')">この内容で質問文を生成</button>
-      <button class="btn" style="margin-top:8px" onclick="sheetSectionMaster('${sid}')">セクションを管理(表示/非表示)</button>`;
+  h+=`<button class="btn pri" style="margin-top:14px" onclick="saveTheme('${sid}');genOrderNew('${sid}')">この内容で質問文を生成</button>
+      <button class="btn" style="margin-top:8px" onclick="saveTheme('${sid}');sheetSectionMaster('${sid}')">セクションを管理(表示/非表示)</button>`;
   openSheet(h);
 }
-function cyclePick(sid,su){ const pk=DB.askPrefs.picks||(DB.askPrefs.picks={}); const cur=pk[su]||'off'; pk[su]= cur==='off'?'sum': cur==='sum'?'deep':'off'; save(); sheetOrderNew(sid); }
+function cyclePick(sid,su){ saveTheme(sid); const pk=DB.askPrefs.picks||(DB.askPrefs.picks={}); const cur=pk[su]||'off'; pk[su]= cur==='off'?'sum': cur==='sum'?'deep':'off'; save(); sheetOrderNew(sid); }
+function saveTheme(sid){ const el=document.getElementById('ord_theme'); if(el){ if(!DB.askPrefs.themes)DB.askPrefs.themes={}; DB.askPrefs.themes[sid]=el.value.trim(); save(); } }
 
 function sheetOrderOrg(sid){
   const lv=DB.askPrefs.level||'標準';
@@ -538,11 +641,14 @@ function genOrderNew(sid){
   const sums=Object.keys(pk).filter(k=>pk[k]==='sum'), deeps=Object.keys(pk).filter(k=>pk[k]==='deep');
   const need=[]; DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
   if(!sums.length&&!deeps.length&&!need.length){ toast('項目を選んでください'); return; }
-  let p=`以下の項目を調査し、指定フォーマットで回答してください。\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ。金額の単位は「単位:◯◯」欄に開示慣行の単位で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n\n# 銘柄: ${s.name} (${s.code})\n`;
+  const theme=((DB.askPrefs.themes||{})[sid]||'').trim();
+  let p=`以下の項目を調査し、指定フォーマットで回答してください。\n`;
+  if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
+  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ。金額の単位は「単位:◯◯」欄に開示慣行の単位で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n\n# 銘柄: ${s.name} (${s.code})\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
   p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
   if(sums.length||deeps.length){
-    p+='\n\n## 分析\n以下の項目について回答。「サマリ」は2〜3文で簡潔に。「詳細」は深掘りした長文(投資判断に効く具体性=数値・競合比較・持続性を重視)。\n';
+    p+='\n\n## 分析\n以下の項目について回答。「サマリ」は2〜3文で簡潔に。「詳細」は深掘りした長文(投資判断に効く具体性=数値・競合比較・持続性を重視)。\n項目名は下記の名称をそのまま使い、カテゴリ名は付けないでください。\n';
     sums.forEach(k=>{ p+=`- ${k}(サマリ): \n`; });
     deeps.forEach(k=>{ p+=`- ${k}(サマリ): \n- ${k}(詳細): \n`; });
   }
@@ -552,8 +658,8 @@ function genOrderNew(sid){
 function genOrderOrg(sid){
   const s=stock(sid); const lv=DB.askPrefs.level||'標準';
   const detail={'要点のみ':'各項目サマリのみ(2〜3文)。詳細は出力しない。','標準':'各項目サマリ(2〜3文)+重要な項目には詳細も出力。','できるだけ残す':'各項目サマリ+詳細を可能な限り厚く。元の情報の欠落を最小化し、数値・固有名詞・根拠を落とさない。'}[lv];
-  const cats=DB.sectionMaster.filter(c=>c.on).map(c=>`${c.cat}: ${c.subs.join(' / ')}`).join('\n');
-  let p=`これから貼り付ける私の分析(AIとのやり取り等)を、下記の体系に沿って整理し直してください。\n\n■粒度: ${lv}\n${detail}\n\n■体系(該当する項目のみ埋める。情報がない項目は出力しない)\n${cats}\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各行に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す。元情報に日付がなければ本日の日付、出典は「手持ち分析」\n\n# 銘柄: ${s.name} (${s.code})\n## 分析\n- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度\n- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度\n\n--- 以下に私の分析を貼り付けます ---`;
+  const cats=DB.sectionMaster.filter(c=>c.on).map(c=>`【${c.cat}】\n`+c.subs.map(su=>`  - ${su}`).join('\n')).join('\n');
+  let p=`これから貼り付ける私の分析(AIとのやり取り等)を、下記の体系に沿って整理し直してください。\n\n■粒度: ${lv}\n${detail}\n\n■体系(該当する項目のみ埋める。情報がない項目は出力しない)\n${cats}\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・項目名は上記リストの名称(- の後の名称)のみを使い、カテゴリ名(【】内)は付けない\n  正しい例: - 主要競合(サマリ): 本文\n  誤った例: - 競争環境: 主要競合(サマリ): 本文\n・各行に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す。元情報に日付がなければ本日の日付、出典は「手持ち分析」\n\n# 銘柄: ${s.name} (${s.code})\n## 分析\n- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度\n- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度\n\n--- 以下に私の分析を貼り付けます ---`;
   showPrompt(p);
 }
 function showPrompt(p){
