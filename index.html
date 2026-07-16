@@ -170,7 +170,7 @@ function seed(){
        cat:'報道確認', freq:'平日', times:['09:15','15:30'], count:'60', paused:false,
        changes:[{cond:'1Q決算 2026/8/7 になったら', freq:'毎日', times:'08:30,12:30,18:00', count:'30'}],
        prompt:'フジクラ(5803)について、光ファイバ需給/AI・DC関連ニュース/信用残・出来高/同業(古河電工・住友電工)動向を重要度順に3〜6点で要約し、最後に注目度(高/中/低)を付けてください。',
-       src:'GPT', srcDate:'2026/7/13', log:[{d:'2026/7/11',type:'変化なし'}], nextFire:'2026/7/14 09:15'}
+       src:'GPT', srcDate:'2026/7/13', log:[{d:'2026/7/11',type:'変化なし'}], nextFire:null}
     ]
   };
 }
@@ -253,15 +253,18 @@ let STATE={tab:'home', stockId:null};
 function go(tab){
   // タブから直接開いた場合、AIに聞く画面の対象銘柄をリセット(企業分析からの遷移時は openAsk が設定済み)
   if(tab==='import' && !STATE._askFromStock) STATE.askStockId=null;
-  STATE._askFromStock=false;
+  if(tab==='reminder' && !STATE._remFromStock) STATE.remStockId=null;
+  STATE._askFromStock=false; STATE._remFromStock=false;
   STATE.tab=tab; STATE.stockId=null;
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   render(); $('#view').scrollTop=0;
 }
 function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
+function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
 function openStock(id){ STATE.stockId=id; render(); $('#view').scrollTop=0; }
 
 function render(){
+  refreshFires();
   const v=$('#view'); const act=$('#topAct'); act.style.display='none'; $('#topSub').textContent='';
   if(STATE.stockId){ renderStockDetail(v); return; }
   ({home:renderHome, analysis:renderAnalysis, import:renderImport, reminder:renderReminder}[STATE.tab])(v);
@@ -284,7 +287,7 @@ function renderHome(v){
   if(!risk.length&&!judge.length&&!todayRem.length&&!stale.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
   // timeline
   const items=[];
-  DB.reminders.filter(r=>!r.paused&&r.nextFire).forEach(r=>{const d=parseD(r.nextFire); if(d)items.push({d,label:r.title,type:'リマインダー',id:r.stockId});});
+  DB.reminders.filter(r=>!r.paused).forEach(r=>{const d=calcNextFire(r); if(d)items.push({d,label:r.title,type:'リマインダー',id:r.stockId});});
   DB.hypotheses.forEach(hh=>{ if(hh.eventType==='date'&&hh.eventDate){const d=parseD(hh.eventDate); if(d)items.push({d,label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'検証イベント'),type:'検証イベント',id:hh.stockId});} });
   items.sort((a,b)=>a.d-b.d);
   h+='<div class="lbl">今週の予定</div>';
@@ -373,7 +376,7 @@ function renderStockDetail(v){
   h+=`<button class="btn sm" style="margin-top:4px" onclick="sheetAddMine('${s.id}')">＋ 見解を追記</button></div>`;
   // links
   h+=`<button class="btn" style="margin-top:6px" onclick="openHypoList('${s.id}')">仮説カード (${hy.length})</button>`;
-  h+=`<button class="btn" style="margin-top:8px" onclick="STATE.remFilter='${s.id}';go('reminder')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
+  h+=`<button class="btn" style="margin-top:8px" onclick="openRem('${s.id}')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
   h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">AIに聞く・取り込む</button>`;
   h+=`<button class="btn danger" style="margin-top:22px" onclick="delStock('${s.id}')">この銘柄を削除</button>`;
   v.innerHTML=h;
@@ -579,6 +582,7 @@ function parseAndPreview(){
       const cls=isNew?'newrow':'';
       let confb=r.conf==='低'?' <span class="chip gray" style="font-size:9px">低</span>':'';
       let beforeHtml, afterHtml;
+      if(isSame) r._skip=true;
       if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw); }
       else if(isSame){ beforeHtml=esc(before); afterHtml='<span class="muted">変更なし</span>'; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
@@ -588,7 +592,10 @@ function parseAndPreview(){
     });
     h+='</table></div>';
     window._orphans=orphans;
-    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${okRows.length}件を読み込む</button>`;
+    const sameCnt=okRows.filter(r=>r._skip).length;
+    const importCnt=okRows.length-sameCnt;
+    if(sameCnt) h+=`<div class="muted" style="margin-top:8px;font-size:11px">前回と同じ内容の ${sameCnt}件 は読み込みません(鮮度のみ更新)。</div>`;
+    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${importCnt}件を読み込む${sameCnt?`(${sameCnt}件は鮮度のみ)`:''}</button>`;
     window._parsed=p;
   }
   if(p.failed.length){
@@ -609,6 +616,11 @@ function commitImport(){
   (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),src:r.src||'AI',details:[]}; } });
   p.rows.forEach(r=>{
     if(r._res&&!r._res.sub) return;
+    if(r._skip){ // 内容が同じ → 鮮度(取得日)のみ更新
+      if(/指標/.test(r.block||'')&&s.metrics[r.key]) s.metrics[r.key].d=normD(r.d);
+      else if(r._res&&r._res.sub&&s.sections[r._res.sub]&&r._res.layer!=='詳細') s.sections[r._res.sub].d=normD(r.d);
+      return;
+    }
     if(/指標/.test(r.block||'')){ s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'}; }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o; }
     else if(/分析/.test(r.block||'')){
@@ -696,7 +708,7 @@ function addStockFromImport(st){ DB.stocks.push({id:st.code,name:st.name,code:st
 //////////////////// REMINDER ////////////////////
 function renderReminder(v){
   $('#topTitle').textContent='リマインダー';
-  const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 登録'; act.onclick=sheetAddReminder;
+  const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 登録'; act.onclick=()=>sheetAddReminder(STATE.remStockId);
   const filt=STATE.remFilter; STATE.remFilter=null;
   let list=DB.reminders; if(filt) list=list.filter(r=>r.stockId===filt);
   let h='';
@@ -721,6 +733,7 @@ function openReminder(id){
   let h=`<h3>${esc(r.title)}</h3>`;
   h+=`<div class="card"><div class="pill-row"><span class="chip navy">${esc(r.cat)}</span><span class="chip gray">${esc(stock(r.stockId)?.name||'')}</span></div>
     <div class="muted" style="margin-top:6px">${esc(r.freq)} ${esc((r.times||[]).join(', '))} · 回数 ${esc(r.count||'上限なし')}</div>
+    <div class="muted" style="margin-top:3px">次回: ${r.paused?'(休止中)':esc(fmtFire(calcNextFire(r)))}</div>
     ${(r.changes||[]).map(c=>`<div class="muted" style="margin-top:3px">頻度変更: ${esc(c.cond)} → ${esc(c.freq)} ${esc(c.times||'')}</div>`).join('')}
     <div class="muted" style="margin-top:3px">作: ${esc(r.src||'手動')} ${esc(r.srcDate||'')}</div></div>`;
   if(r.prompt){ h+=`<div class="card"><div class="lbl" style="margin-top:0">リマインド時に外部AIへ指示するプロンプト</div><div class="muted mono" style="font-size:11px;white-space:pre-wrap">${esc(r.prompt.slice(0,80))}…</div><button class="btn sm" style="margin-top:8px" onclick='copy(${JSON.stringify(r.prompt)},"プロンプトをコピーしました")'>⧉ コピー</button></div>`; }
@@ -728,8 +741,58 @@ function openReminder(id){
   h+=`<button class="btn" onclick="logRem('${r.id}','変化なし')">変化なし(記録)</button><button class="btn" onclick="toast('プロトタイプでは結果貼付は簡略化')">結果を貼り付け</button></div>`;
   h+='<div class="lbl">経過履歴</div><div class="card" style="padding:11px">'+(r.log||[]).map(l=>`<div class="muted">${esc(l.d)} · ${esc(l.type)}</div>`).join('')+'</div>';
   h+='<div class="row" style="gap:8px;margin-top:10px">';
-  h+=`<button class="btn sm" onclick="togglePause('${r.id}')">${r.paused?'再開':'休止'}</button><button class="btn sm danger" onclick="delReminder('${r.id}')">削除</button></div>`;
+  h+=`<button class="btn sm" onclick="sheetEditReminder('${r.id}')">編集</button><button class="btn sm" onclick="togglePause('${r.id}')">${r.paused?'再開':'休止'}</button><button class="btn sm danger" onclick="delReminder('${r.id}')">削除</button></div>`;
   openSheet(h);
+}
+// ===== リマインダーの項目単位編集 =====
+const CATS=['テクニカル','報道確認','決算プレビュー','決算レビュー','指標更新','需給確認','マクロ'];
+const FREQS=['毎日','平日','土日','週次(月)','週次(火)','週次(水)','週次(木)','週次(金)','月次(1日)','単発'];
+function sheetEditReminder(id){
+  const r=DB.reminders.find(x=>x.id===id); if(!r) return;
+  const ch=r.changes||[];
+  let h=`<h3>リマインダーを編集</h3>
+    <label class="fld"><span class="t">対象銘柄</span><select id="e_stock">${DB.stocks.map(s=>`<option value="${s.id}" ${s.id===r.stockId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>
+    <label class="fld"><span class="t">タイトル</span><input id="e_title" value="${esc(r.title||'')}"></label>
+    <label class="fld"><span class="t">コメント</span><textarea id="e_comment" style="min-height:52px">${esc(r.comment||'')}</textarea></label>
+    <label class="fld"><span class="t">カテゴリ</span><select id="e_cat">${CATS.map(c=>`<option ${c===r.cat?'selected':''}>${c}</option>`).join('')}</select></label>
+    <label class="fld"><span class="t">頻度</span><select id="e_freq">${FREQS.map(f=>`<option ${f===r.freq?'selected':''}>${f}</option>`).join('')}${FREQS.includes(r.freq)?'':`<option selected>${esc(r.freq||'')}</option>`}</select></label>
+    <label class="fld"><span class="t">時間(カンマ区切り)</span><input id="e_times" value="${esc((r.times||[]).join(', '))}" placeholder="09:00, 15:30"></label>
+    <label class="fld"><span class="t">回数</span><input id="e_count" value="${esc(r.count||'上限なし')}" placeholder="上限なし / 30"></label>
+    <div class="lbl">頻度変更(最大2)</div>`;
+  for(let i=0;i<2;i++){ const c=ch[i]||{};
+    h+=`<div class="card" style="padding:10px 11px">
+      <div class="muted" style="font-size:10px;margin-bottom:4px">変更${i+1}${c.cond?'':' (未設定)'}</div>
+      <label class="fld" style="margin-bottom:7px"><span class="t">条件(日付を含める)</span><input id="e_c${i}_cond" value="${esc(c.cond||'')}" placeholder="決算発表日 2026/8/13 になったら"></label>
+      <label class="fld" style="margin-bottom:7px"><span class="t">変更後の頻度</span><input id="e_c${i}_freq" value="${esc(c.freq||'')}" placeholder="毎日 / 平日 / 単発 2026/8/13"></label>
+      <label class="fld" style="margin-bottom:0"><span class="t">変更後の時間</span><input id="e_c${i}_times" value="${esc(c.times||'')}" placeholder="08:30, 12:00"></label>
+    </div>`; }
+  h+=`<label class="fld" style="margin-top:8px"><span class="t">実行プロンプト</span><textarea id="e_prompt" style="min-height:110px">${esc(r.prompt||'')}</textarea></label>
+    <button class="btn pri" onclick="saveEditReminder('${r.id}')">保存</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="openReminder('${r.id}')">キャンセル</button>`;
+  openSheet(h);
+}
+function saveEditReminder(id){
+  const r=DB.reminders.find(x=>x.id===id); if(!r) return;
+  const title=$('#e_title').value.trim(); if(!title){ toast('タイトルは必須です'); return; }
+  r.stockId=$('#e_stock').value;
+  r.title=title;
+  r.comment=$('#e_comment').value.trim();
+  r.cat=$('#e_cat').value;
+  r.freq=$('#e_freq').value;
+  r.times=$('#e_times').value.split(',').map(x=>x.trim()).filter(Boolean);
+  r.count=$('#e_count').value.trim()||'上限なし';
+  const ch=[];
+  for(let i=0;i<2;i++){
+    const cond=$('#e_c'+i+'_cond').value.trim();
+    if(!cond) continue;
+    ch.push({cond, freq:$('#e_c'+i+'_freq').value.trim(), times:$('#e_c'+i+'_times').value.trim()});
+  }
+  r.changes=ch;
+  r.prompt=$('#e_prompt').value.trim();
+  const bad=ch.find(c=>!/\d{4}\/\d{1,2}\/\d{1,2}/.test(c.cond));
+  const d=calcNextFire(r); r.nextFire = d?fmtFire(d):null;
+  save(); closeSheet(); render();
+  toast(bad?'保存しました(日付のない頻度変更は無視されます)':'保存しました');
 }
 function logRem(id,type){ const r=DB.reminders.find(x=>x.id===id); r.log.unshift({d:fmtToday(),type}); save(); closeSheet(); toast('記録しました'); }
 function togglePause(id){ const r=DB.reminders.find(x=>x.id===id); r.paused=!r.paused; save(); closeSheet(); render(); toast(r.paused?'休止しました':'再開しました'); }
@@ -740,6 +803,65 @@ function delReminder(id){
   }});
 }
 function fmtNum(v){ const s=String(v).replace(/,/g,''); if(!/^-?\d+(\.\d+)?$/.test(s)) return v; const p=s.split('.'); return Number(p[0]).toLocaleString('en-US')+(p[1]?'.'+p[1]:''); }
+// ===== 次回発火日時の計算 =====
+// 頻度変更(条件日付)を考慮し、指定時点で有効な頻度定義を返す
+function activeSchedule(r, at){
+  let freq=r.freq, times=r.times||[], count=r.count;
+  (r.changes||[]).forEach(c=>{
+    const m=String(c.cond||'').match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+    if(!m) return;
+    const d=new Date(+m[1], +m[2]-1, +m[3]);
+    if(at>=d){ // 条件日を過ぎていれば適用(後の変更ほど優先)
+      if(c.freq) freq=c.freq;
+      if(c.times) times=String(c.times).split(',').map(x=>x.trim()).filter(Boolean);
+      if(c.count) count=c.count;
+    }
+  });
+  return {freq, times, count};
+}
+function matchFreq(freq, d){
+  const w=d.getDay(); // 0=日
+  if(/毎日/.test(freq)) return true;
+  if(/平日/.test(freq)) return w>=1&&w<=5;
+  if(/土日/.test(freq)) return w===0||w===6;
+  if(/週次/.test(freq)){
+    const m=String(freq).match(/[（(]([日月火水木金土])[）)]/);
+    if(!m) return w===1; // 曜日指定なしは月曜
+    return ['日','月','火','水','木','金','土'].indexOf(m[1])===w;
+  }
+  if(/月次/.test(freq)){
+    const m=String(freq).match(/(\d{1,2})日/);
+    return m ? d.getDate()===+m[1] : d.getDate()===1;
+  }
+  if(/単発/.test(freq)){
+    const m=String(freq).match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+    if(!m) return false;
+    return d.getFullYear()===+m[1] && d.getMonth()===+m[2]-1 && d.getDate()===+m[3];
+  }
+  return false;
+}
+// 現在時刻以降の最初の発火日時を返す(最大180日先まで探索)
+function calcNextFire(r, from){
+  const now=from||new Date();
+  for(let i=0;i<180;i++){
+    const d=new Date(now.getFullYear(), now.getMonth(), now.getDate()+i);
+    const sch=activeSchedule(r, d);
+    if(!matchFreq(sch.freq, d)) continue;
+    const times=(sch.times&&sch.times.length?sch.times:['09:00']).slice().sort();
+    for(const tm of times){
+      const mm=String(tm).match(/(\d{1,2}):(\d{2})/); if(!mm) continue;
+      const cand=new Date(d.getFullYear(), d.getMonth(), d.getDate(), +mm[1], +mm[2]);
+      if(cand>now) return cand;
+    }
+  }
+  return null;
+}
+function fmtFire(d){
+  if(!d) return '—';
+  const wd=['日','月','火','水','木','金','土'][d.getDay()];
+  return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}(${wd}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function refreshFires(){ (DB.reminders||[]).forEach(r=>{ if(r.paused){ r.nextFire=null; return; } const d=calcNextFire(r); r.nextFire = d? fmtFire(d) : null; }); }
 function fmtToday(){ const d=today(); return `2026/${d.getMonth()+1}/${d.getDate()}`; }
 
 //////////////////// HYPO ////////////////////
@@ -935,10 +1057,11 @@ function genOrgPrompt(sid){
   let p=`私がこの後貼り付ける${s.name}(${s.code})の分析を、次の体系に沿って整理し直してください。\n粒度: ${grain}\n\n${RULES}\n\n【整理の体系】\n${cats}\n\n# 銘柄: ${s.name} (${s.code})\n## 分析\n(該当する項目のみ「- サブ項目名: サマリ | 基準日 | 出典 | 確信度」で。厚く残す指定なら「- サブ項目名(詳細): 長文」も)\n\n${FMT}\n\n--- 以下に私の分析を貼り付けます ---`;
   copyOrder(p);
 }
-function sheetAddReminder(){
+function sheetAddReminder(presetId){
+  const sel=presetId||STATE.remStockId||'';
   openSheet(`<h3>リマインダー登録</h3>
     <div class="muted" style="margin-bottom:10px">外部AIに設計させる場合は登録用プロンプトをコピーし、回答を貼り付けます。</div>
-    <label class="fld"><span class="t">対象銘柄</span><select id="rm_stock">${DB.stocks.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
+    <label class="fld"><span class="t">対象銘柄</span><select id="rm_stock">${DB.stocks.map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>
     <label class="fld"><span class="t">補足メモ(任意)</span><textarea id="rm_memo" placeholder="監視の狙い・保有状況・警戒条件など"></textarea></label>
     <button class="btn" onclick="copyRegPrompt()">登録用プロンプトをコピー</button>
     <label class="fld" style="margin-top:12px"><span class="t">外部AIの出力(md)を貼り付け</span><textarea id="rm_md" class="mono" placeholder="## リマインダー ..."></textarea></label>
@@ -966,7 +1089,7 @@ function parseReminder(){
   // validate freq changes date
   let bad=r.changes.find(c=>c.cond&&!/\d{4}\/\d{1,2}\/\d{1,2}/.test(c.cond));
   if(!r.title){toast('タイトルが解析できません');return;}
-  r.nextFire='2026/7/14 '+(r.times[0]||'09:00');
+  { const d=calcNextFire(r); r.nextFire = d ? fmtFire(d) : null; }
   DB.reminders.push(r); save(); closeSheet(); go('reminder');
   toast(bad?'登録しました(日付なし頻度変更は要確認)':'登録しました');
 }
