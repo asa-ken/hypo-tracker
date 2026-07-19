@@ -537,6 +537,7 @@ function parseMd(text){
       let d='',src='',conf='',unit='';
       parts.slice(1).forEach(p=>{
         if(/月期/.test(p)&&p.includes('=')){ value+=' | '+p; return; }
+        const confM=p.match(/確信度[:：]\s*(高|中|低)/); if(confM){ conf=confM[1]; return; }
         p=p.replace(/^(出典|確信度|基準日|単位)[:：]\s*/,'');
         if(/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(p)||/^\d{1,2}\/\d{1,2}$/.test(p)) d=p;
         else if(/^(高|中|低)$/.test(p)) conf=p;
@@ -599,10 +600,16 @@ function parseAndPreview(){
   const p=parseMd(text);
   let h='';
   if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で読み込んでください(このプロトタイプでは企業分析の読み込みのみ実装)。</div>'; return; }
-  // md内に銘柄行が無ければ、画面で選択中の銘柄を使う(分割出力の2回目以降を想定)
+  // md内に銘柄行が無ければ、画面で選択中のカードを使う(分割出力の2回目以降を想定)
   let fallback=false;
-  if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0){ p.stock={name:sc0.name, code:sc0.code}; fallback=true; } }
-  if(p.stock){ const known=stock(p.stock.code);
+  if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0){ p.stock={name:sc0.name, code:sc0.id, isMarket:isMkt(sc0)}; fallback=true; } }
+  // テーマ名がどのカードとも一致しないが、選択中カードがある場合は選択中を優先(登録ボタンを出さない)
+  if(p.stock && p.stock.isMarket && !stock(p.stock.code) && STATE.askStockId){
+    const sc0=stock(STATE.askStockId);
+    if(sc0 && isMkt(sc0)){ p.stock={name:sc0.name, code:sc0.id, isMarket:true}; fallback=true; }
+  }
+  if(p.stock){ const known=stock(p.stock.code)||DB.stocks.find(x=>x.name===p.stock.name);
+    if(known&&!stock(p.stock.code)) p.stock.code=known.id;
     h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'選択中の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、画面上部で選択中の銘柄に取り込みます。違う場合は上部で銘柄を切り替えてください。</div>';
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>${p.stock.isMarket?'新規テーマとして登録':'新規銘柄として登録'}</button>`; }
@@ -610,10 +617,13 @@ function parseAndPreview(){
   } else { h+='<div class="pill-row" style="margin:4px 0 8px"><span class="chip red">銘柄を特定できません(上部で銘柄を選ぶか、先頭に # 銘柄: 名称 (コード) を付けてください)</span></div>'; }
   // diff table
   if(p.rows.length){
-    const s=p.stock?stock(p.stock.code):null;
     // 分析行の行き先を判定し、該当なしを分離
     const orphans=[];
-    p.rows.forEach(r=>{ if(/分析/.test(r.block||'')){ const res=resolveSection(r.key,r.value); r._res=res; if(!res.sub) orphans.push(r); } });
+    const target=p.stock?stock(p.stock.code):null;
+    p.rows.forEach(r=>{
+      if(/分析/.test(r.block||'')){ const res=resolveSection(r.key,r.value); r._res=res; if(!res.sub) orphans.push(r); }
+      else if(target&&isMkt(target)&&/指標|業績推移/.test(r.block||'')){ r._res={sub:null}; orphans.push(r); } // 市場カードに指標・推移はない
+    });
     const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
     if(orphans.length){
       h+=`<div class="failbox" style="background:var(--red-bg)"><div class="t" style="color:var(--red-tx)">⚠ 該当セクションが見つからない行 (${orphans.length})</div>
@@ -627,10 +637,11 @@ function parseAndPreview(){
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
       const afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
-      if(s){ if(r.block&&/指標/.test(r.block)&&s.metrics[r.key]){ const mm=s.metrics[r.key]; before=mm.v+(mm.unit?' '+mm.unit:''); }
+      const cmp=target; // 差分の比較は取り込み先カード内に限定(他カードの類似文と比較しない)
+      if(cmp){ if(r.block&&/指標/.test(r.block)&&cmp.metrics[r.key]){ const mm=cmp.metrics[r.key]; before=mm.v+(mm.unit?' '+mm.unit:''); }
              else if(r._res&&r._res.sub){
                label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:9px">詳細</span>':'');
-               const cur=s.sections[r._res.sub];
+               const cur=cmp.sections[r._res.sub];
                if(cur){ before = (r._res.layer==='詳細') ? ((cur.details&&cur.details[0]&&cur.details[0].t)||'—') : (cur.t||'—'); }
              } }
       isSame = (before!=='—' && String(before).trim()===String(afterRaw).trim());
