@@ -28,8 +28,8 @@ describe('migrate', () => {
     expect(out.reminders[0].endDate).toBe('2026/9/1');
   });
 
-  // 回帰テスト10b: 旧「自分の見解(mine)」をメモ型仮説カードへ移行
-  test('株の mine 配列をメモ型仮説カードに変換し、mine を削除する', () => {
+  // 回帰テスト10b: 旧「自分の見解(mine)」をメモ型カードへ移行
+  test('株の mine 配列をメモ型カードに変換し、mine を削除する', () => {
     const db = {
       stocks: [
         {
@@ -46,8 +46,64 @@ describe('migrate', () => {
     const memo = out.hypotheses.find(h => h.stockId === '5803' && h.kind === 'memo');
     expect(memo).toBeTruthy();
     expect(memo.text).toBe('DC向け需給が本丸');
-    expect(memo.state).toBe('メモ');
     expect(memo.createdAt).toBe('2025/1/1');
+  });
+
+  // 回帰テスト: 廃止された kind:'hypo'(検証ポイント・判定・版管理)を kind:'watch'(注目ポイント)へ変換
+  test("kind:'hypo' を watch に変換し、points・judgeLog・ver・verLog・state を破棄する", () => {
+    const db = {
+      stocks: [],
+      hypotheses: [
+        {
+          id: 'h1', stockId: '5803', kind: 'hypo', ver: 2,
+          text: 'データセンター向け光ケーブル需要で高値更新が続く',
+          points: ['DC事業者のCAPEX拡大継続', '情報通信セグメントの利益率改善'],
+          eventType: 'date', eventDate: '2026/8/7', eventNote: '1Q決算',
+          state: '検証待ち', judgeLog: [{ d: '2026/1/1', result: '的中', text: 'x' }],
+          verLog: [{ ver: 1, d: '2025/1/1', text: '旧文言' }],
+        },
+      ],
+      reminders: [],
+    };
+    const out = migrate(db);
+    const h = out.hypotheses.find(x => x.id === 'h1');
+    expect(h.kind).toBe('watch');
+    expect(h.text).toBe('データセンター向け光ケーブル需要で高値更新が続く');
+    expect(h.eventDate).toBe('2026/8/7');
+    expect(h.eventNote).toBe('1Q決算');
+    expect(h.eventType).toBe('date');
+    expect('points' in h).toBe(false);
+    expect('judgeLog' in h).toBe(false);
+    expect('ver' in h).toBe(false);
+    expect('verLog' in h).toBe(false);
+    expect('state' in h).toBe(false);
+  });
+
+  test("kind未設定の最旧データも watch に変換する", () => {
+    const db = {
+      stocks: [],
+      hypotheses: [{ id: 'h2', stockId: '5803', text: '旧仮説', eventDate: null }],
+      reminders: [],
+    };
+    const out = migrate(db);
+    const h = out.hypotheses.find(x => x.id === 'h2');
+    expect(h.kind).toBe('watch');
+    expect(h.eventDate).toBeNull();
+    expect(h.eventType).toBe('none');
+  });
+
+  test("既存の memo・watch はそのまま維持する", () => {
+    const db = {
+      stocks: [],
+      hypotheses: [
+        { id: 'h3', stockId: '5803', kind: 'memo', text: '既存メモ', eventDate: null, eventNote: null, eventType: 'none' },
+        { id: 'h4', stockId: '5803', kind: 'watch', text: '既存の注目ポイント', eventDate: '2026/9/1', eventNote: '決算', eventType: 'date' },
+      ],
+      reminders: [],
+    };
+    const out = migrate(db);
+    expect(out.hypotheses.find(h => h.id === 'h3')).toEqual(db.hypotheses[0]);
+    expect(out.hypotheses.find(h => h.id === 'h4')).toEqual(db.hypotheses[1]);
   });
 
   // 回帰テスト10c: 旧セクション名 → 新体系サブ項目名への読み替え
