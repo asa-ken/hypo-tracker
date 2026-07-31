@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(lib/**)",
+      "Write(lib/**)",
+      "Edit(test/**)",
+      "Write(test/**)",
+      "Bash(npm test)",
+      "Bash(npm run test*)",
+      "Bash(npx vitest*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)"
+    ],
+    "ask": [
+      "Edit(index.html)",
+      "Write(index.html)",
+      "Bash(git push*)",
+      "Bash(rm *)"
+    ]
+  }
+}
