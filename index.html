@@ -527,16 +527,8 @@ function renderImport(v){
   const s=sel?stock(sel):null;
   let h='';
   if(!DB.stocks.length){ v.innerHTML='<div class="empty"><div class="big">銘柄がありません</div><div>「企業分析」の右上「＋ 追加」から登録してください。</div></div>'; return; }
-  // 銘柄選択
-  h+=`<label class="fld"><span class="t">対象の銘柄</span>
-    <select onchange="STATE.askStockId=this.value||null;render()">
-      <option value="" ${!sel?'selected':''}>— 銘柄を選択 —</option>
-      ${DB.stocks.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select></label>`;
   if(s){
-    const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
-    h+=`<div class="card tap" style="padding:8px 11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
-      <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
-      <div style="font-size:12.5px;font-weight:600;margin-top:2px;${th?'':'color:var(--ink3);font-weight:400'}">${th?esc(th):'未設定'}</div></div>`;
+    h+=`<div class="banner" style="margin-bottom:11px">対象: ${esc(s.name)}(銘柄詳細から開いたため自動で設定されています)</div>`;
   }
   // ① 説明書を渡す(最初の1回だけ)
   h+='<div class="lbl">① このアプリの説明書をAIに渡す(最初の1回だけ)</div>';
@@ -703,7 +695,13 @@ function parseAndPreview(){
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、画面上部で選択中の銘柄に取り込みます。違う場合は上部で銘柄を切り替えてください。</div>';
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>${p.stock.isMarket?'新規テーマとして登録':'新規銘柄として登録'}</button>`; }
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
-  } else { h+='<div class="pill-row" style="margin:4px 0 8px"><span class="chip red">銘柄を特定できません(上部で銘柄を選ぶか、先頭に # 銘柄: 名称 (コード) を付けてください)</span></div>'; }
+  } else {
+    h+='<div class="pill-row" style="margin:4px 0 6px"><span class="chip red">銘柄を特定できません</span></div>';
+    h+=`<label class="fld"><span class="t">対象の銘柄を選んでください</span><select id="importStockPick">
+      <option value="">— 選択 —</option>
+      ${DB.stocks.map(x=>`<option value="${x.id}">${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select>
+      <div class="hint">次からは、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けるようAIに伝えておくと選ばずに済みます。</div></label>`;
+  }
   // diff table
   if(p.rows.length){
     // 分析行の行き先を判定し、該当なしを分離
@@ -784,7 +782,8 @@ function addMemoCandidateField(){
 function commitImport(){
   const p=window._parsed; if(!p){toast('読み込む内容がありません');return;}
   if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0) p.stock={name:sc0.name, code:sc0.code}; }
-  if(!p.stock){toast('銘柄が特定できません');return;}
+  if(!p.stock){ const pickEl=$('#importStockPick'); const picked=pickEl?stock(pickEl.value):null; if(picked) p.stock={name:picked.name, code:picked.id}; }
+  if(!p.stock){toast('対象の銘柄を選んでください');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
   const newWatchWithEvent=[];
   // 該当なし行: チェックされたものだけ「その他」カテゴリへ
