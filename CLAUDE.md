@@ -5,7 +5,7 @@
 
 ## コミット運用
 - 作業の区切りごとに git commit する。いつでも切り戻せる状態を保つのが目的。
-- git commit(git add含む)は確認なしで自動実行してよい。ただし git push は必ずユーザーに確認してから実行する。
+- git commit(git add含む)・git push・PRの作成・mainへのマージは確認なしで自動実行してよい。コードの変更が完了したら、pushしてPRを作成/更新し、mainまでマージするところまで一気に行う。
 
 ## lib/ と index.html の関係
 - `lib/` 配下の各ファイルは必ず CommonJS(`module.exports`)のまま維持する。ES Modules化しない。
@@ -15,12 +15,10 @@
 
 ## 確認ルール(作業の自動実行範囲)
 - 以下は確認なしで自動的に進めてよい:
-  - `lib/` および `test/` 配下のファイルの作成・編集
-  - 読み取り系コマンド(`npm test`、`git status`、`git diff`、`git log` など)
-  - `git add` / `git commit`
+  - `lib/`・`test/`・`index.html` を含む、すべてのファイルの作成・編集
+  - 読み取り系コマンド(`npm test`、`git status`、`git diff`、`git log` など)、開発中のサーバー起動・停止(`python3 -m http.server`、`lsof`/`kill`など)
+  - `git add` / `git commit` / `git push` / PRの作成・更新・mainへのマージ
 - 以下は必ず事前にユーザーに確認する:
-  - `index.html` 本体の変更
-  - `git push`
   - `rm` を伴う削除
   - `node_modules` 以外に対するその他の破壊的操作
 
