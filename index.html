@@ -558,7 +558,7 @@ function renderImport(v){
   h+='</div></div>';
   v.innerHTML=h;
 }
-function pickModeGuarded(sid){ if(!sid){ toast('先に上で銘柄を選んでください'); return; } pickMode(sid,'new'); }
+function pickModeGuarded(sid){ if(!sid){ toast('先に上で銘柄を選んでください'); return; } sheetOrderNew(sid); }
 function briefingText(){
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
@@ -1230,7 +1230,7 @@ function doAddStock(order){
   const kind=$('#as_hold').classList.contains('on')?'保有':'ウォッチ';
   DB.stocks.push({id:code,name,code,kind,metrics:{},trend:{},sections:{},mine:[]});
   save(); closeSheet(); 
-  if(order){ openStock(code); sheetOrder(code); } else { openStock(code); }
+  if(order){ openStock(code); sheetOrderNew(code); } else { openStock(code); }
   toast('追加しました');
 }
 function delDetail(sid,sec,idx){
@@ -1250,18 +1250,6 @@ function sheetAddDetail(sid,sec){
 function copyDeep(sid,sec){ const s=stock(sid); copy(s.name+'('+s.code+')の「'+sec+'」についてさらに深掘りして解説してください。前提: 私は個別株投資家で、投資判断に効く具体性(数値・競合比較・持続性)を重視します。装飾なしの文章で回答してください。','深掘り質問文をコピーしました'); }
 function doAddDetail(sid,sec){ const t2=$('#dt_t').value.trim(); if(!t2){toast('内容を入力してください');return;} const s=stock(sid); if(!s.sections[sec]) s.sections[sec]={t:'(サマリ未取得)',d:fmtToday(),src:'—',details:[]}; if(!s.sections[sec].details) s.sections[sec].details=[]; s.sections[sec].details.unshift({ts:fmtToday(),title:$('#dt_title').value.trim(),t:t2}); save(); closeSheet(); render(); toast('詳細を保存しました'); }
 let currentSid=null;
-function sheetOrder(sid){
-  const p=DB.askPrefs||{mode:'new',level:'標準',picks:{}};
-  openSheet(`<h3>質問文を作る</h3>
-    <div class="muted" style="margin-bottom:12px">どちらの聞き方をしますか?</div>
-    <div class="card tap ${p.mode==='new'?'':''}" style="${p.mode==='new'?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="pickMode('${sid}','new')">
-      <div style="font-size:14px;font-weight:700">① 新規に調べる</div>
-      <div class="muted" style="margin-top:3px">これから深掘りする。調べる項目を選んでAIに聞きます。</div></div>
-    <div class="card tap" style="${p.mode==='org'?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="pickMode('${sid}','org')">
-      <div style="font-size:14px;font-weight:700">② 手持ちの分析を整理する</div>
-      <div class="muted" style="margin-top:3px">すでにAIと深掘り済み。手元の分析を指定した粒度で構造化し直します。</div></div>`);
-}
-function pickMode(sid,mode){ DB.askPrefs.mode=mode; save(); if(mode==='new') sheetOrderNew(sid); else sheetOrderOrg(sid); }
 
 function sheetOrderNew(sid){
   const s=stock(sid);
@@ -1309,17 +1297,6 @@ function clearPicks(sid){ DB.askPrefs.picks={}; save(); sheetOrderNew(sid); }
 function cyclePick(sid,su){ saveTheme(sid); const pk=DB.askPrefs.picks||(DB.askPrefs.picks={}); const cur=pk[su]||'off'; pk[su]= cur==='off'?'sum': cur==='sum'?'deep':'off'; save(); sheetOrderNew(sid); }
 function saveTheme(sid){ const el=document.getElementById('ord_theme'); if(el){ if(!DB.askPrefs.themes)DB.askPrefs.themes={}; DB.askPrefs.themes[sid]=el.value.trim(); save(); } }
 
-function sheetOrderOrg(sid){
-  const lv=DB.askPrefs.level||'標準';
-  const opts=[['要点のみ','サマリだけに凝縮。ざっと俯瞰したいとき。'],['標準','サマリ+主要な詳細を残す。'],['できるだけ残す','情報の欠落を最小化し、詳細レイヤーに厚く格納。']];
-  let h=`<h3>残す情報の程度</h3><div class="muted" style="margin-bottom:10px">手元の分析を、8カテゴリの体系に沿ってAIに整理させます。</div>`;
-  opts.forEach(([k,d])=>{ h+=`<div class="card tap" style="${lv===k?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="DB.askPrefs.level='${k}';save();sheetOrderOrg('${sid}')"><div style="font-size:14px;font-weight:700">${k}</div><div class="muted" style="margin-top:3px">${d}</div></div>`; });
-  h+=`<div class="banner" style="margin-top:10px">生成後、この整理プロンプトと一緒に、手元の分析(AIとのチャットログ等)をAIチャットに貼り付けてください。</div>
-      <button class="btn pri" style="margin-top:8px" onclick="genOrderOrg('${sid}')">整理プロンプトを生成</button>
-      <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">← 閉じる</button>`;
-  openSheet(h);
-}
-
 function catOf(su){ const c=DB.sectionMaster.find(x=>x.subs.includes(su)); return c?c.cat:''; }
 function genOrderNew(sid){
   const s=stock(sid); const pk=DB.askPrefs.picks||{};
@@ -1339,13 +1316,6 @@ function genOrderNew(sid){
   }
   p+='\n\n## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。分析は「- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度」「- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度」の2種で回答。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
   showPrompt(p, sid);
-}
-function genOrderOrg(sid){
-  const s=stock(sid); const lv=DB.askPrefs.level||'標準';
-  const detail={'要点のみ':'各項目サマリのみ(2〜3文)。詳細は出力しない。','標準':'各項目サマリ(2〜3文)+重要な項目には詳細も出力。','できるだけ残す':'各項目サマリ+詳細を可能な限り厚く。元の情報の欠落を最小化し、数値・固有名詞・根拠を落とさない。'}[lv];
-  const cats=masterFor(s).filter(c=>c.on).map(c=>`【${c.cat}】\n`+c.subs.map(su=>`  - ${su}`).join('\n')).join('\n');
-  let p=`これから貼り付ける私の分析(AIとのやり取り等)を、下記の体系に沿って整理し直してください。\n\n■粒度: ${lv}\n${detail}\n\n■体系(該当する項目のみ埋める。情報がない項目は出力しない)\n${cats}\n\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・項目名は上記リストの名称(- の後の名称)のみを使い、カテゴリ名(【】内)は付けない\n  正しい例: - 主要競合(サマリ): 本文\n  誤った例: - 競争環境: 主要競合(サマリ): 本文\n・各行に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す。元情報に日付がなければ本日の日付、出典は「手持ち分析」\n\n${isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`}\n## 分析\n- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度\n- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度\n\n--- 以下に私の分析を貼り付けます ---`;
-  showPrompt(p);
 }
 function showPrompt(p, backSid){
   openSheet(`<h3>AIへの質問文</h3>
