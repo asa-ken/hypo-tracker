@@ -87,4 +87,74 @@ describe('parseMd', () => {
     const p = parseMd(text, baseCtx);
     expect(p.rows[0].block).toBe('分析');
   });
+
+  // 注目ポイントの自動取り込み: 本文＋イベント日を1行(1カード分)にまとめる
+  test('注目ポイント: 本文のみ(イベント日なし)を1行にまとめる', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 本文: 出来高が急増したら要警戒',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.rows.length).toBe(1);
+    expect(p.rows[0].block).toBe('注目ポイント');
+    expect(p.rows[0].value).toBe('出来高が急増したら要警戒');
+    expect(p.rows[0].eventDate).toBeNull();
+  });
+
+  test('注目ポイント: 本文とイベント日を1行にまとめる', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 本文: DC向け光ケーブル需要が続伸するか',
+      '- イベント日: 2026/8/7',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.rows.length).toBe(1);
+    expect(p.rows[0].value).toBe('DC向け光ケーブル需要が続伸するか');
+    expect(p.rows[0].eventDate).toBe('2026/8/7');
+  });
+
+  test('注目ポイント: 複数回登場する場合、それぞれ別行に分離する', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 本文: 1つ目の注目ポイント',
+      '- イベント日: 2026/8/7',
+      '## 注目ポイント',
+      '- 本文: 2つ目の注目ポイント(イベント日なし)',
+      '## 注目ポイント',
+      '- 本文: 3つ目の注目ポイント',
+      '- イベント日: 2026/9/1',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    const pts = p.rows.filter(r => r.block === '注目ポイント');
+    expect(pts.length).toBe(3);
+    expect(pts[0].value).toBe('1つ目の注目ポイント');
+    expect(pts[0].eventDate).toBe('2026/8/7');
+    expect(pts[1].value).toBe('2つ目の注目ポイント(イベント日なし)');
+    expect(pts[1].eventDate).toBeNull();
+    expect(pts[2].value).toBe('3つ目の注目ポイント');
+    expect(pts[2].eventDate).toBe('2026/9/1');
+  });
+
+  test('注目ポイントが指標・分析ブロックと混在しても互いに影響しない', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 指標',
+      '- PER(予想): 36.2 | 2026/7/13',
+      '## 注目ポイント',
+      '- 本文: 出来高急増に要警戒',
+      '- イベント日: 2026/8/7',
+      '## 分析',
+      '- 主要競合(サマリ): 古河電工と競合。 | 2026/7/13',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.rows.find(r => r.key === 'PER(予想)')).toBeTruthy();
+    expect(p.rows.find(r => r.block === '分析')).toBeTruthy();
+    const pt = p.rows.find(r => r.block === '注目ポイント');
+    expect(pt.value).toBe('出来高急増に要警戒');
+    expect(pt.eventDate).toBe('2026/8/7');
+    expect(p.rows.length).toBe(3);
+  });
 });

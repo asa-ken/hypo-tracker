@@ -174,9 +174,8 @@ function seed(){
       }
     ],
     hypotheses:[
-      {id:'h1', stockId:'5803', ver:2, text:'データセンター向け光ケーブル需要で高値更新が続く',
-       points:['DC事業者のCAPEX拡大継続','情報通信セグメントの利益率改善','古河電工との相対強さ'],
-       eventType:'date', eventDate:'2026/8/7', eventNote:'1Q決算', state:'検証待ち', judgeLog:[]}
+      {id:'h1', stockId:'5803', kind:'watch', text:'データセンター向け光ケーブル需要で高値更新が続くか。DC事業者のCAPEX動向・情報通信セグメントの利益率・古河電工との相対強弱を見る。強含みなら強気継続、鈍化なら注意。',
+       eventType:'date', eventDate:'2026/8/7', eventNote:'1Q決算'}
     ],
     reminders:[
       {id:'r1', stockId:'5803', title:'フジクラ需給・AI関連ニュース監視', comment:'決算後の需給変化とAI・DC関連報道を毎日チェック',
@@ -231,16 +230,25 @@ function migrate(db){
       if(v&&!v.details) v.details=[];
     });
   });
-  // 旧「自分の見解(mine)」をメモ型の仮説カードに移行
+  // 旧「自分の見解(mine)」をメモ型カードに移行
   (db.stocks||[]).forEach(st=>{
     if(st.mine&&st.mine.length){
       db.hypotheses=db.hypotheses||[];
-      st.mine.forEach(m=>{ db.hypotheses.push({id:'h'+Math.random().toString(36).slice(2,9), stockId:st.id, kind:'memo', ver:1, text:m.t, points:[], eventDate:null, eventNote:null, state:'メモ', judgeLog:[], verLog:[], createdAt:m.ts}); });
+      st.mine.forEach(m=>{ db.hypotheses.push({id:'h'+Math.random().toString(36).slice(2,9), stockId:st.id, kind:'memo', text:m.t, eventDate:null, eventNote:null, eventType:'none', createdAt:m.ts}); });
       delete st.mine;
     }
   });
-  // 既存仮説に kind を補完(検証ポイントやイベントがあれば仮説、なければ従来通り仮説扱い)
-  (db.hypotheses||[]).forEach(h=>{ if(!h.kind) h.kind='hypo'; if(h.kind==='memo'&&!h.state) h.state='メモ'; });
+  // 廃止された 'hypo' 種別(検証ポイント・判定・版管理)を 'watch'(注目ポイント)へ変換。
+  // text・eventDate・eventNoteは引き継ぎ、points・judgeLog・ver・verLog・stateは破棄する。
+  (db.hypotheses||[]).forEach(h=>{ if(!h.kind) h.kind='hypo'; });
+  db.hypotheses=(db.hypotheses||[]).map(h=>{
+    if(h.kind!=='hypo') return h;
+    return {
+      id:h.id, stockId:h.stockId, kind:'watch',
+      text:h.text, eventDate:h.eventDate||null, eventNote:h.eventNote||null,
+      eventType:h.eventDate?'date':'none', createdAt:h.createdAt
+    };
+  });
   // 誤登録カードのクリーニング
   // ①kindが正規値以外なら「ウォッチ」に補正
   (db.stocks||[]).forEach(st=>{ if(!['保有','ウォッチ','市場'].includes(st.kind)) st.kind='ウォッチ'; });
@@ -333,7 +341,6 @@ function openStock(id){ STATE.stockId=id; render(); $('#view').scrollTop=0; }
 
 function render(){
   refreshFires();
-  refreshHypoStates();
   const v=$('#view'); const act=$('#topAct'); act.style.display='none'; $('#topSub').textContent='';
   const menu=$('#topMenu'); menu.style.display='none'; menu.onclick=null;
   if(STATE.stockId){ renderStockDetail(v); return; }
@@ -344,21 +351,17 @@ function render(){
 function renderHome(v){
   $('#topTitle').textContent='ホーム';
   const act=$('#topAct'); act.style.display='block'; act.textContent='⚙ バックアップ'; act.onclick=sheetBackup;
-  const judge=DB.hypotheses.filter(h=>h.state==='判定待ち');
-  const risk=DB.hypotheses.filter(h=>h.state!=='決着' && h.warn);
   const todayRem=DB.reminders.filter(r=>!r.paused);
   const stale=DB.stocks.filter(s=>staleCount(s)>0);
   let h='';
   h+='<div class="lbl">対応が必要</div>';
-  if(risk.length) h+=`<div class="card tap" onclick="openStock('${risk[0].stockId}')"><div class="row"><span class="chip red">要注意の仮説 ${risk.length}</span></div><div style="margin-top:5px;font-size:13px">${esc(risk[0].text)}</div></div>`;
-  if(judge.length) h+=`<div class="card tap" onclick="go('analysis')"><div class="row"><span class="chip amber">判定待ち ${judge.length}</span></div><div style="margin-top:5px;font-size:13px">${esc(judge[0].text)}</div></div>`;
   if(todayRem.length) h+=`<div class="card"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">☀ 今日のまとめ確認をコピー</button></div><div style="margin-top:5px;font-size:13px">${esc(todayRem[0].title)} ほか</div></div>`;
   if(stale.length) h+=`<div class="card tap" onclick="go('analysis')"><div class="row"><span class="chip gray">鮮度切れ ${stale.length}銘柄</span></div><div class="muted" style="margin-top:4px">そろそろ更新: ${stale.map(s=>esc(s.name)).join('、')}</div></div>`;
-  if(!risk.length&&!judge.length&&!todayRem.length&&!stale.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
+  if(!todayRem.length&&!stale.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
   // timeline
   const items=[];
   DB.reminders.filter(r=>!r.paused).forEach(r=>{const d=calcNextFire(r); if(d)items.push({d,label:r.title,type:'リマインダー',id:r.stockId});});
-  DB.hypotheses.forEach(hh=>{ if(hh.eventType==='date'&&hh.eventDate){const d=parseD(hh.eventDate); if(d)items.push({d,label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'検証イベント'),type:'検証イベント',id:hh.stockId});} });
+  DB.hypotheses.forEach(hh=>{ if(hh.kind==='watch'&&hh.eventType==='date'&&hh.eventDate){const d=parseD(hh.eventDate); if(d)items.push({d,label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'注目イベント'),type:'注目イベント',id:hh.stockId});} });
   items.sort((a,b)=>a.d-b.d);
   h+='<div class="lbl">今週の予定</div>';
   if(!items.length) h+='<div class="muted">予定はありません</div>';
@@ -376,11 +379,10 @@ function renderAnalysis(v){
   let h=`<div class="seg">${sorts.map(k=>`<button class="${anaSort===k?'on':''}" onclick="anaSort='${k}';render()">${k}</button>`).join('')}</div>`;
 
   if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
-  const card=(s)=>{ const sc=staleCount(s); const hy=hyposOf(s.id).filter(x=>x.state!=='決着').length; const jw=hyposOf(s.id).filter(x=>x.state==='判定待ち').length;
+  const card=(s)=>{ const sc=staleCount(s); const hy=hyposOf(s.id).length;
     return `<div class="card tap" onclick="openStock('${s.id}')">
       <div class="row"><h2 class="blk">${esc(s.name)}</h2>${sc?`<span class="chip amber">要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}</div>
-      <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span>${hy?`<span class="chip navy">仮説 ${hy}</span>`:''}</div>
-      ${jw?`<div class="muted" style="margin-top:4px;color:var(--amber-tx)">判定待ち ${jw}</div>`:''}
+      <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span>${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}</div>
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
   const mcard=(s)=>{ const sc=staleCount(s); const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
@@ -418,7 +420,7 @@ function renderStockDetail(v){
   const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
   const sc=staleCount(s); const hy=hyposOf(s.id);
   let h='';
-  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}<span class="chip navy">仮説 ${hy.filter(x=>x.state!=='決着').length}</span></div>`;
+  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}<span class="chip navy">メモ・注目 ${hy.length}</span></div>`;
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
   h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
@@ -454,14 +456,14 @@ function renderStockDetail(v){
       </div></div>`; });
     h+=`</div></div>`;
   });
-  // 仮説・メモ(旧「自分の見解」を統合)
-  h+=`<div class="lbl">仮説・メモ (${hy.length})</div>`;
-  h+='<div class="hint" style="margin:-4px 0 7px">思ったことはメモに、検証したくなったら仮説に格上げできます。</div>';
+  // メモ・注目ポイント(旧「自分の見解」を統合)
+  h+=`<div class="lbl">メモ・注目ポイント (${hy.length})</div>`;
+  h+='<div class="hint" style="margin:-4px 0 7px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
   if(!hy.length) h+='<div class="muted" style="padding:0 2px 8px">まだありません。</div>';
   hy.forEach(hh=>h+=hypoMiniCard(hh));
   h+=`<div class="row" style="gap:8px;margin-top:2px">
     <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','memo')">＋ メモ</button>
-    <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','hypo')">＋ 仮説</button>
+    <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','watch')">＋ 注目ポイント</button>
   </div>`;
   // links
   h+=`<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
@@ -489,7 +491,7 @@ function doSaveTheme(sid){ const v=$('#th_in').value.trim(); if(!DB.askPrefs.the
 function delStock(sid){
   const s=stock(sid); const hy=hyposOf(sid).length, rm=remOf(sid).length;
   let msg=`「${s.name}」を削除します。`;
-  if(hy||rm) msg+=`\n\n関連する 仮説${hy}件・リマインダー${rm}件 も削除されます。`;
+  if(hy||rm) msg+=`\n\n関連する メモ・注目ポイント${hy}件・リマインダー${rm}件 も削除されます。`;
   msg+='\n\nこの操作は取り消せません。';
   askConfirm({title:'銘柄を削除', body:msg, okLabel:'削除する', danger:true, onOk:()=>{
     DB.stocks=DB.stocks.filter(x=>x.id!==sid);
@@ -556,7 +558,7 @@ function renderImport(v){
 }
 function parseMd(text){
   // returns {stock:{name,code}, rows:[{block,key,value,d,src,conf,kind}], failed:[], type}
-  const lines=text.split(/\r?\n/); let block=null; const rows=[]; const failed=[]; let stk=null; let type='analysis';
+  const lines=text.split(/\r?\n/); let block=null; let rows=[]; const failed=[]; let stk=null; let type='analysis';
   for(let raw of lines){
     let line=raw.replace(/\*\*/g,'').trim();
     if(!line) continue;
@@ -615,6 +617,17 @@ function parseMd(text){
     else if(/[年][0-9]{1,2}月期\s*(\(予\))?\s*=/.test(r.value)||/FY\d{2}\s*=/.test(r.value)) r.block='業績推移';
     else if(resolveSection(r.key,r.value).sub) r.block='分析';
   });
+  // 「## 注目ポイント」: 本文＋(任意)イベント日を1カード分の行にまとめる。
+  // 複数回登場する場合も、本文の出現ごとに新しいまとまりとして分離する。
+  let merged=[]; let pending=null;
+  rows.forEach(r=>{
+    if(r.block!=='注目ポイント'){ if(pending){merged.push(pending);pending=null;} merged.push(r); return; }
+    if(r.key==='本文'){ if(pending) merged.push(pending); pending={block:'注目ポイント', key:'注目ポイント', value:r.value, eventDate:null, raw:r.raw}; }
+    else if(/イベント日/.test(r.key) && pending){ pending.eventDate=r.value; }
+    else { if(pending){merged.push(pending);pending=null;} merged.push(r); }
+  });
+  if(pending) merged.push(pending);
+  rows=merged;
   // 重複除外(同じキーで同じ値が複数回=AIの再出力)
   const seen=new Set(); const dups=[];
   const uniq=rows.filter(r=>{ const sig=r.key+'|'+String(r.value).slice(0,80); if(seen.has(sig)){ dups.push(r); return false; } seen.add(sig); return true; });
@@ -692,7 +705,7 @@ function parseAndPreview(){
       let confb=r.conf==='低'?' <span class="chip gray" style="font-size:9px">低</span>':'';
       let beforeHtml, afterHtml;
       if(isSame) r._skip=true;
-      if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw); }
+      if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw)+(r.eventDate?`<div class="muted" style="font-size:10px">イベント日: ${esc(r.eventDate)}</div>`:''); }
       else if(isSame){ beforeHtml=esc(before); afterHtml='<span class="muted">変更なし</span>'; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
       h+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:9px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
@@ -720,7 +733,6 @@ function commitImport(){
   if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0) p.stock={name:sc0.name, code:sc0.code}; }
   if(!p.stock){toast('銘柄が特定できません');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
-  let hyp=null;
   // 該当なし行: チェックされたものだけ「その他」カテゴリへ
   (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),src:r.src||'AI',details:[]}; } });
   p.rows.forEach(r=>{
@@ -740,7 +752,11 @@ function commitImport(){
       if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),src:r.src||'AI',details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val}); }
       else { s.sections[key]={t:val,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; }
     }
-    else if(/仮説/.test(r.block||'')){ if(r.key==='仮説'){hyp=hyp||{}; hyp.text=r.value;} if(/検証ポイント/.test(r.key)){hyp=hyp||{}; hyp.points=r.value.split('|').map(x=>x.trim());} if(/検証イベント/.test(r.key)){hyp=hyp||{}; hyp.event=r.value;} }
+    else if(/注目ポイント/.test(r.block||'')){
+      const ed = r.eventDate ? (/^\d{1,2}\/\d{1,2}$/.test(r.eventDate)?'2026/'+r.eventDate:r.eventDate) : null;
+      DB.hypotheses.push({id:'h'+Date.now()+Math.random().toString(36).slice(2,8), stockId:s.id, kind:'watch',
+        text:r.value, eventDate:ed, eventNote:null, eventType:ed?'date':'none'});
+    }
   });
   save();
   toast(p.rows.length+'件を読み込みました');
@@ -847,7 +863,7 @@ function openReminder(id){
   let h=`<h3>${esc(r.title)}</h3>`;
   const linkedHy=r.hypoId?DB.hypotheses.find(x=>x.id===r.hypoId):null;
   h+=`<div class="card"><div class="pill-row"><span class="chip navy">${esc(r.cat)}</span><span class="chip gray">${esc(stock(r.stockId)?.name||'')}</span></div>
-    ${linkedHy?`<div class="mine" style="margin-top:7px"><div class="ts">監視中の仮説</div><div class="row2">${esc(linkedHy.text)}</div></div>`:''}
+    ${linkedHy?`<div class="mine" style="margin-top:7px"><div class="ts">このリマインダーの対象</div><div class="row2">${esc(linkedHy.text)}</div></div>`:''}
     <div class="muted" style="margin-top:6px">${esc(r.freq)} ${esc((r.times||[]).join(', '))}</div>
     ${r.endDate?`<div class="muted" style="margin-top:3px">終了日: ${esc(r.endDate)}${parseD(r.endDate)<new Date()?' <span class="chip gray" style="font-size:9px">終了済</span>':''}</div>`:''}
     ${r.startDate?`<div class="muted" style="margin-top:3px">開始日: ${esc(r.startDate)}${parseD(r.startDate)>new Date()?' <span class="chip gray" style="font-size:9px">開始待ち</span>':''}</div>`:''}
@@ -928,7 +944,7 @@ function logRem(id,type){ const r=DB.reminders.find(x=>x.id===id); r.log.unshift
 function togglePause(id){ const r=DB.reminders.find(x=>x.id===id); r.paused=!r.paused; save(); closeSheet(); render(); toast(r.paused?'休止しました':'再開しました'); }
 function delReminder(id){
   const r=DB.reminders.find(x=>x.id===id); const n=(r&&r.log&&r.log.length)||0;
-  askConfirm({title:'リマインダーを削除', body:`「${r?r.title:''}」を削除します。\n\n経過履歴${n}件も削除されます。関連する仮説は削除されません。`, okLabel:'削除する', danger:true, onOk:()=>{
+  askConfirm({title:'リマインダーを削除', body:`「${r?r.title:''}」を削除します。\n\n経過履歴${n}件も削除されます。関連するメモ・注目ポイントは削除されません。`, okLabel:'削除する', danger:true, onOk:()=>{
     DB.reminders=DB.reminders.filter(x=>x.id!==id); save(); render(); toast('削除しました');
   }});
 }
@@ -1016,15 +1032,6 @@ function fmtFire(d){
   const wd=['日','月','火','水','木','金','土'][d.getDay()];
   return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}(${wd}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
-function refreshHypoStates(){
-  const now=new Date();
-  (DB.hypotheses||[]).forEach(h=>{
-    if(h.state==='検証待ち' && h.eventDate){
-      const d=parseD(h.eventDate);
-      if(d && now>=d) h.state='判定待ち';
-    }
-  });
-}
 function refreshFires(){ (DB.reminders||[]).forEach(r=>{ if(r.paused){ r.nextFire=null; return; } const d=calcNextFire(r); r.nextFire = d? fmtFire(d) : null; }); }
 function toISO(s){ const d=parseD(s); if(!d) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function fromISO(s){ const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); if(!m) return ''; return `${+m[1]}/${+m[2]}/${+m[3]}`; }
@@ -1033,79 +1040,31 @@ function fmtToday(){ const d=today(); return `2026/${d.getMonth()+1}/${d.getDate
 //////////////////// HYPO ////////////////////
 function hypoMiniCard(hh){
   const isMemo=hh.kind==='memo';
-  const stcls={'メモ':'gray','検証待ち':'navy','判定待ち':'amber','決着':'gray'};
-  const resClr={'的中':'green','一部的中':'amber','崩壊':'red','見送り':'gray'};
-  const jl=hh.judgeLog&&hh.judgeLog[0];
   const rmCnt=(DB.reminders||[]).filter(r=>r.hypoId===hh.id).length;
   let h=`<div class="card" style="padding:11px 12px">
-    <div class="row"><span class="chip ${isMemo?'gray':'navy'}" style="font-size:9px">${isMemo?'メモ':'仮説 v'+(hh.ver||1)}</span>
-      <span class="chip ${stcls[hh.state]||'gray'}" style="font-size:9px">${esc(hh.state)}</span></div>
-    <div style="margin-top:6px;font-size:13px;${isMemo?'':'font-weight:600'};white-space:pre-wrap">${esc(hh.text)}</div>`;
-  if(!isMemo){
-    if(hh.points&&hh.points.length) h+=`<div class="muted" style="margin-top:5px;font-size:11px">検証: ${hh.points.map(esc).join(' / ')}</div>`;
-    if(hh.eventDate||hh.eventNote) h+=`<div class="muted" style="margin-top:3px;font-size:11px">イベント: ${esc(hh.eventDate||'')}${hh.eventNote?' ('+esc(hh.eventNote)+')':''}</div>`;
-    if(hh.state==='決着'&&jl) h+=`<div class="mine" style="margin-top:7px"><div class="row2"><span class="chip ${resClr[jl.result]||'gray'}" style="font-size:9px">${esc(jl.result)}</span> <span class="ts">${esc(jl.d)}</span></div>${jl.text?`<div class="row2" style="margin-top:3px;white-space:pre-wrap">${esc(jl.text)}</div>`:''}</div>`;
-  }
-  if(rmCnt) h+=`<div class="muted" style="margin-top:5px;font-size:10px">🔔 監視 ${rmCnt}件</div>`;
-  h+=`<div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap">`;
-  if(isMemo){ h+=`<button class="btn sm" style="width:auto" onclick="promoteToHypo('${hh.id}')">仮説に格上げ</button>`; }
-  else {
-    if(hh.state!=='決着') h+=`<button class="btn sm" style="width:auto" onclick="sheetJudge('${hh.id}')">判定</button>`;
-    h+=`<button class="btn sm" style="width:auto" onclick="addRemForHypo('${hh.id}')">監視を追加</button>`;
-  }
-  h+=`<button class="btn sm ghost" style="width:auto" onclick="sheetEditHypo('${hh.id}')">編集</button>
+    <div class="row"><span class="chip ${isMemo?'gray':'amber'}" style="font-size:9px">${isMemo?'メモ':'注目'}</span></div>
+    <div style="margin-top:6px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>`;
+  if(!isMemo && (hh.eventDate||hh.eventNote)) h+=`<div class="muted" style="margin-top:5px;font-size:11px">イベント: ${esc(hh.eventDate||'')}${hh.eventNote?' ('+esc(hh.eventNote)+')':''}</div>`;
+  if(rmCnt) h+=`<div class="muted" style="margin-top:5px;font-size:10px">🔔 リマインダー ${rmCnt}件</div>`;
+  h+=`<div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap">
+      ${isMemo?'':`<button class="btn sm" style="width:auto" onclick="addRemForHypo('${hh.id}')">リマインダーを追加</button>`}
+      <button class="btn sm ghost" style="width:auto" onclick="sheetEditHypo('${hh.id}')">編集</button>
       <button class="btn sm ghost" style="width:auto" onclick="delHypo('${hh.id}')">削除</button></div>
-    ${(hh.verLog&&hh.verLog.length)?`<div class="muted" style="margin-top:6px;font-size:10px">版履歴: ${hh.verLog.map(v=>'v'+v.ver).join(', ')} → v${hh.ver}</div>`:''}
   </div>`;
   return h;
 }
-function promoteToHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; hh.kind='hypo'; hh.state='検証待ち'; save(); sheetEditHypo(hid); }
 function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE.remHypoId=hid; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, hid); }
-function openHypoList(sid){
-  const s=stock(sid); const list=hyposOf(sid);
-  let h=`<h3>仮説カード</h3><div class="muted" style="margin-bottom:10px">${esc(s.name)}</div>`;
-  if(!list.length) h+='<div class="empty"><div class="big">仮説はまだありません</div><div>「＋ 仮説を作成」から、この銘柄で検証したい予想を立てましょう。</div></div>';
-  const stcls={'検証待ち':'navy','判定待ち':'amber','決着':'gray'};
-  const resClr={'的中':'green','一部的中':'amber','崩壊':'red','見送り':'gray'};
-  list.forEach(hh=>{
-    const jl=hh.judgeLog&&hh.judgeLog[0];
-    h+=`<div class="card"><div class="row"><span class="chip gray">v${hh.ver||1}</span><span class="chip ${stcls[hh.state]||'navy'}">${esc(hh.state)}</span></div>
-      <div style="margin-top:6px;font-size:14px;font-weight:600">${esc(hh.text)}</div>
-      ${(hh.points&&hh.points.length)?`<div class="lbl" style="margin:8px 0 4px">検証ポイント</div>${hh.points.map(p=>`<div class="muted">・${esc(p)}</div>`).join('')}`:''}
-      ${(hh.eventDate||hh.eventNote)?`<div class="muted" style="margin-top:6px">検証イベント: ${esc(hh.eventDate||'')}${hh.eventNote?' ('+esc(hh.eventNote)+')':''}</div>`:''}
-      ${hh.state==='決着'&&jl?`<div class="mine" style="margin-top:8px"><div class="row2"><span class="chip ${resClr[jl.result]||'gray'}">${esc(jl.result)}</span> <span class="ts">${esc(jl.d)}</span></div><div class="row2" style="margin-top:4px;white-space:pre-wrap">${esc(jl.text||'')}</div></div>`:''}
-      <div class="row" style="gap:6px;margin-top:10px">
-        ${hh.state!=='決着'?`<button class="btn sm" onclick="sheetJudge('${hh.id}')">判定する</button>`:''}
-        <button class="btn sm ghost" onclick="sheetEditHypo('${hh.id}')">編集</button>
-        <button class="btn sm ghost" onclick="delHypo('${hh.id}')">削除</button>
-      </div>
-      ${(hh.verLog&&hh.verLog.length)?`<div class="lbl" style="margin:8px 0 3px;font-size:10px">版の履歴</div>${hh.verLog.map(v=>`<div class="muted" style="font-size:10px">v${v.ver} (${esc(v.d)}): ${esc(v.text)}</div>`).join('')}`:''}
-    </div>`;
-  });
-  h+=`<button class="btn pri" style="margin-top:6px" onclick="sheetEditHypo(null,'${sid}')">＋ 仮説を作成</button>`;
-  h+=`<button class="btn ghost" style="margin-top:8px" onclick="openStock('${sid}')">閉じる</button>`;
-  openSheet(h);
-}
 function sheetEditHypo(hid, sid, forceKind){
   const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
   const s=stock(hh?hh.stockId:sid);
-  const kind=hh?hh.kind:(forceKind||'hypo');
+  const kind=hh?hh.kind:(forceKind||'memo');
   const isMemo=kind==='memo';
-  const pts=(hh&&hh.points)||['','',''];
-  while(pts.length<3) pts.push('');
-  let h=`<h3>${hh?(isMemo?'メモを編集':'仮説を編集'):(isMemo?'メモを作成':'仮説を作成')}</h3>
+  let h=`<h3>${hh?(isMemo?'メモを編集':'注目ポイントを編集'):(isMemo?'メモを作成':'注目ポイントを作成')}</h3>
     <div class="muted" style="margin-bottom:10px">${esc(s.name)}</div>
-    <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'仮説(この銘柄がどうなると予想するか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要で高値更新が続く'}">${esc(hh?hh.text:'')}</textarea></label>`;
+    <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'注目ポイント(何がどうなったら良い/悪いか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(hh?hh.text:'')}</textarea></label>`;
   if(!isMemo){
-    h+=`<div class="lbl" style="margin-top:6px">検証ポイント(最大3・仮説が正しいなら観測されるはず)</div>
-    <label class="fld"><input id="hy_p0" value="${esc(pts[0])}" placeholder="例: DC事業者のCAPEX拡大が続く"></label>
-    <label class="fld"><input id="hy_p1" value="${esc(pts[1])}" placeholder="例: 情報通信セグメントの利益率が改善する"></label>
-    <label class="fld"><input id="hy_p2" value="${esc(pts[2])}" placeholder="例: 同業に対して相対的に強い"></label>
-    <label class="fld"><span class="t">検証イベント日(任意)</span><input type="date" id="hy_edate" value="${hh&&hh.eventDate?toISO(hh.eventDate):''}"></label>
-    <label class="fld"><span class="t">イベント名(任意)</span><input id="hy_enote" value="${esc(hh?hh.eventNote||'':'')}" placeholder="例: 1Q決算"></label>
-    ${hh?'<div class="hint" style="margin-bottom:8px">仮説の文章を変更すると、版が上がって履歴に残ります。</div>':''}`;
-  } else {
-    h+='<div class="hint" style="margin-bottom:8px">後から「仮説に格上げ」で検証ポイントやイベントを足せます。</div>';
+    h+=`<label class="fld"><span class="t">気にかけるイベント日(任意)</span><input type="date" id="hy_edate" value="${hh&&hh.eventDate?toISO(hh.eventDate):''}"></label>
+    <label class="fld"><span class="t">イベント名(任意)</span><input id="hy_enote" value="${esc(hh?hh.eventNote||'':'')}" placeholder="例: 1Q決算"></label>`;
   }
   h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}')">保存</button>
     <button class="btn ghost" style="margin-top:8px" onclick="openStock('${s.id}')">キャンセル</button>`;
@@ -1115,48 +1074,21 @@ function saveHypo(hid, sid, kind){
   const text=$('#hy_text').value.trim();
   if(!text){ toast('内容を入力してください'); return; }
   const isMemo=kind==='memo';
-  const points=isMemo?[]:[$('#hy_p0').value.trim(),$('#hy_p1').value.trim(),$('#hy_p2').value.trim()].filter(Boolean);
   const eventDate=isMemo?null:(fromISO($('#hy_edate').value)||null);
   const eventNote=isMemo?null:($('#hy_enote').value.trim()||null);
   if(hid){
     const hh=DB.hypotheses.find(x=>x.id===hid);
-    if(!isMemo && hh.text!==text){ if(!hh.verLog) hh.verLog=[]; hh.verLog.unshift({ver:hh.ver||1, d:fmtToday(), text:hh.text}); hh.ver=(hh.ver||1)+1; }
-    hh.text=text; hh.points=points; hh.eventDate=eventDate; hh.eventNote=eventNote;
+    hh.text=text; hh.eventDate=eventDate; hh.eventNote=eventNote; hh.eventType=eventDate?'date':'none';
   } else {
-    DB.hypotheses.push({id:'h'+Date.now(), stockId:sid, kind:kind||'hypo', ver:1, text, points, eventDate, eventNote,
-      eventType:eventDate?'date':'none', state:isMemo?'メモ':'検証待ち', judgeLog:[], verLog:[]});
+    DB.hypotheses.push({id:'h'+Date.now(), stockId:sid, kind:kind||'memo', text, eventDate, eventNote,
+      eventType:eventDate?'date':'none'});
   }
   save(); openStock(sid); toast('保存しました');
 }
-function sheetJudge(hid){
-  const hh=DB.hypotheses.find(x=>x.id===hid);
-  openSheet(`<h3>仮説を判定</h3>
-    <div class="card" style="font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
-    <div class="lbl">結果</div>
-    <div id="jd_res">
-      ${['的中','一部的中','崩壊','見送り'].map((r,i)=>`<button class="btn ${i?'':'pri'}" data-r="${r}" style="margin-top:6px" onclick="document.querySelectorAll('#jd_res button').forEach(b=>b.classList.remove('pri'));this.classList.add('pri')">${r}</button>`).join('')}
-    </div>
-    <label class="fld" style="margin-top:10px"><span class="t">判定の根拠(外部AIの検証結果を貼るか、自分で記述)</span><textarea id="jd_text" style="min-height:90px" placeholder="何がどうなって、なぜその結果と判断したか"></textarea></label>
-    <div class="hint" style="margin-bottom:8px">判定すると仮説は「決着」になります。崩壊した場合、なぜ外したかを残すと次に活きます。</div>
-    <button class="btn pri" onclick="doJudge('${hid}')">この内容で決着させる</button>
-    <button class="btn ghost" style="margin-top:8px" onclick="openHypoList('${hh.stockId}')">キャンセル</button>`);
-  // デフォルト選択を的中に
-  setTimeout(()=>{ const b=document.querySelector('#jd_res button[data-r="的中"]'); if(b){document.querySelectorAll('#jd_res button').forEach(x=>x.classList.remove('pri'));b.classList.add('pri');} },50);
-}
-function doJudge(hid){
-  const hh=DB.hypotheses.find(x=>x.id===hid);
-  const sel=document.querySelector('#jd_res button.pri');
-  const result=sel?sel.dataset.r:'的中';
-  const text=$('#jd_text').value.trim();
-  if(!hh.judgeLog) hh.judgeLog=[];
-  hh.judgeLog.unshift({d:fmtToday(), result, text});
-  hh.state='決着';
-  save(); openHypoList(hh.stockId); toast('決着しました');
-}
 function delHypo(hid){
   const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh) return;
-  askConfirm({title:'仮説を削除', body:hh.text.slice(0,80)+(hh.text.length>80?'…':''), okLabel:'削除する', danger:true, onOk:()=>{
-    const sid=hh.stockId; DB.hypotheses=DB.hypotheses.filter(x=>x.id!==hid); save(); openHypoList(sid); toast('削除しました');
+  askConfirm({title:'削除', body:hh.text.slice(0,80)+(hh.text.length>80?'…':''), okLabel:'削除する', danger:true, onOk:()=>{
+    const sid=hh.stockId; DB.hypotheses=DB.hypotheses.filter(x=>x.id!==hid); save(); openStock(sid); toast('削除しました');
   }});
 }
 
@@ -1353,7 +1285,7 @@ function sheetAddReminder(presetId, hypoId){
   const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
   openSheet(`<h3>リマインダー登録</h3>
     <div class="muted" style="margin-bottom:10px">外部AIに設計させる場合は登録用プロンプトをコピーし、回答を貼り付けます。</div>
-    ${hh?`<div class="card" style="border-left:3px solid var(--navy);padding:9px 11px;margin-bottom:10px"><div class="muted" style="font-size:10px">この仮説を監視します</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${esc(hh.text)}</div></div><input type="hidden" id="rm_hypo" value="${hid}">`:''}
+    ${hh?`<div class="card" style="border-left:3px solid var(--navy);padding:9px 11px;margin-bottom:10px"><div class="muted" style="font-size:10px">リマインダーの対象</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${esc(hh.text)}</div></div><input type="hidden" id="rm_hypo" value="${hid}">`:''}
     <label class="fld"><span class="t">対象銘柄</span><select id="rm_stock">${DB.stocks.map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>
     <label class="fld"><span class="t">補足メモ(任意)</span><textarea id="rm_memo" placeholder="監視の狙い・保有状況・警戒条件など"></textarea></label>
     <button class="btn" onclick="copyRegPrompt()">登録用プロンプトをコピー</button>
@@ -1364,10 +1296,10 @@ function copyRegPrompt(){
   const sid=$('#rm_stock').value; const s=stock(sid); const memo=$('#rm_memo').value.trim();
   const hidEl=$('#rm_hypo'); const linkedHy=hidEl?DB.hypotheses.find(x=>x.id===hidEl.value):null;
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[sid]||'';
-  const hy=linkedHy?[linkedHy]:hyposOf(sid).filter(h=>h.state!=='決着'&&h.kind!=='memo');
+  const hy=linkedHy?[linkedHy]:hyposOf(sid).filter(h=>h.kind==='watch');
   let ctx='';
   if(theme) ctx+=`注目テーマ: ${theme}\n`;
-  if(hy.length){ ctx+=`検証中の仮説:\n`+hy.map(h=>`  - ${h.text}（検証ポイント: ${(h.points||[]).join(' / ')}／イベント: ${h.eventDate||h.eventNote||'未定'}）`).join('\n')+'\n'; }
+  if(hy.length){ ctx+=`注目ポイント:\n`+hy.map(h=>`  - ${h.text}（イベント: ${h.eventDate||h.eventNote||'未定'}）`).join('\n')+'\n'; }
   const p=`あなたは投資監視の設計を手伝うアシスタントです。
 以下の銘柄について、私と対話しながら「監視リマインダー」を一緒に設計してください。
 
@@ -1481,7 +1413,7 @@ function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&activePrompt(r)
 
 // reset for testing
 function resetDB(){
-  askConfirm({title:'全データを初期化', body:'すべての銘柄・分析・仮説・リマインダーが消え、初期状態に戻ります。\n\nこの操作は取り消せません。必要ならキャンセルして、先にバックアップを書き出してください。', okLabel:'初期化する', danger:true, onOk:()=>{
+  askConfirm({title:'全データを初期化', body:'すべての銘柄・分析・メモ・注目ポイント・リマインダーが消え、初期状態に戻ります。\n\nこの操作は取り消せません。必要ならキャンセルして、先にバックアップを書き出してください。', okLabel:'初期化する', danger:true, onOk:()=>{
     DB=seed(); save(); go('home'); toast('初期化しました');
   }});
 }
