@@ -118,7 +118,7 @@
   <div class="tabbar">
     <button data-tab="home" class="on" onclick="go('home')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>ホーム</button>
     <button data-tab="analysis" onclick="go('analysis')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3-4 3 2 4-6"/></svg>市場・銘柄分析</button>
-    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>AIに聞く</button>
+    <button data-tab="import" onclick="go('import')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>会話を取り込む</button>
     <button data-tab="reminder" onclick="go('reminder')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>リマインダー</button>
   </div>
 </div>
@@ -327,10 +327,10 @@ function filledCatCount(s,cat){ const c=DB.sectionMaster.find(x=>x.cat===cat); i
 //////////////////// router ////////////////////
 let STATE={tab:'home', stockId:null};
 function go(tab){
-  // タブから直接開いた場合、AIに聞く画面の対象銘柄をリセット(企業分析からの遷移時は openAsk が設定済み)
+  // タブから直接開いた場合、会話を取り込む画面の対象銘柄をリセット(企業分析からの遷移時は openAsk が設定済み)
   if(tab==='import' && !STATE._askFromStock) STATE.askStockId=null;
   if(tab==='reminder' && !STATE._remFromStock) STATE.remStockId=null;
-  STATE._askFromStock=false; STATE._remFromStock=false;
+  STATE._askFromStock=false; STATE._remFromStock=false; STATE._triageItems=null;
   STATE.tab=tab; STATE.stockId=null;
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   render(); $('#view').scrollTop=0;
@@ -424,7 +424,7 @@ function renderStockDetail(v){
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
   h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
-    <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(AIに聞くときの観点を決められます)'}</div></div>`;
+    <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(会話の切り口を決められます)'}</div></div>`;
   if(!isMkt(s)){
   h+='<div class="lbl" style="margin-top:2px">主要指標</div>';
   // metrics
@@ -467,7 +467,7 @@ function renderStockDetail(v){
   </div>`;
   // links
   h+=`<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
-  h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">AIに聞く・取り込む</button>`;
+  h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">会話を取り込む</button>`;
   v.innerHTML=h;
 }
 function sheetStockMenu(sid){
@@ -483,7 +483,7 @@ function sheetStockMenu(sid){
 function sheetTheme(sid){
   const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[sid]||'';
   openSheet(`<h3>注目テーマ</h3>
-    <div class="muted" style="margin-bottom:10px">この銘柄を見るときの切り口。「AIに聞く」の質問文に反映されます。</div>
+    <div class="muted" style="margin-bottom:10px">この銘柄を見るときの切り口。「聞くことが思いつかない時は」で作る質問文やリマインダー設定に反映されます。</div>
     <label class="fld"><span class="t">テーマ</span><input id="th_in" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術"></label>
     <button class="btn pri" onclick="doSaveTheme('${sid}')">保存</button>`);
 }
@@ -522,7 +522,7 @@ function renderTrend(s){
 
 //////////////////// IMPORT (parser) ////////////////////
 function renderImport(v){
-  $('#topTitle').textContent='AIに聞く・取り込む';
+  $('#topTitle').textContent='会話を取り込む';
   const sel=STATE.askStockId||'';
   const s=sel?stock(sel):null;
   let h='';
@@ -538,39 +538,76 @@ function renderImport(v){
       <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
       <div style="font-size:12.5px;font-weight:600;margin-top:2px;${th?'':'color:var(--ink3);font-weight:400'}">${th?esc(th):'未設定'}</div></div>`;
   }
-  // STEP1 質問文を作る
-  h+='<div class="lbl">STEP 1 · AIに聞く質問文を作る</div>';
-  if(!sel){ h+='<div class="muted" style="padding:6px 2px">まず上で銘柄を選んでください。</div>'; }
-  else{
-    h+=`<button class="btn" onclick="pickMode('${sel}','new')">① 新規に調べる(項目を選ぶ)</button>`;
-    h+=`<button class="btn" style="margin-top:8px" onclick="pickMode('${sel}','org')">② 手持ちの分析を整理する</button>`;
-    h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。</div>';
-  }
-  // STEP2 貼り付け
-  h+='<div class="lbl">STEP 2 · AIの回答を貼り付ける</div>';
+  // ① 説明書を渡す(最初の1回だけ)
+  h+='<div class="lbl">① このアプリの説明書をAIに渡す(最初の1回だけ)</div>';
+  h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
+  h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
+  h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span><span class="m">開閉</span></div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:8px 11px">${esc(briefingText())}</div></div>`;
+  // ② 会話を貼り付ける
+  h+='<div class="lbl" style="margin-top:18px">② 会話を貼り付ける</div>';
   h+=`<div class="row" style="gap:8px;margin-bottom:6px">
     <button class="btn pri" style="flex:1" onclick="pasteFromClipboard()">📋 貼り付ける</button>
     <button class="btn" style="flex:0 0 88px" onclick="clearPaste()">クリア</button>
   </div>`;
-  h+='<textarea id="mdIn" class="mono" placeholder="「貼り付ける」を押すか、ここに直接ペースト(分割された回答は、続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
+  h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
+  // 困ったときは(旧STEP1・格下げ)
+  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>聞くことが思いつかない時は</span><span class="m">開閉</span></div><div class="b" style="padding:8px 11px">`;
+  if(!sel){ h+='<div class="muted">まず上で銘柄を選んでください。</div>'; }
+  else{
+    h+=`<button class="btn" onclick="pickMode('${sel}','new')">① 新規に調べる(項目を選ぶ)</button>`;
+    h+=`<button class="btn" style="margin-top:8px" onclick="pickMode('${sel}','org')">② 手持ちの分析を整理する</button>`;
+    h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
+  }
+  h+='</div></div>';
   v.innerHTML=h;
 }
+function briefingText(){
+  return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
+
+出力の先頭には対象を明記してください:
+# 銘柄: 銘柄名 (証券コード)
+(市場・業界などテーマの話なら) # テーマ: テーマ名
+
+■ 指標(数値のスナップショット)
+## 指標
+- 指標名: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)
+
+■ 業績推移
+## 業績推移
+- 指標名: 25年3月期=数値 | 26年3月期=数値 | 単位:円 など
+
+■ 分析(定性的な内容)
+## 分析
+- 項目名: 内容 | 基準日(YYYY/M/D)
+
+■ 注目ポイント(検証したい・気にかけたい観点。何がどうなったら良い/悪いか)
+## 注目ポイント
+- 本文: 自由記述
+- イベント日: YYYY/M/D(任意。決算日など気にかけるきっかけがあれば)
+
+これらは私がアプリの画面にそのまま貼り付けて取り込みます。リマインダー(定期確認)の設定はアプリ側で別途行うので、ここでは扱わなくて大丈夫です。`;
+}
+function copyBriefing(){ copy(briefingText(), '説明書をコピーしました。ChatGPTのカスタム指示や会話の最初に貼ってください'); }
 function parseMd(text){
-  // returns {stock:{name,code}, rows:[{block,key,value,d,src,conf,kind}], failed:[], type}
+  // returns {stock:{name,code}, rows:[{block,key,value,d,src,conf,kind}], failed:[], type, memoCandidates:[]}
   const lines=text.split(/\r?\n/); let block=null; let rows=[]; const failed=[]; let stk=null; let type='analysis';
+  // 見出しにも箇条書きにも当てはまらない自由文(会話の地の文)は、メモ候補として連続した段落単位にまとめる
+  const memoCandidates=[]; let pendingFree=[];
+  const flushFree=()=>{ if(pendingFree.length){ memoCandidates.push(pendingFree.join('\n')); pendingFree=[]; } };
   for(let raw of lines){
     let line=raw.replace(/\*\*/g,'').trim();
-    if(!line) continue;
+    if(!line) { flushFree(); continue; }
     if(/^```/.test(line)) continue;                                  // コードブロック境界
     if(/^\[[0-9A-F-]{8,}\]\(https?:\/\//i.test(line)) continue;    // citationリンク行
     if(/^(PR TIMES|\+\d+)\s*`*$/i.test(line)) continue;            // 出典フッタ
     let m;
-    if(m=line.match(/^#\s*銘柄[:：]\s*(.+?)\s*[\(（]([A-Za-z0-9]+)[\)）]/)){ stk={name:m[1].trim(),code:m[2].trim()}; continue; }
-    if(m=line.match(/^#\s*テーマ[:：]\s*(.+)$/)){ const nm=m[1].trim(); const mk=DB.stocks.find(x=>isMkt(x)&&x.name===nm); stk={name:nm, code:mk?mk.id:nm, isMarket:true}; continue; }
-    if(m=line.match(/^##\s*(.+)$/)){ const b=m[1].trim(); block=b; if(/リマインダー/.test(b))type='reminder'; continue; }
-    if(line.startsWith('#')) continue;
+    if(m=line.match(/^#\s*銘柄[:：]\s*(.+?)\s*[\(（]([A-Za-z0-9]+)[\)）]/)){ stk={name:m[1].trim(),code:m[2].trim()}; flushFree(); continue; }
+    if(m=line.match(/^#\s*テーマ[:：]\s*(.+)$/)){ const nm=m[1].trim(); const mk=DB.stocks.find(x=>isMkt(x)&&x.name===nm); stk={name:nm, code:mk?mk.id:nm, isMarket:true}; flushFree(); continue; }
+    if(m=line.match(/^##\s*(.+)$/)){ const b=m[1].trim(); block=b; if(/リマインダー/.test(b))type='reminder'; flushFree(); continue; }
+    if(line.startsWith('#')) { flushFree(); continue; }
     if(/^[-•*・‣▪]\s*/.test(line)){
+      flushFree();
       let body=line.replace(/^[-•*・‣▪]\s*/,'');
       // key: value | d | src | conf   (labels like 出典: 確信度: tolerated)
       let km=body.match(/^([^:：]+)[:：]\s*(.*)$/);
@@ -608,8 +645,9 @@ function parseMd(text){
       // date-ok check
       if(d&&!parseD(d.length<=5?('2026/'+d):d) && !/^\d{1,2}\/\d{1,2}$/.test(d)){ /* keep */ }
       rows.push({block,key,value,d,src,conf,unit, raw:raw.trim()});
-    } else { failed.push(raw.trim()); }
+    } else { pendingFree.push(line); }
   }
+  flushFree();
   // 見出しが無い行の行き先をキーから推定(GPTの分割出力対策)
   rows.forEach(r=>{
     if(r.block) return;
@@ -631,7 +669,7 @@ function parseMd(text){
   // 重複除外(同じキーで同じ値が複数回=AIの再出力)
   const seen=new Set(); const dups=[];
   const uniq=rows.filter(r=>{ const sig=r.key+'|'+String(r.value).slice(0,80); if(seen.has(sig)){ dups.push(r); return false; } seen.add(sig); return true; });
-  return {stock:stk, rows:uniq, failed, type, dups};
+  return {stock:stk, rows:uniq, failed, type, dups, memoCandidates};
 }
 async function pasteFromClipboard(){
   const ta=$('#mdIn'); if(!ta) return;
@@ -715,9 +753,18 @@ function parseAndPreview(){
     h+='</table></div>';
     window._orphans=orphans;
     const sameCnt=okRows.filter(r=>r._skip).length;
-    const importCnt=okRows.length-sameCnt;
     if(sameCnt) h+=`<div class="muted" style="margin-top:8px;font-size:11px">前回と同じ内容の ${sameCnt}件 は読み込みません(鮮度のみ更新)。</div>`;
-    h+=`<button class="btn pri" style="margin-top:10px" onclick="commitImport()">✓ ${importCnt}件を読み込む${sameCnt?`(${sameCnt}件は鮮度のみ)`:''}</button>`;
+  } else {
+    window._orphans=[];
+  }
+  // メモ候補(見出し・箇条書きに当てはまらなかった自由文。動的に追加・削除・編集できる)
+  h+='<div class="lbl" style="margin-top:16px">メモ候補</div>';
+  if(p.memoCandidates.length) h+='<div class="hint" style="margin:-4px 0 6px">フォーマットに当てはまらなかった文章です。不要なものは×で消し、書き足したい内容は追加できます。</div>';
+  else h+='<div class="muted" style="padding:0 2px 6px">今回はありません。</div>';
+  h+='<div id="memoCandList">'+p.memoCandidates.map(t=>memoCandField(t)).join('')+'</div>';
+  h+='<button class="btn sm" onclick="addMemoCandidateField()">＋ メモ候補を追加</button>';
+  if(p.rows.length || p.memoCandidates.length){
+    h+=`<button class="btn pri" style="margin-top:12px" onclick="commitImport()">✓ 読み込む</button>`;
     window._parsed=p;
   }
   if(p.failed.length){
@@ -728,11 +775,22 @@ function parseAndPreview(){
   }
   out.innerHTML=h;
 }
+function memoCandField(text){
+  return `<div class="mc-item" style="position:relative;margin-bottom:8px">
+    <textarea class="mc-text" style="min-height:52px;padding-right:34px">${esc(text)}</textarea>
+    <span class="del" style="position:absolute;top:8px;right:10px;cursor:pointer" onclick="this.closest('.mc-item').remove()">×</span>
+  </div>`;
+}
+function addMemoCandidateField(){
+  const list=$('#memoCandList'); if(!list) return;
+  list.insertAdjacentHTML('beforeend', memoCandField(''));
+}
 function commitImport(){
   const p=window._parsed; if(!p){toast('読み込む内容がありません');return;}
   if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0) p.stock={name:sc0.name, code:sc0.code}; }
   if(!p.stock){toast('銘柄が特定できません');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
+  const newWatchWithEvent=[];
   // 該当なし行: チェックされたものだけ「その他」カテゴリへ
   (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),src:r.src||'AI',details:[]}; } });
   p.rows.forEach(r=>{
@@ -754,14 +812,20 @@ function commitImport(){
     }
     else if(/注目ポイント/.test(r.block||'')){
       const ed = r.eventDate ? (/^\d{1,2}\/\d{1,2}$/.test(r.eventDate)?'2026/'+r.eventDate:r.eventDate) : null;
-      DB.hypotheses.push({id:'h'+Date.now()+Math.random().toString(36).slice(2,8), stockId:s.id, kind:'watch',
-        text:r.value, eventDate:ed, eventNote:null, eventType:ed?'date':'none'});
+      const hid='h'+Date.now()+Math.random().toString(36).slice(2,8);
+      DB.hypotheses.push({id:hid, stockId:s.id, kind:'watch', text:r.value, eventDate:ed, eventNote:null, eventType:ed?'date':'none'});
+      if(ed) newWatchWithEvent.push({id:hid, text:r.value, eventDate:ed});
     }
   });
+  // メモ候補: 画面上で編集・追加・削除された内容をそのまま取り込む
+  const memoTexts=[...document.querySelectorAll('#memoCandList .mc-text')].map(ta=>ta.value.trim()).filter(Boolean);
+  memoTexts.forEach(t=>{ DB.hypotheses.push({id:'h'+Date.now()+Math.random().toString(36).slice(2,8), stockId:s.id, kind:'memo', text:t, eventDate:null, eventNote:null, eventType:'none'}); });
   save();
-  toast(p.rows.length+'件を読み込みました');
+  const n=p.rows.length+memoTexts.length;
+  toast(n+'件を読み込みました');
   $('#mdIn').value=''; $('#parseOut').innerHTML='';
   openStock(s.id);
+  if(newWatchWithEvent.length) sheetReminderTriage(newWatchWithEvent, s.id);
 }
 function knownSubs(){ const a=[]; DB.sectionMaster.forEach(c=>c.subs.forEach(su=>a.push(su))); (DB.marketSectionMaster||[]).forEach(c=>c.subs.forEach(su=>a.push(su))); return a; }
 // 「主要競合(サマリ)」「競争環境: 主要競合(サマリ)」「競争環境: 主要競合(詳細): 本文」いずれも解決する
@@ -1053,7 +1117,35 @@ function hypoMiniCard(hh){
   </div>`;
   return h;
 }
-function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE.remHypoId=hid; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, hid); }
+function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE._triageItems=null; STATE.remHypoId=hid; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, hid); }
+// 取り込み直後に「イベント日つき注目ポイント」をまとめて確認する一覧シート。
+// 1件ずつ「リマインダーを追加」→登録完了(またはキャンセル)で、この一覧に戻ってこられる。
+function sheetReminderTriage(items, sid){
+  STATE._triageItems=items; STATE._triageSid=sid;
+  if(!items || !items.length){ STATE._triageItems=null; return; }
+  let h=`<h3>注目ポイントを確認</h3>
+    <div class="muted" style="margin-bottom:10px">イベント日つきで取り込まれました。リマインダーが必要なものだけ設定してください。</div>`;
+  items.forEach(it=>{
+    h+=`<div class="card" style="padding:9px 11px;margin-bottom:8px">
+      <div class="row" style="align-items:flex-start;gap:8px">
+        <div style="flex:1;font-size:13px">${esc(it.text.slice(0,80))}${it.text.length>80?'…':''}<div class="muted" style="margin-top:3px;font-size:11px">イベント日: ${esc(it.eventDate)}</div></div>
+        <span class="del" onclick="triageRemove('${it.id}')">×</span>
+      </div>
+      <button class="btn sm" style="margin-top:8px;width:auto" onclick="triageAddReminder('${it.id}')">リマインダーを追加</button>
+    </div>`;
+  });
+  h+=`<button class="btn ghost" style="margin-top:4px" onclick="STATE._triageItems=null;closeSheet();">閉じる</button>`;
+  openSheet(h);
+}
+function triageRemove(id){
+  STATE._triageItems=(STATE._triageItems||[]).filter(x=>x.id!==id);
+  sheetReminderTriage(STATE._triageItems, STATE._triageSid);
+}
+function triageAddReminder(id){
+  const hh=DB.hypotheses.find(x=>x.id===id); if(!hh) return;
+  STATE.remHypoId=id; STATE.remStockId=hh.stockId; STATE._remFromStock=true;
+  closeSheet(); sheetAddReminder(hh.stockId, id);
+}
 function sheetEditHypo(hid, sid, forceKind){
   const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
   const s=stock(hh?hh.stockId:sid);
@@ -1127,11 +1219,11 @@ function doAddMarket(){
 }
 function sheetAddStock2(){
   openSheet(`<h3>銘柄を追加</h3>
-    <div class="banner" style="margin-bottom:12px">登録後、「AIに聞く」で分析を集めます。<b>一度に聞く項目は5つまで</b>がおすすめです(多いとAIの回答が不安定になります)。あとから何度でも追加できます。</div>
+    <div class="banner" style="margin-bottom:12px">登録後、「会話を取り込む」で分析を集めます。何を聞けばいいか迷ったら、調べる項目を選んで質問文を作ることもできます(<b>一度に5項目まで</b>がおすすめです。多いとAIの回答が不安定になります)。あとから何度でも追加できます。</div>
     <label class="fld"><span class="t">銘柄名</span><input id="as_name" placeholder="例: 古河電気工業"></label>
     <label class="fld"><span class="t">ティッカー / 証券コード</span><input id="as_code" placeholder="例: 5801 / PLTR"></label>
     <label class="fld"><span class="t">区分</span><div class="seg"><button class="on" id="as_hold" onclick="this.classList.add('on');this.nextElementSibling.classList.remove('on')">保有</button><button id="as_watch" onclick="this.classList.add('on');this.previousElementSibling.classList.remove('on')">ウォッチ</button></div></label>
-    <button class="btn pri" onclick="doAddStock(true)">追加してAIに聞く</button>
+    <button class="btn pri" onclick="doAddStock(true)">追加して項目を選ぶ</button>
     <button class="btn" style="margin-top:8px" onclick="doAddStock(false)">追加のみ</button>`);
 }
 function doAddStock(order){
@@ -1163,7 +1255,7 @@ function doAddDetail(sid,sec){ const t2=$('#dt_t').value.trim(); if(!t2){toast('
 let currentSid=null;
 function sheetOrder(sid){
   const p=DB.askPrefs||{mode:'new',level:'標準',picks:{}};
-  openSheet(`<h3>AIに聞く</h3>
+  openSheet(`<h3>質問文を作る</h3>
     <div class="muted" style="margin-bottom:12px">どちらの聞き方をしますか?</div>
     <div class="card tap ${p.mode==='new'?'':''}" style="${p.mode==='new'?'border-color:var(--navy);background:var(--navy-bg)':''}" onclick="pickMode('${sid}','new')">
       <div style="font-size:14px;font-weight:700">① 新規に調べる</div>
@@ -1290,7 +1382,8 @@ function sheetAddReminder(presetId, hypoId){
     <label class="fld"><span class="t">補足メモ(任意)</span><textarea id="rm_memo" placeholder="監視の狙い・保有状況・警戒条件など"></textarea></label>
     <button class="btn" onclick="copyRegPrompt()">登録用プロンプトをコピー</button>
     <label class="fld" style="margin-top:12px"><span class="t">外部AIの出力(md)を貼り付け</span><textarea id="rm_md" class="mono" placeholder="## リマインダー ..."></textarea></label>
-    <button class="btn pri" onclick="parseReminder()">解析して登録</button>`);
+    <button class="btn pri" onclick="parseReminder()">解析して登録</button>
+    ${STATE._triageItems?'<button class="btn ghost" style="margin-top:8px" onclick="sheetReminderTriage(STATE._triageItems, STATE._triageSid)">← 一覧に戻る</button>':''}`);
 }
 function copyRegPrompt(){
   const sid=$('#rm_stock').value; const s=stock(sid); const memo=$('#rm_memo').value.trim();
@@ -1402,8 +1495,15 @@ function parseReminder(){
   let bad=r.changes.find(c=>c.cond&&!/\d{4}\/\d{1,2}\/\d{1,2}/.test(c.cond));
   if(!r.title){toast('タイトルが解析できません');return;}
   { const d=calcNextFire(r); r.nextFire = d ? fmtFire(d) : null; }
-  DB.reminders.push(r); save(); closeSheet(); go('reminder');
+  DB.reminders.push(r); save();
   toast(bad?'登録しました(日付なし頻度変更は要確認)':'登録しました');
+  if(STATE._triageItems){
+    const doneId=hidEl?hidEl.value:null;
+    STATE._triageItems=STATE._triageItems.filter(x=>x.id!==doneId);
+    sheetReminderTriage(STATE._triageItems, STATE._triageSid);
+  } else {
+    closeSheet(); go('reminder');
+  }
 }
 
 //////////////////// util ////////////////////
@@ -1449,7 +1549,7 @@ function sheetMetricsMaster(){
   const mm=DB.metricsMaster;
   const graphOn=mm.trend.filter(x=>x.graph).length;
   let h=`<h3>収容指標・業績分析項目の設定</h3>
-    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が「AIに聞く」の質問文と、銘柄詳細の表示に使われます。</div>`;
+    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。</div>`;
   // スナップショット指標
   h+=`<div class="lbl" style="margin-top:0">スナップショット指標 (${mm.snap.length})</div>`;
   mm.snap.forEach((k,i)=>{
@@ -1537,7 +1637,7 @@ function doAddMetric(type){
     if(g && mm.trend.filter(x=>x.graph).length>=4){ g=false; toast('グラフは4件までのため、グラフ表示なしで追加します'); }
     mm.trend.push({name, graph:!!g});
   }
-  save(); sheetMetricsMaster(); toast('追加しました。「AIに聞く」で取得できます');
+  save(); sheetMetricsMaster(); toast('追加しました。会話を取り込む画面で取得できます');
 }
 function sheetBackup(){
   openSheet(`<h3>バックアップ</h3>
