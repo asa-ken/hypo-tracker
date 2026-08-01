@@ -93,6 +93,7 @@
   .pages{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
   .pages::-webkit-scrollbar{display:none;}
   .page{flex:0 0 100%; scroll-snap-align:start; padding:14px 20px; min-height:140px;}
+  .page.tight{padding:2px 0 4px; min-height:0;}
   .page .kicker{font-size:10px; font-weight:700; letter-spacing:.04em; color:var(--navy-tx); background:var(--navy-bg); display:inline-block; padding:3px 9px; border-radius:8px; margin-bottom:10px;}
   .page .kicker.detail{color:var(--ink2); background:var(--bg); border:1px solid var(--line);}
   .page .txt{font-size:13.5px; line-height:1.75; white-space:pre-wrap;}
@@ -457,11 +458,17 @@ function renderStockDetail(v){
     <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(会話の切り口を決められます)'}</div></div>`;
   if(!isMkt(s)){
   h+='<div class="lbl" style="margin-top:2px">主要指標</div>';
-  // metrics
-  h+='<div class="metric">';
-  DB.metricsMaster.snap.slice(0,6).forEach(k=>{ const m=s.metrics[k]; const stale=m&&daysSince(m.d)>30; const miss=!m;
-    h+=`<div class="m ${stale?'stale':''}"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.slice(5))+(stale?' 要更新':'')}</div></div>`; });
-  h+='</div>';
+  // metrics(6件を超える場合は横スワイプページャーで送る)
+  {
+    const allKeys=DB.metricsMaster.snap;
+    const chunks=[]; for(let i=0;i<allKeys.length;i+=6) chunks.push(allKeys.slice(i,i+6));
+    if(chunks.length<=1){
+      h+='<div class="metric">'+(chunks[0]||[]).map(k=>metricCellHtml(s,k)).join('')+'</div>';
+    } else {
+      const pages=chunks.map(chunk=>`<div class="metric">${chunk.map(k=>metricCellHtml(s,k)).join('')}</div>`);
+      h+=pagerBlock('metrics', pages, (idx,total)=>`指標 ${idx+1}/${total}`, 'tight');
+    }
+  }
   // trend
   h+='<div class="lbl">業績推移</div>';
   h+=renderTrend(s);
@@ -491,6 +498,11 @@ function renderStockDetail(v){
   h+=`<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
   h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">会話を取り込む</button>`;
   v.innerHTML=h;
+  pagerInit('metrics'); pagerInit('trendchart');
+}
+function metricCellHtml(s,k){
+  const m=s.metrics[k]; const stale=m&&daysSince(m.d)>30; const miss=!m;
+  return `<div class="m ${stale?'stale':''}"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.slice(5))+(stale?' 要更新':'')}</div></div>`;
 }
 function sheetStockMenu(sid){
   const s=stock(sid); if(!s) return;
@@ -528,12 +540,18 @@ function renderTrend(s){
   const years=new Set(); Object.values(tr).forEach(o=>Object.keys(o).forEach(k=>{if(k!=='unit')years.add(k);}));
   const ys=[...years];
   let h='<div class="card" style="padding:11px 12px">';
-  // simple bar chart on first graph indicator
-  if(inds.length){ const first=tr[inds[0].name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
-    h+='<div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px">';
-    ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
-      h+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('年','\n年').split('\n')[0])}</div></div>`; });
-    h+='</div>'; h+=`<div class="muted" style="font-size:10px;margin-bottom:6px">${esc(inds[0].name)}(${esc(first.unit||'')}) · 点線=予想</div>`; }
+  // 棒グラフ(グラフ対象指標が複数あれば横スワイプページャーで切り替え)
+  if(inds.length){
+    const chartHtml=(ind)=>{ const first=tr[ind.name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
+      let ch='<div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px">';
+      ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
+        ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('年','\n年').split('\n')[0])}</div></div>`; });
+      ch+='</div>'; ch+=`<div class="muted" style="font-size:10px;margin-bottom:2px">${esc(ind.name)}(${esc(first.unit||'')}) · 点線=予想</div>`;
+      return ch;
+    };
+    if(inds.length<=1){ h+=chartHtml(inds[0]); }
+    else { h+=pagerBlock('trendchart', inds.map(chartHtml), (idx)=>`${esc(inds[idx].name)} (${idx+1}/${inds.length})`, 'tight'); }
+  }
   // table
   h+='<div style="overflow-x:auto"><table style="white-space:nowrap"><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
   DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name]; if(!o)return;
@@ -1270,52 +1288,66 @@ function sheetAddDetail(sid,sec){
 function copyDeep(sid,sec){ const s=stock(sid); copy(s.name+'('+s.code+')の「'+sec+'」についてさらに深掘りして解説してください。前提: 私は個別株投資家で、投資判断に効く具体性(数値・競合比較・持続性)を重視します。装飾なしの文章で回答してください。','深掘り質問文をコピーしました'); }
 function doAddDetail(sid,sec){ const t2=$('#dt_t').value.trim(); if(!t2){toast('内容を入力してください');return;} const s=stock(sid); if(!s.sections[sec]) s.sections[sec]={t:'(サマリ未取得)',d:fmtToday(),src:'—',details:[]}; if(!s.sections[sec].details) s.sections[sec].details=[]; s.sections[sec].details.unshift({ts:fmtToday(),title:$('#dt_title').value.trim(),t:t2}); save(); closeSheet(); render(); toast('詳細を保存しました'); }
 // 分析項目: 概要ページ→詳細ページを横スワイプで移動するシート
-let anActiveIdx=0;
+// 汎用の横スワイプページャー(ボトムシート内・ページ内インラインの両方で使う)
+const _pagerState={}; const _pagerCap={};
+function pagerBlock(id, pageHtmls, capFn, pageClass){
+  const total=pageHtmls.length;
+  _pagerCap[id]=capFn||null;
+  const cls='page'+(pageClass?' '+pageClass:'');
+  const pagesHtml=pageHtmls.map(ph=>`<div class="${cls}">${ph}</div>`).join('');
+  const dotsHtml=total>1?Array.from({length:total},(_,i)=>`<span class="dot${i===0?' on':''}"></span>`).join(''):'';
+  return `<div class="pages-wrap"><div class="pages" id="${id}_pages">${pagesHtml}</div>
+      <div class="edge-hint left" id="${id}_el">‹</div><div class="edge-hint right" id="${id}_er">›</div></div>
+    ${total>1?`<div class="swipecap" id="${id}_cap"></div>
+    <div class="pager-nav">
+      <button class="navbtn" id="${id}_prev" onclick="pagerGoto('${id}',_pagerState['${id}'].activeIdx-1)">‹</button>
+      <div class="dots" id="${id}_dots">${dotsHtml}</div>
+      <button class="navbtn" id="${id}_next" onclick="pagerGoto('${id}',_pagerState['${id}'].activeIdx+1)">›</button>
+    </div>`:''}`;
+}
+function pagerInit(id){
+  const pagesEl=document.getElementById(id+'_pages'); if(!pagesEl) return;
+  const total=pagesEl.children.length;
+  _pagerState[id]={activeIdx:0, total};
+  pagesEl.scrollLeft=0;
+  pagerUpdateNav(id);
+  pagesEl.onscroll=()=>{ const w=pagesEl.clientWidth; if(!w) return; const idx=Math.round(pagesEl.scrollLeft/w); if(idx!==_pagerState[id].activeIdx){ _pagerState[id].activeIdx=idx; pagerUpdateNav(id); } };
+}
+function pagerGoto(id, idx){
+  const st=_pagerState[id]; if(!st||idx<0||idx>=st.total) return;
+  document.getElementById(id+'_pages').scrollTo({left:idx*document.getElementById(id+'_pages').clientWidth, behavior:'smooth'});
+}
+function pagerUpdateNav(id){
+  const st=_pagerState[id]; if(!st) return;
+  const prev=document.getElementById(id+'_prev'), next=document.getElementById(id+'_next');
+  if(prev) prev.disabled=st.activeIdx===0;
+  if(next) next.disabled=st.activeIdx>=st.total-1;
+  const dots=document.getElementById(id+'_dots');
+  if(dots) [...dots.children].forEach((el,i)=>el.classList.toggle('on', i===st.activeIdx));
+  const el=document.getElementById(id+'_el'), er=document.getElementById(id+'_er');
+  if(el) el.classList.toggle('show', st.activeIdx>0);
+  if(er) er.classList.toggle('show', st.activeIdx<st.total-1);
+  const cap=document.getElementById(id+'_cap');
+  if(cap && _pagerCap[id]) cap.textContent=_pagerCap[id](st.activeIdx, st.total);
+}
 function sheetAnalysisItem(sid,su){
   const s=stock(sid); const val=s.sections[su]; const det=(val&&val.details)||[];
-  const total=1+det.length;
   const cat=masterFor(s).find(c=>c.subs.includes(su));
-  let pagesHtml=`<div class="page">
-    <span class="kicker">概要</span>
+  const pages=[`<span class="kicker">概要</span>
     <div class="txt">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}</div>
-    ${val?`<div class="meta"><span>基準日: ${esc(val.d)}</span><span>出典: ${esc(val.src||'—')}</span></div>`:''}
-  </div>`;
+    ${val?`<div class="meta"><span>基準日: ${esc(val.d)}</span><span>出典: ${esc(val.src||'—')}</span></div>`:''}`];
   det.forEach((dd,di)=>{
-    pagesHtml+=`<div class="page">
-      <span class="kicker detail">詳細 ${di+1}${dd.title?' ・ '+esc(dd.title):''}</span>
+    pages.push(`<span class="kicker detail">詳細 ${di+1}${dd.title?' ・ '+esc(dd.title):''}</span>
       <div class="txt">${esc(dd.t)}</div>
-      <div class="meta"><span>${esc(dd.ts)}</span><button class="del" style="border:none;background:none;padding:0" onclick="delDetail('${sid}','${esc(su)}',${di})">削除</button></div>
-    </div>`;
+      <div class="meta"><span>${esc(dd.ts)}</span><button class="del" style="border:none;background:none;padding:0" onclick="delDetail('${sid}','${esc(su)}',${di})">削除</button></div>`);
   });
-  const dotsHtml=total>1?Array.from({length:total},(_,i)=>`<span class="dot${i===0?' on':''}"></span>`).join(''):'';
   openSheet(`<div style="margin:-16px -16px 0">
       <div class="pager-top"><div><div class="ti">${esc(su)}</div><div class="cat">${esc(cat?cat.cat:'')}</div></div></div>
-      <div class="pages-wrap"><div class="pages" id="anPages">${pagesHtml}</div>
-        <div class="edge-hint left" id="anEdgeL">‹</div><div class="edge-hint right" id="anEdgeR">›</div></div>
-      <div class="swipecap" id="anCap"></div>
-      <div class="pager-nav" id="anNav" style="display:${total>1?'flex':'none'}">
-        <button class="navbtn" onclick="anGoto(anActiveIdx-1)">‹</button>
-        <div class="dots" id="anDots">${dotsHtml}</div>
-        <button class="navbtn" onclick="anGoto(anActiveIdx+1)">›</button>
-      </div>
+      ${pagerBlock('an', pages, (idx,total)=>idx===0?'左にスワイプして詳細を見る':`詳細 ${idx}/${total-1}`)}
     </div>
     <button class="btn sm" style="margin-top:2px" onclick="sheetAddDetail('${sid}','${esc(su)}')">＋ 詳細を追記</button>
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">閉じる</button>`);
-  anActiveIdx=0; anUpdateNav(total);
-  const pagesEl=document.getElementById('anPages');
-  pagesEl.scrollLeft=0;
-  pagesEl.onscroll=()=>{ const w=pagesEl.clientWidth; const idx=Math.round(pagesEl.scrollLeft/w); if(idx!==anActiveIdx){ anActiveIdx=idx; anUpdateNav(total); } };
-}
-function anGoto(idx){ const pagesEl=document.getElementById('anPages'); const total=pagesEl.children.length; if(idx<0||idx>=total) return; pagesEl.scrollTo({left:idx*pagesEl.clientWidth, behavior:'smooth'}); }
-function anUpdateNav(total){
-  const btns=document.querySelectorAll('#anNav .navbtn');
-  btns[0].disabled=anActiveIdx===0; btns[1].disabled=anActiveIdx>=total-1;
-  [...document.getElementById('anDots').children].forEach((el,i)=>el.classList.toggle('on', i===anActiveIdx));
-  document.getElementById('anEdgeL').classList.toggle('show', anActiveIdx>0);
-  document.getElementById('anEdgeR').classList.toggle('show', anActiveIdx<total-1);
-  const cap=document.getElementById('anCap');
-  cap.style.display=total>1?'block':'none';
-  cap.textContent=total>1?(anActiveIdx===0?'左にスワイプして詳細を見る':`詳細 ${anActiveIdx}/${total-1}`):'';
+  pagerInit('an');
 }
 let currentSid=null;
 
