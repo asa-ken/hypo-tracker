@@ -552,16 +552,13 @@ function renderImport(v){
   h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
   // 困ったときは(旧STEP1・格下げ)
-  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>聞くことが思いつかない時は</span><span class="m">開閉</span></div><div class="b" style="padding:8px 11px">`;
-  if(!sel){ h+='<div class="muted">まず上で銘柄を選んでください。</div>'; }
-  else{
-    h+=`<button class="btn" onclick="pickMode('${sel}','new')">① 新規に調べる(項目を選ぶ)</button>`;
-    h+=`<button class="btn" style="margin-top:8px" onclick="pickMode('${sel}','org')">② 手持ちの分析を整理する</button>`;
-    h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
-  }
+  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span><span class="m">開閉</span></div><div class="b" style="padding:8px 11px">`;
+  h+=`<button class="btn" onclick="pickModeGuarded('${sel}')">調べる項目を選ぶ</button>`;
+  h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
   h+='</div></div>';
   v.innerHTML=h;
 }
+function pickModeGuarded(sid){ if(!sid){ toast('先に上で銘柄を選んでください'); return; } pickMode(sid,'new'); }
 function briefingText(){
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
