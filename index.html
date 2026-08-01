@@ -553,12 +553,11 @@ function renderImport(v){
   h+='<div id="parseOut"></div>';
   // 困ったときは(旧STEP1・格下げ)
   h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span><span class="m">開閉</span></div><div class="b" style="padding:8px 11px">`;
-  h+=`<button class="btn" onclick="pickModeGuarded('${sel}')">調べる項目を選ぶ</button>`;
+  h+=`<button class="btn" onclick="sheetOrderNew('${sel}')">調べる項目を選ぶ</button>`;
   h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
   h+='</div></div>';
   v.innerHTML=h;
 }
-function pickModeGuarded(sid){ if(!sid){ toast('先に上で銘柄を選んでください'); return; } sheetOrderNew(sid); }
 function briefingText(){
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
@@ -1252,9 +1251,9 @@ function doAddDetail(sid,sec){ const t2=$('#dt_t').value.trim(); if(!t2){toast('
 let currentSid=null;
 
 function sheetOrderNew(sid){
-  const s=stock(sid);
+  const s=sid?stock(sid):null;
   // 選択は毎回リセット(前回の選択を引き継がない。深掘りは3件ずつ複数回に分ける運用を想定)
-  if(!STATE._pickSession || STATE._pickSession!==sid){ DB.askPrefs.picks={}; STATE._pickSession=sid; }
+  if(STATE._pickSession===undefined || STATE._pickSession===null || STATE._pickSession!==sid){ DB.askPrefs.picks={}; STATE._pickSession=sid; }
   const pk=DB.askPrefs.picks||{};
   const th=(DB.askPrefs.themes||{})[sid]||'';
   const cnt=Object.values(pk).filter(x=>x&&x!=='off').length;
@@ -1264,7 +1263,7 @@ function sheetOrderNew(sid){
       <b>一度に聞くのは5項目まで(深掘りは3項目まで)がおすすめです。</b><br>
       項目が多いとAIの回答が不安定になったり、分割出力されて取り込みにくくなります。<br>
       何度かに分けて聞き、少しずつ育てるのがおすすめです。<br>
-      <span style="font-size:11px">緑=深掘り済 / 灰=要点のみ取得済 / 無印=未取得</span>
+      ${s?'<span style="font-size:11px">緑=深掘り済 / 灰=要点のみ取得済 / 無印=未取得</span>':'<span style="font-size:11px">銘柄を選ばずに使うと、視点を広げるための参考項目リストになります(取得状況は表示されません)</span>'}
     </div>
     <label class="fld"><span class="t">深掘りテーマ(任意)</span>
       <input id="ord_theme" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術">
@@ -1278,7 +1277,7 @@ function sheetOrderNew(sid){
   masterFor(s).filter(c=>c.on).forEach((c,ci)=>{
     h+=`<div class="lbl" style="margin:12px 0 4px">${esc(c.cat)}</div>`;
     c.subs.forEach(su=>{ const st=pk[su]||'off';
-      const cur=s.sections[su];
+      const cur=s?s.sections[su]:null;
       const hasDeep=cur&&cur.details&&cur.details.length;
       let badge='';
       if(cur&&hasDeep) badge=` <span class="chip green" style="font-size:9px">深掘り済 ${cur.details.length}</span>`;
@@ -1299,16 +1298,17 @@ function saveTheme(sid){ const el=document.getElementById('ord_theme'); if(el){ 
 
 function catOf(su){ const c=DB.sectionMaster.find(x=>x.subs.includes(su)); return c?c.cat:''; }
 function genOrderNew(sid){
-  const s=stock(sid); const pk=DB.askPrefs.picks||{};
+  const s=sid?stock(sid):null; const pk=DB.askPrefs.picks||{};
   const sums=Object.keys(pk).filter(k=>pk[k]==='sum'), deeps=Object.keys(pk).filter(k=>pk[k]==='deep');
-  const need=[]; if(!isMkt(s)) DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
+  const need=[]; if(s && !isMkt(s)) DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
   if(!sums.length&&!deeps.length&&!need.length){ toast('項目を選んでください'); return; }
   const theme=((DB.askPrefs.themes||{})[sid]||'').trim();
+  const head=s?(isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`):'# 銘柄またはテーマ: (会話の中で対象を明記してください)';
   let p=`以下の項目を調査し、指定フォーマットで回答してください。\n`;
   if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
-  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典はサイト名のみ(URLやリンク記法は書かない)\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`}」と該当する「## 見出し」を付ける\n\n${isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`}\n`;
+  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典はサイト名のみ(URLやリンク記法は書かない)\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
-  if(!isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
+  if(s && !isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
   if(sums.length||deeps.length){
     p+='\n\n## 分析\n以下の項目について回答。「サマリ」は2〜3文で簡潔に。「詳細」は深掘りした長文(投資判断に効く具体性=数値・競合比較・持続性を重視)。\n項目名は下記の名称をそのまま使い、カテゴリ名は付けないでください。\n';
     sums.forEach(k=>{ p+=`- ${k}(サマリ): \n`; });
