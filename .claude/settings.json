@@ -5,19 +5,29 @@
       "Write(lib/**)",
       "Edit(test/**)",
       "Write(test/**)",
+      "Edit(index.html)",
+      "Write(index.html)",
       "Bash(npm test)",
       "Bash(npm run test*)",
+      "Bash(npm install*)",
       "Bash(npx vitest*)",
+      "Bash(node -e*)",
+      "Bash(python3 -m http.server*)",
+      "Bash(lsof*)",
+      "Bash(kill*)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
       "Bash(git add*)",
-      "Bash(git commit*)"
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git fetch*)",
+      "Bash(git rebase*)",
+      "Bash(git checkout -B*)",
+      "Bash(git merge-base*)",
+      "Bash(git cherry-pick*)"
     ],
     "ask": [
-      "Edit(index.html)",
-      "Write(index.html)",
-      "Bash(git push*)",
       "Bash(rm *)"
     ]
   }
