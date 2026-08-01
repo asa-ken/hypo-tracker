@@ -454,7 +454,8 @@ function renderStockDetail(v){
   const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
   const sc=staleCount(s); const hy=hyposOf(s.id);
   let h='';
-  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}<span class="chip navy">メモ・注目 ${hy.length}</span></div>`;
+  const wCnt=hy.filter(x=>x.kind==='watch').length, mCnt=hy.length-wCnt;
+  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
   h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
@@ -548,12 +549,12 @@ function renderTrend(s){
     const chartHtml=(ind)=>{ const first=tr[ind.name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
       let ch='<div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px">';
       ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
-        ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('年','\n年').split('\n')[0])}</div></div>`; });
+        ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('期','').replace(/[（(]予[）)]/,''))}</div></div>`; });
       ch+='</div>'; ch+=`<div class="muted" style="font-size:10px;margin-bottom:2px">${esc(ind.name)}(${esc(first.unit||'')}) · 点線=予想</div>`;
       return ch;
     };
     if(inds.length<=1){ h+=chartHtml(inds[0]); }
-    else { h+=pagerBlock('trendchart', inds.map(chartHtml), (idx)=>`${esc(inds[idx].name)} (${idx+1}/${inds.length})`, 'tight'); }
+    else { h+=pagerBlock('trendchart', inds.map(chartHtml), (idx)=>`${idx+1} / ${inds.length}`, 'tight'); }
   }
   // table
   h+='<div style="overflow-x:auto"><table style="white-space:nowrap"><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
@@ -594,6 +595,13 @@ function renderImport(v){
   v.innerHTML=h;
 }
 function briefingText(){
+  // 分析の項目名は resolveSection が既知の名称にしか当たらないため、
+  // 実際のマスターから一覧を生成して説明書に載せる(載せないと外部AIの出力がほぼ全て「該当なし」になる)
+  const catList=(m)=>m.filter(c=>c.on).map(c=>`  【${c.cat}】 `+c.subs.join(' / ')).join('\n');
+  const stockCats=catList(DB.sectionMaster);
+  const mktCats=catList(DB.marketSectionMaster||[]);
+  const snap=DB.metricsMaster.snap.join(' / ');
+  const trend=DB.metricsMaster.trend.map(t=>t.name).join(' / ');
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
 出力の先頭には対象を明記してください:
@@ -602,20 +610,32 @@ function briefingText(){
 
 ■ 指標(数値のスナップショット)
 ## 指標
-- 指標名: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)
+- 指標名: 値 | 単位:◯◯ | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)
+  値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
+  よく使う指標名: ${snap}
+  これ以外の指標名も自由に使えます(取り込み時に自動で追加されます)。
 
 ■ 業績推移
 ## 業績推移
-- 指標名: 25年3月期=数値 | 26年3月期=数値 | 単位:円 など
+- 指標名: 25年3月期=数値 | 26年3月期=数値 | 27年3月期(予)=数値 | 単位:◯◯ | 基準日 | 出典 | 確信度
+  よく使う指標名: ${trend}
+  決算期は「yy年mm月期」表記、予想には(予)を付けてください(米国株など海外企業も同じ形式で、その企業の決算月に合わせてください)。
 
 ■ 分析(定性的な内容)
 ## 分析
-- 項目名: 内容 | 基準日(YYYY/M/D)
+- 項目名(サマリ): 2〜3文の要点 | 基準日(YYYY/M/D) | 出典 | 確信度
+- 項目名(詳細): 深掘りした長文 | 基準日(YYYY/M/D) | 出典 | 確信度
+  項目名は必ず下記のいずれかを使ってください(カテゴリ名【】は付けない)。ここに無い名前を使うと取り込めません。
+${stockCats}
+  テーマ・市場の話のときは下記を使ってください:
+${mktCats}
 
 ■ 注目ポイント(検証したい・気にかけたい観点。何がどうなったら良い/悪いか)
 ## 注目ポイント
 - 本文: 自由記述
 - イベント日: YYYY/M/D(任意。決算日など気にかけるきっかけがあれば)
+  複数ある場合は「## 注目ポイント」の見出しごと繰り返してください。
+  この2つ以外の項目(出典など)は書かないでください。
 
 これらは私がアプリの画面にそのまま貼り付けて取り込みます。リマインダー(定期確認)の設定はアプリ側で別途行うので、ここでは扱わなくて大丈夫です。`;
 }
@@ -843,8 +863,17 @@ function commitImport(){
       else if(r._res&&r._res.sub&&s.sections[r._res.sub]&&r._res.layer!=='詳細') s.sections[r._res.sub].d=normD(r.d);
       return;
     }
-    if(/指標/.test(r.block||'')){ s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'}; }
-    else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o; }
+    if(/指標/.test(r.block||'')){
+      s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'};
+      // マスターに無い指標名は保存しても画面に出ないため、取り込み時に自動登録する
+      if(!DB.metricsMaster.snap.includes(r.key)) DB.metricsMaster.snap.push(r.key);
+    }
+    else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
+      if(!DB.metricsMaster.trend.some(t=>t.name===r.key)){
+        // グラフは最大4件までの運用のため、超える分は表(グラフなし)で追加
+        DB.metricsMaster.trend.push({name:r.key, graph:DB.metricsMaster.trend.filter(t=>t.graph).length<4});
+      }
+    }
     else if(/分析/.test(r.block||'')){
       const res=resolveSection(r.key, r.value);
       if(!res.sub) return;
@@ -1149,8 +1178,9 @@ function hypoMiniCard(hh){
   const rmCnt=(DB.reminders||[]).filter(r=>r.hypoId===hh.id).length;
   let h=`<div class="card" style="padding:11px 12px">
     <div class="row"><span class="chip ${isMemo?'gray':'amber'}" style="font-size:9px">${isMemo?'メモ':'注目'}</span></div>
-    <div style="margin-top:6px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>`;
+    <div class="clip3" style="margin-top:6px;font-size:13px;white-space:pre-wrap;cursor:pointer" onclick="this.classList.toggle('open')">${esc(hh.text)}</div>`;
   if(!isMemo && (hh.eventDate||hh.eventNote)) h+=`<div class="muted" style="margin-top:5px;font-size:11px">イベント: ${esc(hh.eventDate||'')}${hh.eventNote?' ('+esc(hh.eventNote)+')':''}</div>`;
+  if(hh.text.length>80) h+='<div class="muted" style="font-size:10px;margin-top:3px">本文をタップで全文表示</div>';
   if(rmCnt) h+=`<div class="muted" style="margin-top:5px;font-size:10px">🔔 リマインダー ${rmCnt}件</div>`;
   h+=`<div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap">
       ${isMemo?'':`<button class="btn sm" style="width:auto" onclick="addRemForHypo('${hh.id}')">リマインダーを追加</button>`}
