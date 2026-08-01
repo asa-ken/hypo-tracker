@@ -189,4 +189,50 @@ describe('parseMd', () => {
     expect(p.failed.length).toBe(1);
     expect(p.memoCandidates.length).toBe(0);
   });
+
+  // 回帰: 注目ポイント内の想定外キーがそのまま注目ポイントカードになっていた
+  test('注目ポイント内の 本文・イベント日 以外のキーはカード化せずメモ候補に回す', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 本文: 正しい注目点',
+      '- 出典: 株探',
+      '- 確信度: 高',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    const pts = p.rows.filter(r => r.block === '注目ポイント');
+    expect(pts.length).toBe(1);
+    expect(pts[0].value).toBe('正しい注目点');
+    expect(p.memoCandidates).toEqual(['出典: 株探', '確信度: 高']);
+  });
+
+  test('本文より前に来たイベント日はカード化せずメモ候補に回す', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- イベント日: 2026/8/7',
+      '- 本文: 本命の注目点',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    const pts = p.rows.filter(r => r.block === '注目ポイント');
+    expect(pts.length).toBe(1);
+    expect(pts[0].value).toBe('本命の注目点');
+    expect(pts[0].eventDate).toBeNull();
+    expect(p.memoCandidates).toEqual(['イベント日: 2026/8/7']);
+  });
+
+  test('本文の後の想定外キーを挟んでも、後続のイベント日は同じ注目ポイントに紐づく', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 本文: 出来高急増に要警戒',
+      '- 確信度: 高',
+      '- イベント日: 2026/8/7',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    const pts = p.rows.filter(r => r.block === '注目ポイント');
+    expect(pts.length).toBe(1);
+    expect(pts[0].eventDate).toBe('2026/8/7');
+    expect(p.memoCandidates).toEqual(['確信度: 高']);
+  });
 });
