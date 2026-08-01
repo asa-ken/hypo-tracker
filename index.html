@@ -80,6 +80,36 @@
   .mine .row2{font-size:12px; color:var(--navy-tx);} .mine .ts{font-size:10px; color:var(--navy); opacity:.7;}
   .empty{text-align:center; padding:40px 20px; color:var(--ink3);}
   .empty .big{font-size:15px; font-weight:600; color:var(--ink2); margin-bottom:6px;}
+  /* 分析項目の行(タップで概要/詳細スワイプシートを開く) */
+  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; font-size:12.5px; border-top:1px solid var(--line); cursor:pointer;}
+  .sub-row:active{background:var(--bg);}
+  .sub-row .row-right{display:flex; align-items:center; gap:6px;}
+  .sub-row .arrow{color:var(--ink3); font-size:14px;}
+  /* 概要/詳細の横スワイプページャー */
+  .pager-top{padding:2px 0 10px; border-bottom:1px solid var(--line); margin-bottom:2px;}
+  .pager-top .ti{font-size:14px; font-weight:700;}
+  .pager-top .cat{font-size:11px; color:var(--ink3); margin-top:1px;}
+  .pages-wrap{position:relative;}
+  .pages{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .pages::-webkit-scrollbar{display:none;}
+  .page{flex:0 0 100%; scroll-snap-align:start; padding:14px 2px; min-height:140px;}
+  .page .kicker{font-size:10px; font-weight:700; letter-spacing:.04em; color:var(--navy-tx); background:var(--navy-bg); display:inline-block; padding:3px 9px; border-radius:8px; margin-bottom:10px;}
+  .page .kicker.detail{color:var(--ink2); background:var(--bg); border:1px solid var(--line);}
+  .page .txt{font-size:13.5px; line-height:1.75; white-space:pre-wrap;}
+  .page .meta{margin-top:12px; font-size:11px; color:var(--ink3); display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .edge-hint{position:absolute; top:0; bottom:0; width:26px; display:flex; align-items:center; font-size:18px; color:var(--navy-tx); pointer-events:none; opacity:0; transition:opacity .2s;}
+  .edge-hint.show{opacity:1;}
+  .edge-hint.left{left:0; justify-content:flex-start; background:linear-gradient(to right, var(--app) 25%, transparent 100%);}
+  .edge-hint.right{right:0; justify-content:flex-end; background:linear-gradient(to left, var(--app) 25%, transparent 100%);}
+  .swipecap{text-align:center; font-size:11px; color:var(--ink3); padding:8px 0 2px;}
+  .pager-nav{display:flex; align-items:center; justify-content:center; gap:14px; padding:8px 0 4px;}
+  .navbtn{border:none; background:var(--navy); color:#fff; width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex:none;}
+  .navbtn:active{transform:scale(.94);}
+  .navbtn:disabled{opacity:.25; cursor:default;}
+  .dots{display:flex; align-items:center; gap:6px;}
+  .dot{width:6px; height:6px; border-radius:50%; background:var(--line2); transition:background .15s, transform .15s;}
+  .dot.on{background:var(--navy); transform:scale(1.4);}
+  @media (prefers-reduced-motion: reduce){ .dot{transition:none;} }
   /* modal */
   .scrim{position:fixed; inset:0; background:rgba(20,30,40,.4); z-index:40; display:none; align-items:flex-end; justify-content:center;}
   .scrim.show{display:flex;}
@@ -436,24 +466,16 @@ function renderStockDetail(v){
   h+='<div class="lbl">業績推移</div>';
   h+=renderTrend(s);
   } // end !isMkt
-  // sections (2-level accordion; master switches by kind)
+  // sections(カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く)
   h+='<div class="lbl">分析</div>';
   masterFor(s).filter(c=>c.on).forEach((c,ci)=>{
     const filled=filledCatCount(s,c.cat);
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:9px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:4px 8px 8px">`;
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:9px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:0">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
-      h+=`<div class="sec" style="margin:6px 0"><div class="h" style="padding:7px 9px;font-size:12px" onclick="event.stopPropagation();this.parentNode.classList.toggle('open')"><span>${esc(su)}${det.length?` <span class="chip gray" style="font-size:9px">詳細${det.length}</span>`:''}</span><span class="m">${val?esc(val.d.slice(5)):''}</span></div><div class="b" style="font-size:12.5px">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}
-        ${det.length?`<div class="lbl" style="margin:8px 0 4px;font-size:10px">AI深掘り・詳細メモ (${det.length})</div>`:''}
-        ${det.map((dd,di)=>`<div class="mine" style="margin-top:6px;padding:0">
-          <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer" onclick="event.stopPropagation();this.parentNode.querySelector('.dbody').classList.toggle('open2')">
-            <span class="ts" style="flex:1">${esc(dd.ts)}${dd.title?' · '+esc(dd.title):''}</span>
-            <span class="ts" style="font-size:9px">開閉</span>
-            <button class="del" style="border:none;background:none;padding:2px 4px" onclick="event.stopPropagation();delDetail('${s.id}','${esc(su)}',${di})">削除</button>
-          </div>
-          <div class="dbody row2" style="white-space:pre-wrap;padding:0 8px 7px;display:none">${esc(dd.t)}</div>
-        </div>`).join('')}
-        <button class="btn sm" style="margin-top:6px" onclick="event.stopPropagation();sheetAddDetail('${s.id}','${esc(su)}')">＋ 詳細を追記</button>
-      </div></div>`; });
+      h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${esc(su)}')">
+        <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:9px">詳細${det.length}</span>`:''}</span>
+        <span class="row-right"><span class="m">${val?esc(val.d.slice(5)):'未取得'}</span><span class="arrow">›</span></span>
+      </div>`; });
     h+=`</div></div>`;
   });
   // メモ・注目ポイント(旧「自分の見解」を統合)
@@ -1247,6 +1269,54 @@ function sheetAddDetail(sid,sec){
 }
 function copyDeep(sid,sec){ const s=stock(sid); copy(s.name+'('+s.code+')の「'+sec+'」についてさらに深掘りして解説してください。前提: 私は個別株投資家で、投資判断に効く具体性(数値・競合比較・持続性)を重視します。装飾なしの文章で回答してください。','深掘り質問文をコピーしました'); }
 function doAddDetail(sid,sec){ const t2=$('#dt_t').value.trim(); if(!t2){toast('内容を入力してください');return;} const s=stock(sid); if(!s.sections[sec]) s.sections[sec]={t:'(サマリ未取得)',d:fmtToday(),src:'—',details:[]}; if(!s.sections[sec].details) s.sections[sec].details=[]; s.sections[sec].details.unshift({ts:fmtToday(),title:$('#dt_title').value.trim(),t:t2}); save(); closeSheet(); render(); toast('詳細を保存しました'); }
+// 分析項目: 概要ページ→詳細ページを横スワイプで移動するシート
+let anActiveIdx=0;
+function sheetAnalysisItem(sid,su){
+  const s=stock(sid); const val=s.sections[su]; const det=(val&&val.details)||[];
+  const total=1+det.length;
+  const cat=masterFor(s).find(c=>c.subs.includes(su));
+  let pagesHtml=`<div class="page">
+    <span class="kicker">概要</span>
+    <div class="txt">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}</div>
+    ${val?`<div class="meta"><span>基準日: ${esc(val.d)}</span><span>出典: ${esc(val.src||'—')}</span></div>`:''}
+  </div>`;
+  det.forEach((dd,di)=>{
+    pagesHtml+=`<div class="page">
+      <span class="kicker detail">詳細 ${di+1}${dd.title?' ・ '+esc(dd.title):''}</span>
+      <div class="txt">${esc(dd.t)}</div>
+      <div class="meta"><span>${esc(dd.ts)}</span><button class="del" style="border:none;background:none;padding:0" onclick="delDetail('${sid}','${esc(su)}',${di})">削除</button></div>
+    </div>`;
+  });
+  const dotsHtml=total>1?Array.from({length:total},(_,i)=>`<span class="dot${i===0?' on':''}"></span>`).join(''):'';
+  openSheet(`<div style="margin:-16px -16px 0">
+      <div class="pager-top"><div><div class="ti">${esc(su)}</div><div class="cat">${esc(cat?cat.cat:'')}</div></div></div>
+      <div class="pages-wrap"><div class="pages" id="anPages">${pagesHtml}</div>
+        <div class="edge-hint left" id="anEdgeL">‹</div><div class="edge-hint right" id="anEdgeR">›</div></div>
+      <div class="swipecap" id="anCap"></div>
+      <div class="pager-nav" id="anNav" style="display:${total>1?'flex':'none'}">
+        <button class="navbtn" onclick="anGoto(anActiveIdx-1)">‹</button>
+        <div class="dots" id="anDots">${dotsHtml}</div>
+        <button class="navbtn" onclick="anGoto(anActiveIdx+1)">›</button>
+      </div>
+    </div>
+    <button class="btn sm" style="margin-top:2px" onclick="sheetAddDetail('${sid}','${esc(su)}')">＋ 詳細を追記</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">閉じる</button>`);
+  anActiveIdx=0; anUpdateNav(total);
+  const pagesEl=document.getElementById('anPages');
+  pagesEl.scrollLeft=0;
+  pagesEl.onscroll=()=>{ const w=pagesEl.clientWidth; const idx=Math.round(pagesEl.scrollLeft/w); if(idx!==anActiveIdx){ anActiveIdx=idx; anUpdateNav(total); } };
+}
+function anGoto(idx){ const pagesEl=document.getElementById('anPages'); const total=pagesEl.children.length; if(idx<0||idx>=total) return; pagesEl.scrollTo({left:idx*pagesEl.clientWidth, behavior:'smooth'}); }
+function anUpdateNav(total){
+  const btns=document.querySelectorAll('#anNav .navbtn');
+  btns[0].disabled=anActiveIdx===0; btns[1].disabled=anActiveIdx>=total-1;
+  [...document.getElementById('anDots').children].forEach((el,i)=>el.classList.toggle('on', i===anActiveIdx));
+  document.getElementById('anEdgeL').classList.toggle('show', anActiveIdx>0);
+  document.getElementById('anEdgeR').classList.toggle('show', anActiveIdx<total-1);
+  const cap=document.getElementById('anCap');
+  cap.style.display=total>1?'block':'none';
+  cap.textContent=total>1?(anActiveIdx===0?'左にスワイプして詳細を見る':`詳細 ${anActiveIdx}/${total-1}`):'';
+}
 let currentSid=null;
 
 function sheetOrderNew(sid){
