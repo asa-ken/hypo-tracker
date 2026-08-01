@@ -157,4 +157,36 @@ describe('parseMd', () => {
     expect(pt.eventDate).toBe('2026/8/7');
     expect(p.rows.length).toBe(3);
   });
+
+  // 自由文(見出しにも箇条書きにも当てはまらない会話の地の文)をメモ候補として拾う
+  test('見出し・箇条書きに当てはまらない自由文をメモ候補にする', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '古河電工とのペア取引が効きそうな気がする。',
+      '## 指標',
+      '- PER(予想): 36.2 | 2026/7/13',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.memoCandidates).toEqual(['古河電工とのペア取引が効きそうな気がする。']);
+    expect(p.failed.length).toBe(0);
+  });
+
+  test('連続する自由文は1つのメモ候補にまとめ、空行で区切られていれば別候補にする', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '1行目の気づき',
+      '2行目は1行目の続き',
+      '',
+      '別の話題のメモ',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.memoCandidates).toEqual(['1行目の気づき\n2行目は1行目の続き', '別の話題のメモ']);
+  });
+
+  test('箇条書きの体裁だがkey:valueでない行は、従来通りfailedに入りメモ候補にはならない', () => {
+    const text = ['- ただの箇条書きで区切りが無い行'].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.failed.length).toBe(1);
+    expect(p.memoCandidates.length).toBe(0);
+  });
 });
