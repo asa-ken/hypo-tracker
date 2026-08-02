@@ -213,7 +213,7 @@ function seed(){
        cat:'報道確認', freq:'平日', times:['09:15','15:30'], startDate:null, endDate:null, paused:false,
        changes:[{cond:'1Q決算 2026/8/7 になったら', freq:'毎日', times:'08:30,12:30,18:00'}],
        prompt:'フジクラ(5803)について、光ファイバ需給/AI・DC関連ニュース/信用残・出来高/同業(古河電工・住友電工)動向を重要度順に3〜6点で要約し、最後に注目度(高/中/低)を付けてください。',
-       src:'GPT', srcDate:'2026/7/13', log:[{d:'2026/7/11',type:'変化なし'}], nextFire:null}
+       src:'GPT', srcDate:'2026/7/13', log:[{d:'2026/7/11',type:'変化なし'}], nextFire:null, hypoIds:[]}
     ]
   };
 }
@@ -246,6 +246,10 @@ function migrate(db){
     if(r.endDate===undefined) r.endDate=null;
     if('count' in r) delete r.count;
     (r.changes||[]).forEach(c=>{ if('count' in c) delete c.count; });
+    // 紐付けを単一hypoIdから配列hypoIdsへ。
+    // 同じイベント日(同じ決算など)の注目ポイントを1つのリマインダーでまとめて見るため
+    if(!Array.isArray(r.hypoIds)) r.hypoIds = r.hypoId ? [r.hypoId] : [];
+    if('hypoId' in r) delete r.hypoId;
   });
   if(!db.metricsMaster) db.metricsMaster=s0.metricsMaster;
   if(!db.metricsMaster.hiddenSnap) db.metricsMaster.hiddenSnap=[];
@@ -1002,9 +1006,9 @@ function remCard(r){
 function openReminder(id){
   const r=DB.reminders.find(x=>x.id===id);
   let h=`<h3>${esc(r.title)}</h3>`;
-  const linkedHy=r.hypoId?DB.hypotheses.find(x=>x.id===r.hypoId):null;
+  const linkedHys=(r.hypoIds||[]).map(id=>DB.hypotheses.find(x=>x.id===id)).filter(Boolean);
   h+=`<div class="card"><div class="pill-row"><span class="chip navy">${esc(r.cat)}</span><span class="chip gray">${esc(stock(r.stockId)?.name||'')}</span></div>
-    ${linkedHy?`<div class="mine" style="margin-top:7px"><div class="ts">このリマインダーの対象</div><div class="row2">${esc(linkedHy.text)}</div></div>`:''}
+    ${linkedHys.length?`<div class="mine" style="margin-top:7px"><div class="ts">このリマインダーの対象${linkedHys.length>1?` (${linkedHys.length}件)`:''}</div>${linkedHys.map(x=>`<div class="row2" style="margin-top:2px">・${esc(x.text)}</div>`).join('')}</div>`:''}
     <div class="muted" style="margin-top:6px">${esc(r.freq)} ${esc((r.times||[]).join(', '))}</div>
     ${r.endDate?`<div class="muted" style="margin-top:3px">終了日: ${esc(r.endDate)}${parseD(r.endDate)<new Date()?' <span class="chip gray" style="font-size:9px">終了済</span>':''}</div>`:''}
     ${r.startDate?`<div class="muted" style="margin-top:3px">開始日: ${esc(r.startDate)}${parseD(r.startDate)>new Date()?' <span class="chip gray" style="font-size:9px">開始待ち</span>':''}</div>`:''}
@@ -1181,7 +1185,7 @@ function fmtToday(){ const d=today(); return `2026/${d.getMonth()+1}/${d.getDate
 //////////////////// HYPO ////////////////////
 function hypoMiniCard(hh){
   const isMemo=hh.kind==='memo';
-  const rmCnt=(DB.reminders||[]).filter(r=>r.hypoId===hh.id).length;
+  const rmCnt=(DB.reminders||[]).filter(r=>(r.hypoIds||[]).includes(hh.id)).length;
   let h=`<div class="card" style="padding:11px 12px">
     <div class="row"><span class="chip ${isMemo?'gray':'amber'}" style="font-size:9px">${isMemo?'メモ':'注目'}</span></div>
     <div class="clip3" style="margin-top:6px;font-size:13px;white-space:pre-wrap;cursor:pointer" onclick="this.classList.toggle('open')">${esc(hh.text)}</div>`;
@@ -1195,23 +1199,30 @@ function hypoMiniCard(hh){
   </div>`;
   return h;
 }
-function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE._triageItems=null; STATE.remHypoId=hid; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, hid); }
+function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE._triageItems=null; STATE.remHypoIds=[hid]; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, [hid]); }
 // 取り込み直後に「イベント日つき注目ポイント」をまとめて確認する一覧シート。
-// 1件ずつ「リマインダーを追加」→登録完了(またはキャンセル)で、この一覧に戻ってこられる。
+// 同じイベント日(同じ決算など)のものは1グループにまとめ、1つのリマインダーで確認できるようにする。
 function sheetReminderTriage(items, sid){
   STATE._triageItems=items; STATE._triageSid=sid;
   // 全件さばき終えた(またはすべて×で消した)らシートを閉じる。
   // 閉じずにreturnすると、消したはずの項目が残って見える
   if(!items || !items.length){ STATE._triageItems=null; closeSheet(); return; }
+  const groups={};
+  items.forEach(it=>{ (groups[it.eventDate]=groups[it.eventDate]||[]).push(it); });
+  const days=Object.keys(groups).sort((a,b)=>(parseD(a)||0)-(parseD(b)||0));
   let h=`<h3>注目ポイントを確認</h3>
-    <div class="muted" style="margin-bottom:10px">イベント日つきで取り込まれました。リマインダーが必要なものだけ設定してください。</div>`;
-  items.forEach(it=>{
-    h+=`<div class="card" style="padding:9px 11px;margin-bottom:8px">
-      <div class="row" style="align-items:flex-start;gap:8px">
-        <div style="flex:1;font-size:13px">${esc(it.text.slice(0,80))}${it.text.length>80?'…':''}<div class="muted" style="margin-top:3px;font-size:11px">イベント日: ${esc(it.eventDate)}</div></div>
+    <div class="muted" style="margin-bottom:10px">イベント日つきで取り込まれました。同じ日のものは1つのリマインダーでまとめて確認できます。</div>`;
+  days.forEach(d=>{
+    const g=groups[d];
+    h+=`<div class="card" style="padding:10px 12px;margin-bottom:9px">
+      <div class="row"><span class="chip navy">${esc(d)}</span><span class="muted" style="font-size:11px">${g.length}件</span></div>`;
+    g.forEach(it=>{
+      h+=`<div class="row" style="align-items:flex-start;gap:8px;margin-top:7px">
+        <div class="clip3" style="flex:1;font-size:12.5px">${esc(it.text)}</div>
         <span class="del" onclick="triageRemove('${it.id}')">×</span>
-      </div>
-      <button class="btn sm" style="margin-top:8px;width:auto" onclick="triageAddReminder('${it.id}')">リマインダーを追加</button>
+      </div>`;
+    });
+    h+=`<button class="btn sm" style="margin-top:9px;width:auto" onclick="triageAddReminder('${escArg(d)}')">${g.length>1?`この日の${g.length}件をまとめてリマインダーに`:'リマインダーを追加'}</button>
     </div>`;
   });
   h+=`<button class="btn ghost" style="margin-top:4px" onclick="STATE._triageItems=null;closeSheet();">閉じる</button>`;
@@ -1221,10 +1232,13 @@ function triageRemove(id){
   STATE._triageItems=(STATE._triageItems||[]).filter(x=>x.id!==id);
   sheetReminderTriage(STATE._triageItems, STATE._triageSid);
 }
-function triageAddReminder(id){
-  const hh=DB.hypotheses.find(x=>x.id===id); if(!hh) return;
-  STATE.remHypoId=id; STATE.remStockId=hh.stockId; STATE._remFromStock=true;
-  closeSheet(); sheetAddReminder(hh.stockId, id);
+// 同じイベント日の注目ポイントをまとめて1つのリマインダーに紐づける
+function triageAddReminder(day){
+  const g=(STATE._triageItems||[]).filter(x=>x.eventDate===day);
+  if(!g.length) return;
+  const ids=g.map(x=>x.id);
+  STATE.remHypoIds=ids; STATE.remStockId=STATE._triageSid; STATE._remFromStock=true;
+  closeSheet(); sheetAddReminder(STATE._triageSid, ids);
 }
 function sheetEditHypo(hid, sid, forceKind){
   const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
@@ -1487,13 +1501,13 @@ function sheetSectionMaster(sid){
   openSheet(h);
 }
 function copyOrder(p){ copy(p,'質問文をコピーしました。AIに貼り付けて、回答をSTEP2へ'); STATE._pickSession=null; DB.askPrefs.picks={}; save(); closeSheet(); if(STATE.tab!=='import') go('import'); else render(); }
-function sheetAddReminder(presetId, hypoId){
+function sheetAddReminder(presetId, hypoIds){
   const sel=presetId||STATE.remStockId||'';
-  const hid=hypoId||STATE.remHypoId||''; STATE.remHypoId=null;
-  const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
+  const ids=((hypoIds&&hypoIds.length?hypoIds:STATE.remHypoIds)||[]).filter(Boolean); STATE.remHypoIds=null;
+  const hs=ids.map(id=>DB.hypotheses.find(x=>x.id===id)).filter(Boolean);
   openSheet(`<h3>リマインダー登録</h3>
     <div class="muted" style="margin-bottom:10px">外部AIに設計させる場合は登録用プロンプトをコピーし、回答を貼り付けます。</div>
-    ${hh?`<div class="card" style="border-left:3px solid var(--navy);padding:9px 11px;margin-bottom:10px"><div class="muted" style="font-size:10px">リマインダーの対象</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${esc(hh.text)}</div></div><input type="hidden" id="rm_hypo" value="${hid}">`:''}
+    ${hs.length?`<div class="card" style="border-left:3px solid var(--navy);padding:9px 11px;margin-bottom:10px"><div class="muted" style="font-size:10px">リマインダーの対象${hs.length>1?` (${hs.length}件をまとめて確認)`:''}</div>${hs.map(x=>`<div class="clip3" style="font-size:12.5px;font-weight:600;margin-top:3px">${hs.length>1?'・':''}${esc(x.text)}</div>`).join('')}</div><input type="hidden" id="rm_hypo" value="${esc(ids.join(','))}">`:''}
     <label class="fld"><span class="t">対象銘柄</span><select id="rm_stock">${DB.stocks.map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>
     <label class="fld"><span class="t">補足メモ(任意)</span><textarea id="rm_memo" placeholder="監視の狙い・保有状況・警戒条件など"></textarea></label>
     <button class="btn" onclick="copyRegPrompt()">登録用プロンプトをコピー</button>
@@ -1503,12 +1517,15 @@ function sheetAddReminder(presetId, hypoId){
 }
 function copyRegPrompt(){
   const sid=$('#rm_stock').value; const s=stock(sid); const memo=$('#rm_memo').value.trim();
-  const hidEl=$('#rm_hypo'); const linkedHy=hidEl?DB.hypotheses.find(x=>x.id===hidEl.value):null;
+  const hidEl=$('#rm_hypo');
+  const ids=(hidEl&&hidEl.value)?hidEl.value.split(',').filter(Boolean):[];
+  const linked=ids.map(id=>DB.hypotheses.find(x=>x.id===id)).filter(Boolean);
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[sid]||'';
-  const hy=linkedHy?[linkedHy]:hyposOf(sid).filter(h=>h.kind==='watch');
+  const hy=linked.length?linked:hyposOf(sid).filter(h=>h.kind==='watch');
   let ctx='';
   if(theme) ctx+=`注目テーマ: ${theme}\n`;
   if(hy.length){ ctx+=`注目ポイント:\n`+hy.map(h=>`  - ${h.text}（イベント: ${h.eventDate||h.eventNote||'未定'}）`).join('\n')+'\n'; }
+  if(linked.length>1) ctx+=`※上記${linked.length}件は同じイベント日のため、1つのリマインダーでまとめて確認したいです。\n`;
   const p=`あなたは投資監視の設計を手伝うアシスタントです。
 以下の銘柄について、私と対話しながら「監視リマインダー」を一緒に設計してください。
 
@@ -1578,7 +1595,7 @@ function parseReminder(){
   const md=$('#rm_md').value; const sid=$('#rm_stock').value;
   const hidEl=$('#rm_hypo');
   if(!md.trim()){toast('mdを貼り付けてください');return;}
-  const lines=md.split(/\r?\n/); let block=null; const r={id:'r'+Date.now(),stockId:sid,hypoId:hidEl?hidEl.value:null,times:[],changes:[],log:[],paused:false,src:'外部AI',srcDate:fmtToday()}; let cur=null; let promptLines=[]; let inPrompt=false; let promptTarget=0; const chPrompts={};
+  const lines=md.split(/\r?\n/); let block=null; const r={id:'r'+Date.now(),stockId:sid,hypoIds:(hidEl&&hidEl.value?hidEl.value.split(',').filter(Boolean):[]),times:[],changes:[],log:[],paused:false,src:'外部AI',srcDate:fmtToday()}; let cur=null; let promptLines=[]; let inPrompt=false; let promptTarget=0; const chPrompts={};
   for(let raw of lines){ let line=raw.replace(/\*\*/g,'').trim(); if(!line)continue;
     let m;
     if(m=line.match(/^##\s*(.+)$/)){
@@ -1614,8 +1631,9 @@ function parseReminder(){
   DB.reminders.push(r); save();
   toast(bad?'登録しました(日付なし頻度変更は要確認)':'登録しました');
   if(STATE._triageItems){
-    const doneId=hidEl?hidEl.value:null;
-    STATE._triageItems=STATE._triageItems.filter(x=>x.id!==doneId);
+    // まとめて登録した場合は、その日の全件を一覧から取り除く
+    const done=r.hypoIds||[];
+    STATE._triageItems=STATE._triageItems.filter(x=>!done.includes(x.id));
     sheetReminderTriage(STATE._triageItems, STATE._triageSid);
   } else {
     closeSheet(); go('reminder');
