@@ -361,7 +361,7 @@ function staleCount(s){
   return n;
 }
 function allSubs(){ const a=[]; DB.sectionMaster.forEach(c=>{ if(c.on) c.subs.forEach(su=>a.push({cat:c.cat,sub:su})); }); return a; }
-function filledCatCount(s,cat){ const c=DB.sectionMaster.find(x=>x.cat===cat); if(!c)return 0; return c.subs.filter(su=>s.sections[su]).length; }
+function filledCatCount(s,cat,master){ const c=(master||DB.sectionMaster).find(x=>x.cat===cat); if(!c)return 0; return c.subs.filter(su=>s.sections[su]).length; }
 
 //////////////////// router ////////////////////
 let STATE={tab:'home', stockId:null};
@@ -400,7 +400,16 @@ function renderHome(v){
   // timeline
   const items=[];
   DB.reminders.filter(r=>!r.paused).forEach(r=>{const d=calcNextFire(r); if(d)items.push({d,label:r.title,type:'リマインダー',id:r.stockId});});
-  DB.hypotheses.forEach(hh=>{ if(hh.kind==='watch'&&hh.eventType==='date'&&hh.eventDate){const d=parseD(hh.eventDate); if(d)items.push({d,label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'注目イベント'),type:'注目イベント',id:hh.stockId});} });
+  {
+    const evs={};
+    DB.hypotheses.forEach(hh=>{ if(hh.kind!=='watch'||hh.eventType!=='date'||!hh.eventDate) return;
+      const d=parseD(hh.eventDate); if(!d) return;
+      const key=hh.stockId+'|'+hh.eventDate+'|'+(hh.eventNote||'');
+      if(evs[key]) { evs[key].n++; return; }
+      evs[key]={d, label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'注目イベント'), id:hh.stockId, n:1};
+    });
+    Object.values(evs).forEach(e=>items.push({d:e.d, label:e.label+(e.n>1?` (注目${e.n}件)`:''), type:'注目イベント', id:e.id}));
+  }
   items.sort((a,b)=>a.d-b.d);
   h+='<div class="lbl">今週の予定</div>';
   if(!items.length) h+='<div class="muted">予定はありません</div>';
@@ -485,7 +494,7 @@ function renderStockDetail(v){
   // sections(カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く)
   h+='<div class="lbl">分析</div>';
   masterFor(s).filter(c=>c.on).forEach((c,ci)=>{
-    const filled=filledCatCount(s,c.cat);
+    const filled=filledCatCount(s,c.cat,masterFor(s));
     h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:9px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:0">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
