@@ -614,6 +614,8 @@ function briefingText(){
   値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
   よく使う指標名: ${snap}
   これ以外の指標名も自由に使えます(取り込み時に自動で追加されます)。
+  現在株価や当日の値動きは不要です(リアルタイム性が要るものは証券アプリで見ます)。
+  ここで扱いたいのは、決算や指標の更新に合わせて数か月単位で見直す数字です。
 
 ■ 業績推移
 ## 業績推移
@@ -865,11 +867,12 @@ function commitImport(){
     }
     if(/指標/.test(r.block||'')){
       s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'};
-      // マスターに無い指標名は保存しても画面に出ないため、取り込み時に自動登録する
-      if(!DB.metricsMaster.snap.includes(r.key)) DB.metricsMaster.snap.push(r.key);
+      // マスターに無い指標名は保存しても画面に出ないため、取り込み時に自動登録する。
+      // ただしユーザーが自分で非表示にした指標は、取り込みのたびに復活させない
+      if(!DB.metricsMaster.snap.includes(r.key) && !(DB.metricsMaster.hiddenSnap||[]).includes(r.key)) DB.metricsMaster.snap.push(r.key);
     }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
-      if(!DB.metricsMaster.trend.some(t=>t.name===r.key)){
+      if(!DB.metricsMaster.trend.some(t=>t.name===r.key) && !(DB.metricsMaster.hiddenTrend||[]).some(t=>t.name===r.key)){
         // グラフは最大4件までの運用のため、超える分は表(グラフなし)で追加
         DB.metricsMaster.trend.push({name:r.key, graph:DB.metricsMaster.trend.filter(t=>t.graph).length<4});
       }
