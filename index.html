@@ -368,14 +368,6 @@ function isMkt(s){return s&&s.kind==='市場';}
 function masterFor(s){return isMkt(s)?DB.marketSectionMaster:DB.sectionMaster;}
 function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
 function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
-// 「要更新」= 取得済みだが古いもの。未取得は数えない(どの指標を重視するかは人によるため)
-function staleCount(s){
-  let n=0;
-  // 指標は数えない: 四半期開示のBS項目などは決算直後を除き常に30日超になり、
-  // 構造的に永久に「要更新」になってしまうため。指標は基準日をそのまま見せる方針。
-  Object.values(s.sections).forEach(v=>{ if(v && daysSince(v.d)>90) n++; });
-  return n;
-}
 function allSubs(){ const a=[]; DB.sectionMaster.forEach(c=>{ if(c.on) c.subs.forEach(su=>a.push({cat:c.cat,sub:su})); }); return a; }
 function filledCatCount(s,cat,master){ const c=(master||DB.sectionMaster).find(x=>x.cat===cat); if(!c)return 0; return c.subs.filter(su=>s.sections[su]).length; }
 
@@ -407,7 +399,6 @@ function renderHome(v){
   $('#topTitle').textContent='ホーム';
   const act=$('#topAct'); act.style.display='block'; act.textContent='⚙ バックアップ'; act.onclick=sheetBackup;
   const todayRem=DB.reminders.filter(r=>!r.paused);
-  const stale=DB.stocks.filter(s=>staleCount(s)>0);
   const pend=pendingHints();
   let h='';
   h+='<div class="lbl">対応が必要</div>';
@@ -415,8 +406,7 @@ function renderHome(v){
   // 取り込みで日付が入ったのにリマインダー未登録の注目ポイント。
   // 日付はリマインダーでしか管理しないので、ここで登録を促さないと予定として現れない
   if(pend.length) h+=`<div class="card tap" onclick="openStock('${pend[0].stockId}')"><div class="row"><span class="chip amber">リマインド未登録 ${pend.length}件</span></div><div class="muted" style="margin-top:4px">日付つきの注目ポイントがあります: ${pend.slice(0,3).map(p=>esc((stock(p.stockId)?.name||'')+' '+p.remindHint.date)).join('、')}</div></div>`;
-  if(stale.length) h+=`<div class="card tap" onclick="go('analysis')"><div class="row"><span class="chip gray">鮮度切れ ${stale.length}銘柄</span></div><div class="muted" style="margin-top:4px">そろそろ更新: ${stale.map(s=>esc(s.name)).join('、')}</div></div>`;
-  if(!todayRem.length&&!stale.length&&!pend.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
+  if(!todayRem.length&&!pend.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
   // 予定はリマインダーだけを載せる。
   // 以前は「注目イベント」も並べていたが、リマインダーの日付が「次に通知する日」なのに対し
   // 注目イベントの日付は「その日に事が起きる」で意味が違い、同じ見た目で並ぶと混乱するため廃止した
@@ -435,19 +425,19 @@ let anaSort='保有優先';
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
   const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
-  const sorts=['保有優先','鮮度が古い順','名前順'];
+  const sorts=['保有優先','名前順'];
   let h=`<div class="seg">${sorts.map(k=>`<button class="${anaSort===k?'on':''}" onclick="anaSort='${k}';render()">${k}</button>`).join('')}</div>`;
 
   if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
-  const card=(s)=>{ const sc=staleCount(s); const hy=hyposOf(s.id).length;
+  const card=(s)=>{ const hy=hyposOf(s.id).length;
     return `<div class="card tap" onclick="openStock('${s.id}')">
-      <div class="row"><h2 class="blk">${esc(s.name)}</h2>${sc?`<span class="chip amber">要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}</div>
-      <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span>${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}</div>
+      <div class="row"><h2 class="blk">${esc(s.name)}</h2>${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}</div>
+      <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span></div>
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
-  const mcard=(s)=>{ const sc=staleCount(s); const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+  const mcard=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
     return `<div class="card tap" onclick="openStock('${s.id}')">
-      <div class="row"><h2 class="blk">◆ ${esc(s.name)}</h2>${sc?`<span class="chip amber">要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}</div>
+      <h2 class="blk">◆ ${esc(s.name)}</h2>
       ${th?`<div class="muted" style="margin-top:3px">注目: ${esc(th)}</div>`:''}
     </div>`; };
   if(mkts.length){
@@ -463,8 +453,7 @@ function renderAnalysis(v){
     });
   } else {
     let list=DB.stocks.filter(s=>!isMkt(s));
-    if(anaSort==='鮮度が古い順') list.sort((a,b)=>staleCount(b)-staleCount(a));
-    else list.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    list.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
     h+=`<div class="lbl">銘柄 (${list.length})</div>`;
     list.forEach(s=>h+=card(s));
   }
@@ -478,10 +467,10 @@ function renderStockDetail(v){
   $('#topSub').textContent=isMkt(s)?'市場・テーマ':(s.code+' · '+s.kind);
   const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=()=>{STATE.stockId=null;render();};
   const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
-  const sc=staleCount(s); const hy=hyposOf(s.id);
+  const hy=hyposOf(s.id);
   let h='';
   const wCnt=hy.filter(x=>x.kind==='watch').length, mCnt=hy.length-wCnt;
-  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">分析の要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
+  if(wCnt||mCnt) h+=`<div class="pill-row" style="margin-bottom:11px">${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
   h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
