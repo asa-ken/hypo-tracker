@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { kindLabel, kindChipColor, showsEvent } from '../lib/hypoKind.js';
+import { kindLabel, kindChipColor, canRemind } from '../lib/hypoKind.js';
 
 describe('hypoKind', () => {
   test('kindLabel', () => {
@@ -12,8 +12,8 @@ describe('hypoKind', () => {
     expect(kindChipColor('watch')).toBe('amber');
   });
 
-  test('showsEvent', () => {
-    expect(showsEvent('memo')).toBe(false);
-    expect(showsEvent('watch')).toBe(true);
+  test('canRemind: リマインダーを紐づけられるのは注目ポイントだけ', () => {
+    expect(canRemind('memo')).toBe(false);
+    expect(canRemind('watch')).toBe(true);
   });
 });
