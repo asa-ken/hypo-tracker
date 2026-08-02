@@ -351,7 +351,8 @@ function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
 // 「要更新」= 取得済みだが古いもの。未取得は数えない(どの指標を重視するかは人によるため)
 function staleCount(s){
   let n=0;
-  DB.metricsMaster.snap.forEach(k=>{ const m=s.metrics[k]; if(m && daysSince(m.d)>30) n++; });
+  // 指標は数えない: 四半期開示のBS項目などは決算直後を除き常に30日超になり、
+  // 構造的に永久に「要更新」になってしまうため。指標は基準日をそのまま見せる方針。
   Object.values(s.sections).forEach(v=>{ if(v && daysSince(v.d)>90) n++; });
   return n;
 }
@@ -455,7 +456,7 @@ function renderStockDetail(v){
   const sc=staleCount(s); const hy=hyposOf(s.id);
   let h='';
   const wCnt=hy.filter(x=>x.kind==='watch').length, mCnt=hy.length-wCnt;
-  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">鮮度: 要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
+  h+=`<div class="pill-row" style="margin-bottom:11px">${sc?`<span class="chip amber">分析の要更新 ${sc}</span>`:'<span class="chip green">最新</span>'}${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
   h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
@@ -505,8 +506,10 @@ function renderStockDetail(v){
   pagerInit('metrics'); pagerInit('trendchart');
 }
 function metricCellHtml(s,k){
-  const m=s.metrics[k]; const stale=m&&daysSince(m.d)>30; const miss=!m;
-  return `<div class="m ${stale?'stale':''}"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.slice(5))+(stale?' 要更新':'')}</div></div>`;
+  const m=s.metrics[k]; const miss=!m;
+  // 「要更新」の判定はせず、いつ時点の数字かを事実として見せる。
+  // 何年のものか分かるよう年(下2桁)まで出す(四半期開示は数か月前の日付が正常なため)
+  return `<div class="m"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:9px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.replace(/^\d{2}/,''))}</div></div>`;
 }
 function sheetStockMenu(sid){
   const s=stock(sid); if(!s) return;
