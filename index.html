@@ -49,7 +49,9 @@
   .btn.sm{padding:7px 11px; font-size:12px; width:auto;}
   .btn.ghost{border-color:transparent; color:var(--ink3);}
   .btn.danger{color:var(--red-tx); border-color:var(--red-bg);}
-  input,textarea,select{width:100%; border:1px solid var(--line2); border-radius:9px; padding:10px 12px; font-size:14px; font-family:inherit; color:var(--ink); background:var(--card); margin-top:4px;}
+  input,textarea,select{width:100%; max-width:100%; min-width:0; box-sizing:border-box; border:1px solid var(--line2); border-radius:9px; padding:10px 12px; font-size:14px; font-family:inherit; color:var(--ink); background:var(--card); margin-top:4px;}
+  /* 日付・時刻の入力(特にtime)はブラウザ標準UIの内部幅が広く、通常のpaddingだと外枠をはみ出すことがあるため詰める */
+  input[type="date"],input[type="time"]{padding:10px 6px;}
   textarea{resize:vertical; min-height:60px;}
   textarea.mono{font-family:var(--mono); font-size:12px; line-height:1.6;}
   label.fld{display:block; margin-bottom:11px;}
