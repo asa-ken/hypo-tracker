@@ -98,9 +98,11 @@ describe('migrate', () => {
     const h = out.hypotheses.find(x => x.id === 'h1');
     expect(h.kind).toBe('watch');
     expect(h.text).toBe('データセンター向け光ケーブル需要で高値更新が続く');
-    expect(h.eventDate).toBe('2026/8/7');
-    expect(h.eventNote).toBe('1Q決算');
-    expect(h.eventType).toBe('date');
+    // イベント日はカード自身の属性ではなく、リマインダー登録の候補日になる
+    expect(h.remindHint).toEqual({ date: '2026/8/7', note: '1Q決算' });
+    expect('eventDate' in h).toBe(false);
+    expect('eventNote' in h).toBe(false);
+    expect('eventType' in h).toBe(false);
     expect('points' in h).toBe(false);
     expect('judgeLog' in h).toBe(false);
     expect('ver' in h).toBe(false);
@@ -117,22 +119,57 @@ describe('migrate', () => {
     const out = migrate(db);
     const h = out.hypotheses.find(x => x.id === 'h2');
     expect(h.kind).toBe('watch');
-    expect(h.eventDate).toBeNull();
-    expect(h.eventType).toBe('none');
+    expect(h.remindHint).toBeUndefined();
   });
 
-  test("既存の memo・watch はそのまま維持する", () => {
+  // 「注目イベント」を廃止し、日付の管理をリマインダーに一本化したことの回帰テスト
+  test('日付つきの注目ポイントは remindHint(リマインダー候補)に移す', () => {
     const db = {
       stocks: [],
       hypotheses: [
-        { id: 'h3', stockId: '5803', kind: 'memo', text: '既存メモ', eventDate: null, eventNote: null, eventType: 'none' },
+        { id: 'h3', stockId: '5803', kind: 'memo', text: '既存メモ' },
         { id: 'h4', stockId: '5803', kind: 'watch', text: '既存の注目ポイント', eventDate: '2026/9/1', eventNote: '決算', eventType: 'date' },
       ],
       reminders: [],
     };
     const out = migrate(db);
-    expect(out.hypotheses.find(h => h.id === 'h3')).toEqual(db.hypotheses[0]);
-    expect(out.hypotheses.find(h => h.id === 'h4')).toEqual(db.hypotheses[1]);
+    expect(out.hypotheses.find(h => h.id === 'h3')).toEqual({ id: 'h3', stockId: '5803', kind: 'memo', text: '既存メモ' });
+    const h4 = out.hypotheses.find(h => h.id === 'h4');
+    expect(h4.remindHint).toEqual({ date: '2026/9/1', note: '決算' });
+    expect('eventDate' in h4).toBe(false);
+  });
+
+  // 既にリマインダーがあるものは登録済みなので、重ねて登録を促さない
+  test('リマインダーが紐づいている注目ポイントには候補日を作らない', () => {
+    const db = {
+      stocks: [],
+      hypotheses: [{ id: 'h5', stockId: '5803', kind: 'watch', text: 'x', eventDate: '2026/9/1', eventNote: '決算' }],
+      reminders: [{ id: 'r1', stockId: '5803', title: 't', freq: '毎日', times: [], changes: [], hypoIds: ['h5'] }],
+    };
+    const out = migrate(db);
+    const h5 = out.hypotheses.find(h => h.id === 'h5');
+    expect(h5.remindHint).toBeUndefined();
+    expect('eventDate' in h5).toBe(false);
+  });
+
+  test('日付を持たない注目ポイントには候補日を作らない', () => {
+    const db = {
+      stocks: [],
+      hypotheses: [{ id: 'h6', stockId: '5803', kind: 'watch', text: 'x', eventDate: null }],
+      reminders: [],
+    };
+    const out = migrate(db);
+    expect(out.hypotheses.find(h => h.id === 'h6').remindHint).toBeUndefined();
+  });
+
+  test('すでに remindHint を持つデータは上書きしない(再実行しても壊れない)', () => {
+    const db = {
+      stocks: [],
+      hypotheses: [{ id: 'h7', stockId: '5803', kind: 'watch', text: 'x', remindHint: { date: '2026/10/1', note: null } }],
+      reminders: [],
+    };
+    const out = migrate(db);
+    expect(out.hypotheses.find(h => h.id === 'h7').remindHint).toEqual({ date: '2026/10/1', note: null });
   });
 
   // 回帰テスト10c: 旧セクション名 → 新体系サブ項目名への読み替え
