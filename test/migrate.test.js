@@ -18,6 +18,35 @@ describe('migrate', () => {
     expect('count' in r.changes[0]).toBe(false);
   });
 
+  // リマインダーの紐付けを単一hypoIdから配列hypoIdsへ移行
+  test('リマインダーの hypoId を hypoIds 配列へ移行する', () => {
+    const db = {
+      stocks: [], hypotheses: [],
+      reminders: [{ id: 'r1', stockId: '5803', title: 't', freq: '毎日', times: [], changes: [], hypoId: 'h9' }],
+    };
+    const out = migrate(db);
+    expect(out.reminders[0].hypoIds).toEqual(['h9']);
+    expect('hypoId' in out.reminders[0]).toBe(false);
+  });
+
+  test('hypoId が無い(未紐付けの)リマインダーは空配列にする', () => {
+    const db = {
+      stocks: [], hypotheses: [],
+      reminders: [{ id: 'r1', stockId: '5803', title: 't', freq: '毎日', times: [], changes: [] }],
+    };
+    const out = migrate(db);
+    expect(out.reminders[0].hypoIds).toEqual([]);
+  });
+
+  test('すでに hypoIds を持つリマインダーは維持する(複数紐付けを壊さない)', () => {
+    const db = {
+      stocks: [], hypotheses: [],
+      reminders: [{ id: 'r1', stockId: '5803', title: 't', freq: '毎日', times: [], changes: [], hypoIds: ['h1', 'h2', 'h3'] }],
+    };
+    const out = migrate(db);
+    expect(out.reminders[0].hypoIds).toEqual(['h1', 'h2', 'h3']);
+  });
+
   test('すでに endDate を持つリマインダーはそのまま維持する', () => {
     const db = {
       stocks: [],
