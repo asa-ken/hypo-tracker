@@ -81,8 +81,8 @@
   .empty{text-align:center; padding:40px 20px; color:var(--ink3);}
   .empty .big{font-size:15px; font-weight:600; color:var(--ink2); margin-bottom:6px;}
   /* 分析項目の行(タップで概要/詳細スワイプシートを開く) */
-  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; font-size:12.5px; border-top:1px solid var(--line); cursor:pointer;}
-  .sub-row:active{background:var(--bg);}
+  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; font-size:12.5px; border-top:1px solid var(--line); cursor:pointer; background:var(--card);}
+  .sub-row:active{background:var(--navy-bg);}
   .sub-row .row-right{display:flex; align-items:center; gap:6px;}
   .sub-row .arrow{color:var(--ink3); font-size:14px;}
   /* 概要/詳細の横スワイプページャー */
@@ -399,7 +399,7 @@ function renderHome(v){
   if(!todayRem.length&&!stale.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
   // timeline
   const items=[];
-  DB.reminders.filter(r=>!r.paused).forEach(r=>{const d=calcNextFire(r); if(d)items.push({d,label:r.title,type:'リマインダー',id:r.stockId});});
+  DB.reminders.filter(r=>!r.paused).forEach(r=>{const d=calcNextFire(r); if(d)items.push({d,label:r.title,type:'リマインダー',act:`openReminder('${r.id}')`});});
   {
     const evs={};
     DB.hypotheses.forEach(hh=>{ if(hh.kind!=='watch'||hh.eventType!=='date'||!hh.eventDate) return;
@@ -408,13 +408,13 @@ function renderHome(v){
       if(evs[key]) { evs[key].n++; return; }
       evs[key]={d, label:(stock(hh.stockId)?.name||'')+' '+(hh.eventNote||'注目イベント'), id:hh.stockId, n:1};
     });
-    Object.values(evs).forEach(e=>items.push({d:e.d, label:e.label+(e.n>1?` (注目${e.n}件)`:''), type:'注目イベント', id:e.id}));
+    Object.values(evs).forEach(e=>items.push({d:e.d, label:e.label+(e.n>1?` (注目${e.n}件)`:''), type:'注目イベント', act:`openStock('${e.id}')`}));
   }
   items.sort((a,b)=>a.d-b.d);
   h+='<div class="lbl">今週の予定</div>';
   if(!items.length) h+='<div class="muted">予定はありません</div>';
   items.slice(0,6).forEach(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
-    h+=`<div class="card tap" onclick="openStock('${it.id}')"><div class="row"><span style="font-size:13px;font-weight:600">${esc(it.label)}</span><span class="muted">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div><div class="muted" style="margin-top:2px">${it.type}</div></div>`; });
+    h+=`<div class="card tap" onclick="${it.act}"><div class="row"><span style="font-size:13px;font-weight:600">${esc(it.label)}</span><span class="muted">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div><div class="muted" style="margin-top:2px">${it.type}</div></div>`; });
   v.innerHTML=h;
 }
 
@@ -475,7 +475,7 @@ function renderStockDetail(v){
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
     <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(会話の切り口を決められます)'}</div></div>`;
   if(!isMkt(s)){
-  h+='<div class="lbl" style="margin-top:2px">主要指標</div>';
+  h+=lblWithEdit('主要指標','sheetMetricsMaster()','margin-top:2px');
   // metrics(6件を超える場合は横スワイプページャーで送る)
   {
     const allKeys=DB.metricsMaster.snap;
@@ -488,7 +488,7 @@ function renderStockDetail(v){
     }
   }
   // trend
-  h+='<div class="lbl">業績推移</div>';
+  h+=lblWithEdit('業績推移','sheetMetricsMaster()');
   h+=renderTrend(s);
   } // end !isMkt
   // sections(カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く)
@@ -517,6 +517,13 @@ function renderStockDetail(v){
   h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">会話を取り込む</button>`;
   v.innerHTML=h;
   pagerInit('metrics'); pagerInit('trendchart');
+}
+// 見出しの右端に編集リンクを添える(指標の追加・削除などの設定画面への入口)
+function lblWithEdit(label, action, extraStyle){
+  return `<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;${extraStyle||''}">
+    <span>${esc(label)}</span>
+    <span style="color:var(--navy);cursor:pointer;font-weight:600" onclick="${action}">編集</span>
+  </div>`;
 }
 function metricCellHtml(s,k){
   const m=s.metrics[k]; const miss=!m;
@@ -563,7 +570,7 @@ function renderTrend(s){
   // 棒グラフ(グラフ対象指標が複数あれば横スワイプページャーで切り替え)
   if(inds.length){
     const chartHtml=(ind)=>{ const first=tr[ind.name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
-      let ch='<div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px">';
+      let ch='<div style="display:flex;align-items:flex-end;gap:6px;height:118px;margin-bottom:8px">';
       ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
         ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:8px;color:var(--ink3);text-align:center">${esc(y.replace('期','').replace(/[（(]予[）)]/,''))}</div></div>`; });
       ch+='</div>'; ch+=`<div class="muted" style="font-size:10px;margin-bottom:2px">${esc(ind.name)}(${esc(first.unit||'')}) · 点線=予想</div>`;
@@ -1262,7 +1269,7 @@ function sheetEditHypo(hid, sid, forceKind){
     <label class="fld"><span class="t">イベント名(任意)</span><input id="hy_enote" value="${esc(hh?hh.eventNote||'':'')}" placeholder="例: 1Q決算"></label>`;
   }
   h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}')">保存</button>
-    <button class="btn ghost" style="margin-top:8px" onclick="openStock('${s.id}')">キャンセル</button>`;
+    <button class="btn ghost" style="margin-top:8px" onclick="closeSheet();openStock('${s.id}')">キャンセル</button>`;
   openSheet(h);
 }
 function saveHypo(hid, sid, kind){
@@ -1278,7 +1285,9 @@ function saveHypo(hid, sid, kind){
     DB.hypotheses.push({id:'h'+Date.now(), stockId:sid, kind:kind||'memo', text, eventDate, eventNote,
       eventType:eventDate?'date':'none'});
   }
-  save(); openStock(sid); toast('保存しました');
+  // 保存したらシートを閉じる。閉じないと同じ画面のまま保存を再度押せてしまい、
+  // 新規作成の場合は同じ内容が二重に登録されてしまう
+  save(); closeSheet(); openStock(sid); toast('保存しました');
 }
 function delHypo(hid){
   const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh) return;
