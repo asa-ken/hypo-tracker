@@ -245,6 +245,44 @@ describe('migrate', () => {
     expect(out.marketMetricsMaster.snap).not.toEqual(out.metricsMaster.snap);
   });
 
+  // 市場カードは粒度(市場/業界/テーマ)ごとに語彙が違うので、マスターを分けて持つ
+  test('業界・テーマ用のマスターを補完し、それぞれ内容が異なる', () => {
+    const out = migrate({ stocks: [], hypotheses: [], reminders: [] });
+    expect(out.industryMetricsMaster.snap.length).toBeGreaterThan(0);
+    expect(Array.isArray(out.themeMetricsMaster.snap)).toBe(true);
+    expect(out.industrySectionMaster.length).toBeGreaterThan(0);
+    expect(out.themeSectionMaster.length).toBeGreaterThan(0);
+    // 市場に効く指標(騰落レシオ)は業界には無い
+    expect(out.marketMetricsMaster.snap).toContain('騰落レシオ(25日)');
+    expect(out.industryMetricsMaster.snap).not.toContain('騰落レシオ(25日)');
+    // 市場専用のカテゴリ(金融環境)は業界には無い
+    const cats = m => m.map(c => c.cat);
+    expect(cats(out.marketSectionMaster)).toContain('金融環境');
+    expect(cats(out.industrySectionMaster)).not.toContain('金融環境');
+  });
+
+  test('粒度が未設定の既存の市場カードは「市場」扱いにする', () => {
+    const db = {
+      stocks: [
+        { id: 'mkt1', name: '日本株市場', kind: '市場', metrics: {}, trend: {}, sections: {} },
+        { id: '5803', name: 'フジクラ', kind: '保有', metrics: {}, trend: {}, sections: {} },
+      ],
+      hypotheses: [], reminders: [],
+    };
+    const out = migrate(db);
+    expect(out.stocks.find(s => s.id === 'mkt1').scope).toBe('市場');
+    // 銘柄には粒度を付けない
+    expect(out.stocks.find(s => s.id === '5803').scope).toBeUndefined();
+  });
+
+  test('すでに粒度が設定されているカードは上書きしない', () => {
+    const db = {
+      stocks: [{ id: 'mkt2', name: '半導体', kind: '市場', scope: '業界', metrics: {}, trend: {}, sections: {} }],
+      hypotheses: [], reminders: [],
+    };
+    expect(migrate(db).stocks[0].scope).toBe('業界');
+  });
+
   test('すでに市場用の指標マスターがあれば上書きしない', () => {
     const db = {
       stocks: [], hypotheses: [], reminders: [],
