@@ -117,11 +117,10 @@
   .scrim{position:fixed; inset:0; background:rgba(20,30,40,.4); z-index:40; display:none; align-items:flex-end; justify-content:center;}
   .scrim.show{display:flex;}
   .sheet{position:relative; background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto;}
-  /* 画面端スワイプで閉じるための専用の細い帯。ここだけtouch-action:pan-yにして、
+  /* 画面端スワイプで閉じるための帯。ここだけtouch-action:pan-yにして、
      ブラウザ自身の「画面端スワイプで戻る」機能に横方向の操作を渡さないようにする。
-     帯をシート全体ではなくこの細い領域に限定するのは、分析項目の横スワイプページャー
-     (シート内の.pages)の水平スクロールを巻き込んで壊さないため */
-  .edge-swipe-zone{position:fixed; top:0; bottom:0; left:0; width:28px; z-index:41; touch-action:pan-y; pointer-events:none;}
+     判定が狭すぎるとの指摘を受け、左端30%まで広げている */
+  .edge-swipe-zone{position:fixed; top:0; bottom:0; left:0; width:30%; z-index:41; touch-action:pan-y; pointer-events:none;}
   .edge-swipe-zone.show{pointer-events:auto;}
   .sheet h3{font-size:15px; font-weight:700; margin:2px 0 12px; text-align:center;}
   /* 背景タップで閉じられるが、それに気づかず「戻れない」と感じる人のための明示的な閉じるボタン */
@@ -1368,30 +1367,46 @@ function requestCloseSheet(){
 function cancelCloseSheet(){ $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; }
 function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeSheet(); }
 // 右エッジからのスワイプでシートを閉じる(ブラウザの戻るジェスチャーに合わせる)。
-// 画面左端の細い専用帯(#edgeSwipeZone)だけにタッチ操作を持たせることで、
-// ①シート内の横スワイプページャー(分析項目の詳細送りなど)を巻き込まず、
-// ②ブラウザ/OS自身の「画面端スワイプで戻る」にタッチを奪われないようにしている
+// 判定域(#edgeSwipeZone、左端30%)は広めなので、単なるタップやシートの縦スクロールを
+// 巻き込まないよう、動き出しで「横方向のドラッグか」を見極めてから初めて介入する。
+// タップ/縦スクロールと判定した場合は、帯の下にある本来の要素に処理を渡す
 (function(){
-  const THRESH=70;
-  let sx=0, sy=0, dragging=false;
+  const THRESH=70, DECIDE=10;
+  let sx=0, sy=0, lastY=0, state='idle'; // idle|pending|swipe|scroll
+  let tapTarget=null;
   const zone=$('#edgeSwipeZone'), sheet=$('#sheet');
+  function underneath(x,y){
+    zone.style.pointerEvents='none';
+    const el=document.elementFromPoint(x,y);
+    zone.style.pointerEvents='';
+    return el;
+  }
   zone.addEventListener('touchstart', e=>{
     if($('#exitConfirm').classList.contains('show')) return;
     const t=e.touches[0];
-    sx=t.clientX; sy=t.clientY; dragging=true;
+    sx=t.clientX; sy=lastY=t.clientY; state='pending';
+    tapTarget=underneath(sx, sy);
   }, {passive:true});
   zone.addEventListener('touchmove', e=>{
-    if(!dragging) return;
+    if(state==='idle') return;
     const t=e.touches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
-    if(dx<=0) return;
-    if(Math.abs(dx)>Math.abs(dy)){ sheet.style.transform=`translateX(${dx}px)`; if(e.cancelable) e.preventDefault(); }
+    if(state==='pending'){
+      if(Math.abs(dx)<DECIDE && Math.abs(dy)<DECIDE) return; // タップかどうかまだ様子見
+      state=(dx>0 && Math.abs(dx)>Math.abs(dy)) ? 'swipe' : 'scroll';
+    }
+    if(state==='swipe'){ sheet.style.transform=`translateX(${dx}px)`; if(e.cancelable) e.preventDefault(); }
+    else if(state==='scroll'){ sheet.scrollTop-=(t.clientY-lastY); if(e.cancelable) e.preventDefault(); }
+    lastY=t.clientY;
   }, {passive:false});
   zone.addEventListener('touchend', ()=>{
-    if(!dragging) return; dragging=false;
-    const m=sheet.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
-    sheet.style.transition='transform .15s ease-out'; sheet.style.transform='translateX(0)';
-    setTimeout(()=>{ sheet.style.transition=''; }, 150);
-    if(dx>THRESH) requestCloseSheet();
+    if(state==='pending' && tapTarget) tapTarget.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+    if(state==='swipe'){
+      const m=sheet.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
+      sheet.style.transition='transform .15s ease-out'; sheet.style.transform='translateX(0)';
+      setTimeout(()=>{ sheet.style.transition=''; }, 150);
+      if(dx>THRESH) requestCloseSheet();
+    }
+    state='idle'; tapTarget=null;
   }, {passive:true});
 })();
 function sheetAddStock(){
