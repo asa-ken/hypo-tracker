@@ -193,10 +193,18 @@ function seed(){
       trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true}],
       hiddenSnap:[], hiddenTrend:[]
     },
-    // 市場・テーマ用の指標。個別企業の指標(PER・売上高など)とは別物なので独立して持つ。
-    // 現在値・当日の値動きではなく、数か月単位で見直す水準感・センチメントを対象にする
-    marketMetricsMaster:{
+    // 市場カードは粒度(scope)ごとに語彙が違うので、指標マスターを分けて持つ。
+    // 例: 「日本株市場」に騰落レシオは効くが「データセンター業界」には無意味
+    marketMetricsMaster:{   // scope:'市場' … 日本株市場、米国株市場など
       snap:['予想PER(市場全体)','PBR(市場全体)','配当利回り(市場全体)','騰落レシオ(25日)','信用評価損益率','長期金利(10年)'],
+      hiddenSnap:[]
+    },
+    industryMetricsMaster:{ // scope:'業界' … 半導体、データセンターなど
+      snap:['市場規模','市場成長率(YoY)','設備投資額'],
+      hiddenSnap:[]
+    },
+    themeMetricsMaster:{    // scope:'テーマ' … AI、脱炭素など。数値化しにくいので既定は置かず取り込みで育てる
+      snap:[],
       hiddenSnap:[]
     },
     sectionMaster:[
@@ -209,11 +217,31 @@ function seed(){
       {cat:'リスク要因', on:true, subs:['事業リスク','財務リスク','市場リスク','オペレーションリスク','法務リスク']},
       {cat:'株主還元', on:false, subs:['配当方針','自社株買い','総還元性向','資本政策']}
     ],
-    marketSectionMaster:[
+    marketSectionMaster:[   // scope:'市場'
       {cat:'現状認識', on:true, subs:['何が起きているか','市場コンセンサス']},
       {cat:'金融環境', on:true, subs:['金利・金融政策','流動性']},
       {cat:'需給', on:true, subs:['投資主体別動向','ポジション・センチメント']},
       {cat:'割高・割安の水準', on:true, subs:['市場全体の割高・割安','セクター別の割高・割安']},
+      {cat:'注目イベント', on:true, subs:['注目日程','想定シナリオ']},
+      {cat:'強弱シナリオ', on:true, subs:['強気シナリオ','弱気シナリオ','転換の観測ポイント']},
+      {cat:'自分の銘柄への影響', on:true, subs:['保有・ウォッチ銘柄への影響']}
+    ],
+    industrySectionMaster:[ // scope:'業界' … 市場全体の需給や金利ではなく、産業側の構造を見る
+      {cat:'現状認識', on:true, subs:['何が起きているか','業界コンセンサス']},
+      {cat:'市場規模・成長性', on:true, subs:['市場規模と内訳','成長率と driver','需要の持続性']},
+      {cat:'産業構造', on:true, subs:['バリューチェーン','収益が集まる場所','参入障壁']},
+      {cat:'競争環境', on:true, subs:['主要プレイヤーとシェア','価格動向・採算']},
+      {cat:'技術・規制', on:true, subs:['技術トレンド','規制・政策']},
+      {cat:'注目イベント', on:true, subs:['注目日程','想定シナリオ']},
+      {cat:'強弱シナリオ', on:true, subs:['強気シナリオ','弱気シナリオ','転換の観測ポイント']},
+      {cat:'自分の銘柄への影響', on:true, subs:['保有・ウォッチ銘柄への影響']}
+    ],
+    themeSectionMaster:[    // scope:'テーマ' … 業界横断の切り口。数値より「広がり」と「進み具合」を見る
+      {cat:'現状認識', on:true, subs:['何が起きているか','市場コンセンサス']},
+      {cat:'テーマの中身', on:true, subs:['何が新しいのか','広がりの範囲']},
+      {cat:'進捗と実績', on:true, subs:['実装・普及の進み具合','収益化の実例']},
+      {cat:'追い風・向かい風', on:true, subs:['政策・規制','ボトルネック']},
+      {cat:'関連する業界・銘柄', on:true, subs:['恩恵を受ける側','逆風を受ける側']},
       {cat:'注目イベント', on:true, subs:['注目日程','想定シナリオ']},
       {cat:'強弱シナリオ', on:true, subs:['強気シナリオ','弱気シナリオ','転換の観測ポイント']},
       {cat:'自分の銘柄への影響', on:true, subs:['保有・ウォッチ銘柄への影響']}
@@ -285,10 +313,16 @@ function migrate(db){
   if(!db.metricsMaster) db.metricsMaster=s0.metricsMaster;
   if(!db.metricsMaster.hiddenSnap) db.metricsMaster.hiddenSnap=[];
   if(!db.metricsMaster.hiddenTrend) db.metricsMaster.hiddenTrend=[];
-  // 市場・テーマ用の指標マスター(旧データには存在しない)
-  if(!db.marketMetricsMaster) db.marketMetricsMaster=s0.marketMetricsMaster;
-  if(!db.marketMetricsMaster.snap) db.marketMetricsMaster.snap=[];
-  if(!db.marketMetricsMaster.hiddenSnap) db.marketMetricsMaster.hiddenSnap=[];
+  // 市場カードの粒度(市場/業界/テーマ)ごとのマスター(旧データには存在しない)
+  ['marketMetricsMaster','industryMetricsMaster','themeMetricsMaster'].forEach(k=>{
+    if(!db[k]) db[k]=s0[k];
+    if(!db[k].snap) db[k].snap=[];
+    if(!db[k].hiddenSnap) db[k].hiddenSnap=[];
+  });
+  if(!db.industrySectionMaster) db.industrySectionMaster=s0.industrySectionMaster;
+  if(!db.themeSectionMaster) db.themeSectionMaster=s0.themeSectionMaster;
+  // 既存の市場カードは粒度が未設定なので「市場」扱いにする(従来の語彙がそのまま使える)
+  (db.stocks||[]).forEach(st=>{ if(st.kind==='市場' && !st.scope) st.scope='市場'; });
   // 旧セクション名 → 新体系サブ項目への読み替え
   const MAP={'事業・ビジネスモデル':'事業構造','成長ドライバー':'市場成長率','リスク要因':'事業リスク','競合ポジション':'主要競合','技術':'技術力'};
   (db.stocks||[]).forEach(st=>{
@@ -398,9 +432,17 @@ function showCell(td){ const d=td.querySelector('.clip3'); if(d) d.classList.tog
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
 function stock(id){return DB.stocks.find(s=>s.id===id);}
 function isMkt(s){return s&&s.kind==='市場';}
-function masterFor(s){return isMkt(s)?DB.marketSectionMaster:DB.sectionMaster;}
+// 市場カードの粒度。旧データや未設定は「市場」扱い
+const SCOPES=['市場','業界','テーマ'];
+function scopeOf(s){ return isMkt(s) ? (SCOPES.includes(s.scope)?s.scope:'市場') : null; }
+// 粒度ごとのマスター名。語彙が違うので分けている(市場に騰落レシオ、業界に市場規模)
+const SCOPE_KEYS={'市場':{sec:'marketSectionMaster',met:'marketMetricsMaster'},
+                  '業界':{sec:'industrySectionMaster',met:'industryMetricsMaster'},
+                  'テーマ':{sec:'themeSectionMaster',met:'themeMetricsMaster'}};
+function scopeKeys(s){ return SCOPE_KEYS[scopeOf(s)]||SCOPE_KEYS['市場']; }
+function masterFor(s){return isMkt(s)?DB[scopeKeys(s).sec]:DB.sectionMaster;}
 // 指標マスターも銘柄と市場で別物。市場は業績推移(trend)を持たない
-function metricsMasterFor(s){return isMkt(s)?DB.marketMetricsMaster:DB.metricsMaster;}
+function metricsMasterFor(s){return isMkt(s)?DB[scopeKeys(s).met]:DB.metricsMaster;}
 function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
 function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
 function allSubs(){ const a=[]; DB.sectionMaster.forEach(c=>{ if(c.on) c.subs.forEach(su=>a.push({cat:c.cat,sub:su})); }); return a; }
@@ -472,12 +514,13 @@ function renderAnalysis(v){
   const mkts=DB.stocks.filter(s=>isMkt(s));
   const mcard=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
     return `<div class="card tap" onclick="openStock('${s.id}')">
-      <h2 class="blk">◆ ${esc(s.name)}</h2>
+      <div class="row"><h2 class="blk">◆ ${esc(s.name)}</h2><span class="chip gray">${esc(scopeOf(s))}</span></div>
       ${th?`<div class="muted" style="margin-top:3px">注目: ${esc(th)}</div>`:''}
     </div>`; };
   if(mkts.length){
-    h+=`<div class="lbl">市場・テーマ (${mkts.length})</div>`;
-    mkts.forEach(s=>h+=mcard(s));
+    // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
+    h+=`<div class="lbl">市場・業界・テーマ (${mkts.length})</div>`;
+    SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>h+=mcard(s)));
   }
   if(anaSort==='保有優先'){
     [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
@@ -548,7 +591,7 @@ function blkHypos(s, hy){
   return h;
 }
 function blkLinks(s){
-  return `<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">${isMkt(s)?'この市場・テーマ':'この銘柄'}のリマインダー (${remOf(s.id).length})</button>
+  return `<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">${isMkt(s)?'この'+scopeOf(s):'この銘柄'}のリマインダー (${remOf(s.id).length})</button>
     <button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">会話を取り込む</button>`;
 }
 function detailHeader(s, sub){
@@ -573,15 +616,19 @@ function renderStockDetail(v){
 }
 
 //////////////////// MARKET DETAIL ////////////////////
-// 市場・テーマ専用。銘柄と違い業績推移は持たず、指標は市場用マスター(marketMetricsMaster)を使う。
+// 市場・業界・テーマ専用。銘柄と違い業績推移は持たず、指標は粒度ごとのマスターを使う。
 // 以前は銘柄画面を流用して指標を丸ごと隠していたため、市場の水準感を数値で残せなかった
 function renderMarketDetail(v){
   const s=stock(STATE.stockId); if(!s){go('analysis');return;}
-  detailHeader(s, '市場・テーマ');
+  const sc=scopeOf(s);
+  detailHeader(s, sc);
   const hy=hyposOf(s.id);
   let h=blkChips(hy)+blkTheme(s);
-  h+=blkMetrics(s,'市場の水準',DB.marketMetricsMaster.snap,'sheetMarketMetricsMaster()','mktmetrics');
-  h+='<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準感・センチメントを記録します。</div>';
+  const METLBL={'市場':'市場の水準','業界':'業界の規模・成長','テーマ':'テーマの指標'};
+  const keys=metricsMasterFor(s).snap;
+  if(keys.length) h+=blkMetrics(s,METLBL[sc],keys,'sheetMarketMetricsMaster()','mktmetrics');
+  else h+=lblWithEdit(METLBL[sc],'sheetMarketMetricsMaster()','margin-top:2px')+'<div class="muted" style="padding:0 2px 4px">まだありません。会話を取り込むと自動で増えます。</div>';
+  h+='<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。</div>';
   h+=blkSections(s);
   h+=blkHypos(s,hy);
   // 市場の話は最終的に「自分の銘柄がどうなるか」に着地するので、保有・ウォッチへの導線を置く
@@ -611,11 +658,19 @@ function sheetStockMenu(sid){
   const s=stock(sid); if(!s) return;
   const mkt=isMkt(s);
   openSheet(`<h3>${esc(s.name)}</h3>
-    ${mkt?`<button class="btn" onclick="closeSheet();sheetMarketMetricsMaster()">⚙ 水準指標・分析項目の設定(市場・テーマ用)</button>`
+    ${mkt?`<label class="fld"><span class="t">種別</span>
+      <div class="seg">${SCOPES.map(k=>`<button class="${k===scopeOf(s)?'on':''}" onclick="setScope('${sid}','${k}')">${k}</button>`).join('')}</div>
+      <div class="hint">${esc(SCOPE_INFO[scopeOf(s)].desc)} 切り替えると指標・分析項目の既定が変わります(入力済みの内容は残ります)。</div></label>
+      <button class="btn" onclick="closeSheet();sheetMarketMetricsMaster()">⚙ 指標・分析項目の設定(${esc(scopeOf(s))}用)</button>`
          :`<button class="btn" onclick="closeSheet();sheetMetricsMaster()">⚙ 収容指標・業績分析項目の設定</button>`}
     <button class="btn" style="margin-top:8px" onclick="closeSheet();sheetTheme('${sid}')">注目テーマを編集</button>
     <button class="btn danger" style="margin-top:16px" onclick="delStock('${sid}')">${mkt?'このカードを削除':'この銘柄を削除'}</button>
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">閉じる</button>`);
+}
+// 粒度の変更。既に入力済みのセクション・指標のデータは消さない(表示対象から外れるだけ)
+function setScope(sid, sc){
+  const s=stock(sid); if(!s||!SCOPES.includes(sc)) return;
+  s.scope=sc; save(); render(); sheetStockMenu(sid); toast(sc+'に変更しました');
 }
 function sheetTheme(sid){
   const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[sid]||'';
@@ -699,8 +754,11 @@ function briefingText(){
   const catList=(m)=>m.filter(c=>c.on).map(c=>`  【${c.cat}】 `+c.subs.join(' / ')).join('\n');
   const stockCats=catList(DB.sectionMaster);
   const mktCats=catList(DB.marketSectionMaster||[]);
+  const indCats=catList(DB.industrySectionMaster||[]);
+  const thmCats=catList(DB.themeSectionMaster||[]);
   const snap=DB.metricsMaster.snap.join(' / ');
   const mktSnap=DB.marketMetricsMaster.snap.join(' / ');
+  const indSnap=(DB.industryMetricsMaster.snap||[]).join(' / ');
   const trend=DB.metricsMaster.trend.map(t=>t.name).join(' / ');
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
@@ -719,7 +777,8 @@ function briefingText(){
 - 指標名: 値 | 単位:◯◯ | 基準日(YYYY/M/D)
   値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
   銘柄の話のときによく使う指標名: ${snap}
-  市場・テーマの話のときによく使う指標名: ${mktSnap}
+  市場全体の話のときによく使う指標名: ${mktSnap}
+  業界の話のときによく使う指標名: ${indSnap}
   これ以外の指標名も自由に使えます(取り込み時に自動で追加されます)。
   現在株価や当日の値動きは不要です(リアルタイム性が要るものは証券アプリで見ます)。
   ここで扱いたいのは、決算や指標の更新に合わせて数か月単位で見直す数字です。
@@ -737,8 +796,12 @@ function briefingText(){
 - 項目名(詳細): 深掘りした長文 | 基準日(YYYY/M/D)
   項目名は必ず下記のいずれかを使ってください(カテゴリ名【】は付けない)。ここに無い名前を使うと取り込めません。
 ${stockCats}
-  テーマ・市場の話のときは下記を使ってください:
+  市場全体(日本株市場・米国株市場など)の話のときは下記:
 ${mktCats}
+  業界(半導体・データセンターなど)の話のときは下記:
+${indCats}
+  テーマ(AI・脱炭素など、業界をまたぐ切り口)の話のときは下記:
+${thmCats}
 
 ■ 注目ポイント(検証したい・気にかけたい観点。何がどうなったら良い/悪いか)
 ## 注目ポイント
@@ -1017,7 +1080,9 @@ function commitImport(){
   openStock(s.id);
   if(newWatchWithEvent.length) sheetReminderTriage(newWatchWithEvent, s.id);
 }
-function knownSubs(){ const a=[]; DB.sectionMaster.forEach(c=>c.subs.forEach(su=>a.push(su))); (DB.marketSectionMaster||[]).forEach(c=>c.subs.forEach(su=>a.push(su))); return a; }
+// 取り込みの項目名解決は全マスター横断で行う(粒度を跨いだ貼り付けでも取りこぼさない)
+function allSectionMasters(){ return [DB.sectionMaster, DB.marketSectionMaster, DB.industrySectionMaster, DB.themeSectionMaster].filter(Boolean); }
+function knownSubs(){ const a=[]; allSectionMasters().forEach(M=>M.forEach(c=>c.subs.forEach(su=>a.push(su)))); return a; }
 // 「主要競合(サマリ)」「競争環境: 主要競合(サマリ)」「競争環境: 主要競合(詳細): 本文」いずれも解決する
 function resolveSection(rawKey, rawValue){
   let key=String(rawKey||'').trim(), value=String(rawValue||'').trim();
@@ -1027,7 +1092,7 @@ function resolveSection(rawKey, rawValue){
   let p=pick(key);
   if(p){ key=p.base; layer=p.lay; }
   // ケースB: キーがカテゴリ名で、値の先頭が「サブ項目(レイヤー): 本文」
-  const cats=DB.sectionMaster.map(c=>c.cat).concat((DB.marketSectionMaster||[]).map(c=>c.cat));
+  const cats=[].concat(...allSectionMasters().map(M=>M.map(c=>c.cat)));
   if(cats.includes(key)){
     const m=value.match(/^([^:：]+)[:：]\s*([\s\S]*)$/);
     if(m){ const p2=pick(m[1].trim()); if(p2){ key=p2.base; layer=p2.lay; value=m[2].trim(); } else { key=m[1].trim(); value=m[2].trim(); } }
@@ -1083,7 +1148,8 @@ function normalizeValueUnit(value, unit){
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
 function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。出典・確信度は書かない。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
 function addStockFromImport(st){
-  if(st.isMarket){ const id='mkt'+Date.now(); DB.stocks.push({id, name:st.name, code:'', kind:'市場', metrics:{}, trend:{}, sections:{}, mine:[]}); st.code=id; }
+  // 取り込み経由では粒度を選べないので既定の「市場」。カードのメニューから後で変更できる
+  if(st.isMarket){ const id='mkt'+Date.now(); DB.stocks.push({id, name:st.name, code:'', kind:'市場', scope:'市場', metrics:{}, trend:{}, sections:{}, mine:[]}); st.code=id; }
   else DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{},mine:[]});
   save(); toast('登録しました'); parseAndPreview();
 }
@@ -1479,12 +1545,31 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
 function sheetAddStock(){
   openSheet(`<h3>追加</h3>
     <div class="card tap" onclick="sheetAddStock2()"><div style="font-size:14px;font-weight:700">● 銘柄を追加</div><div class="muted" style="margin-top:3px">個別企業の分析ノート(指標・業績推移つき)</div></div>
-    <div class="card tap" onclick="sheetAddMarket()"><div style="font-size:14px;font-weight:700">◆ 市場・テーマを追加</div><div class="muted" style="margin-top:3px">マクロ・業界・テーマの分析ノート(例: 日本株市場 / AI・半導体サイクル / データセンター業界)</div></div>`);
+    <div class="card tap" onclick="sheetAddMarket()"><div style="font-size:14px;font-weight:700">◆ 市場・業界・テーマを追加</div><div class="muted" style="margin-top:3px">市場全体 / 業界 / テーマの分析ノート(例: 日本株市場 / データセンター / AI)</div></div>`);
 }
-function sheetAddMarket(){
-  openSheet(`<h3>市場・テーマを追加</h3>
-    <div class="banner" style="margin-bottom:12px">粒度は自由です。「日本株市場」のような広いものも、「AI・半導体サイクル」「データセンター業界」のような絞ったものも、同じように扱えます。</div>
-    <label class="fld"><span class="t">名前</span><input id="am_mname" placeholder="例: AI・半導体サイクル"></label>
+const SCOPE_INFO={
+  '市場':{ex:'例: 日本株市場 / 米国株市場', desc:'国や市場全体。金利・需給・割高割安の水準を見ます。'},
+  '業界':{ex:'例: 半導体 / データセンター / 自動車', desc:'産業単位。市場規模・成長率・競争構造を見ます。'},
+  'テーマ':{ex:'例: AI / 脱炭素 / インバウンド', desc:'業界をまたぐ切り口。広がりと進み具合を見ます。'}
+};
+// 粒度によって既定の指標・分析項目が変わるので、追加時に選ばせたうえで中身を見せる
+function sheetAddMarket(sel){
+  const sc=SCOPES.includes(sel)?sel:'市場';
+  const info=SCOPE_INFO[sc];
+  const met=(DB[SCOPE_KEYS[sc].met].snap||[]);
+  const cats=(DB[SCOPE_KEYS[sc].sec]||[]).filter(c=>c.on).map(c=>c.cat);
+  openSheet(`<h3>市場・業界・テーマを追加</h3>
+    <label class="fld"><span class="t">種別</span>
+      <div class="seg">${SCOPES.map(k=>`<button class="${k===sc?'on':''}" onclick="sheetAddMarket('${k}')">${k}</button>`).join('')}</div>
+      <div class="hint">${esc(info.desc)}</div></label>
+    <div class="card" style="padding:10px 12px;margin-bottom:12px">
+      <div class="muted" style="font-size:10px">「${esc(sc)}」の既定の項目</div>
+      <div style="font-size:12px;margin-top:5px"><b>指標</b>: ${met.length?esc(met.join(' / ')):'なし(取り込むと自動で増えます)'}</div>
+      <div style="font-size:12px;margin-top:4px"><b>分析</b>: ${esc(cats.join(' / '))}</div>
+      <div class="hint" style="margin-top:6px">項目は後からいつでも追加・削除できます(カード右上の ☰ → 設定)。</div>
+    </div>
+    <label class="fld"><span class="t">名前</span><input id="am_mname" placeholder="${esc(info.ex.replace(/^例: /,'例: '))}"></label>
+    <input type="hidden" id="am_scope" value="${esc(sc)}">
     <button class="btn pri" onclick="doAddMarket()">追加</button>
     <button class="btn ghost" style="margin-top:8px" onclick="sheetAddStock()">← 戻る</button>`);
 }
@@ -1492,8 +1577,9 @@ function doAddMarket(){
   const name=$('#am_mname').value.trim();
   if(!name){ toast('名前を入力してください'); return; }
   if(DB.stocks.some(s=>s.name===name)){ toast('同名のカードが既にあります'); return; }
+  const el=$('#am_scope'); const scope=SCOPES.includes(el&&el.value)?el.value:'市場';
   const id='mkt'+Date.now();
-  DB.stocks.push({id, name, code:'', kind:'市場', metrics:{}, trend:{}, sections:{}, mine:[]});
+  DB.stocks.push({id, name, code:'', kind:'市場', scope, metrics:{}, trend:{}, sections:{}, mine:[]});
   save(); closeSheet(); openStock(id); toast('追加しました');
 }
 function sheetAddStock2(){
@@ -1674,9 +1760,10 @@ function showPrompt(p, backSid){
 }
 function sheetSectionMaster(sid){
   const s0=sid&&sid!=='null'?stock(sid):null;
-  const M=s0&&isMkt(s0)?DB.marketSectionMaster:DB.sectionMaster;
-  const mname=s0&&isMkt(s0)?'marketSectionMaster':'sectionMaster';
-  let h=`<h3>セクションの管理${s0&&isMkt(s0)?'(市場・テーマ用)':''}</h3><div class="muted" style="margin-bottom:10px">大カテゴリの表示/非表示を切り替えます。</div>`;
+  const mkt=s0&&isMkt(s0);
+  const mname=mkt?scopeKeys(s0).sec:'sectionMaster';
+  const M=DB[mname];
+  let h=`<h3>分析セクションの管理${mkt?`(${esc(scopeOf(s0))}用)`:''}</h3><div class="muted" style="margin-bottom:10px">大カテゴリの表示/非表示を切り替えます。後からいつでも変更できます。</div>`;
   M.forEach((c,i)=>{
     h+=`<div class="row" style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--line)">
       <span style="flex:1;font-size:13px">${esc(c.cat)}<div class="muted" style="font-size:10px">${esc(c.subs.join('・'))}</div></span>
@@ -1947,11 +2034,15 @@ function sheetMetricsMaster(){
   openSheet(h);
 }
 // 市場・テーマ用の指標設定。銘柄用と違い業績推移(trend)は無く、スナップショットだけを持つ
+// 粒度(市場/業界/テーマ)ごとに別々のマスターを編集する。開いているカードの粒度が対象
+function curScopeMet(){ const s=STATE.stockId?stock(STATE.stockId):null; return DB[(s&&isMkt(s)?scopeKeys(s):SCOPE_KEYS['市場']).met]; }
+function curScopeName(){ const s=STATE.stockId?stock(STATE.stockId):null; return (s&&isMkt(s)?scopeOf(s):'市場'); }
 function sheetMarketMetricsMaster(){
-  const mm=DB.marketMetricsMaster;
-  let h=`<h3>市場の水準指標の設定</h3>
-    <div class="muted" style="margin-bottom:12px">すべての市場・テーマカードに共通の設定です。当日の値動きではなく、数か月単位で見直す水準感・センチメントを想定しています。</div>`;
-  h+=`<div class="lbl" style="margin-top:0">水準指標 (${mm.snap.length})</div>`;
+  const mm=curScopeMet(); const sc=curScopeName();
+  let h=`<h3>${esc(sc)}の指標の設定</h3>
+    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。項目は後からいつでも追加・削除できます。</div>`;
+  h+=`<div class="lbl" style="margin-top:0">指標 (${mm.snap.length})</div>`;
+  if(!mm.snap.length) h+='<div class="muted" style="padding:0 2px 6px">まだありません。会話を取り込むと自動で増えます。</div>';
   mm.snap.forEach((k,i)=>{
     h+=`<div class="row" style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid var(--line)">
       <span style="flex:1;font-size:13px">${esc(k)}</span>
@@ -1972,35 +2063,37 @@ function sheetMarketMetricsMaster(){
   openSheet(h);
 }
 function moveMarketMetric(i,dir){
-  const arr=DB.marketMetricsMaster.snap; const j=i+dir;
+  const arr=curScopeMet().snap; const j=i+dir;
   if(j<0||j>=arr.length) return;
   const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
   save(); sheetMarketMetricsMaster();
 }
 function hideMarketMetric(name){
-  const mm=DB.marketMetricsMaster;
+  const mm=curScopeMet();
   mm.snap=mm.snap.filter(x=>x!==name);
   if(!mm.hiddenSnap) mm.hiddenSnap=[];
   if(!mm.hiddenSnap.includes(name)) mm.hiddenSnap.push(name);
   save(); sheetMarketMetricsMaster(); toast('非表示にしました(データは保持されます)');
 }
 function restoreMarketMetric(name){
-  const mm=DB.marketMetricsMaster;
+  const mm=curScopeMet();
   mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name);
   if(!mm.snap.includes(name)) mm.snap.push(name);
   save(); sheetMarketMetricsMaster(); toast('復元しました');
 }
 function sheetAddMarketMetric(){
-  openSheet(`<h3>市場の水準指標を追加</h3>
-    <div class="muted" style="margin-bottom:10px">市場・テーマ全体の水準やセンチメントを表す指標</div>
-    <label class="fld"><span class="t">指標名</span><input id="amm_name" placeholder="例: VIX指数 / ドル円 / 空売り比率 / 益回りスプレッド"></label>
+  const sc=curScopeName();
+  const PH={'市場':'例: VIX指数 / ドル円 / 空売り比率','業界':'例: 稼働率 / 平均単価(ASP) / 受注残','テーマ':'例: 関連予算規模 / 導入社数'};
+  openSheet(`<h3>${esc(sc)}の指標を追加</h3>
+    <div class="muted" style="margin-bottom:10px">「${esc(sc)}」全体の水準を表す指標</div>
+    <label class="fld"><span class="t">指標名</span><input id="amm_name" placeholder="${esc(PH[sc]||PH['市場'])}"></label>
     <button class="btn pri" onclick="doAddMarketMetric()">追加</button>
     <button class="btn ghost" style="margin-top:8px" onclick="sheetMarketMetricsMaster()">キャンセル</button>`);
 }
 function doAddMarketMetric(){
   const name=$('#amm_name').value.trim();
   if(!name){ toast('指標名を入力してください'); return; }
-  const mm=DB.marketMetricsMaster;
+  const mm=curScopeMet();
   if(mm.snap.includes(name)){ toast('同じ指標が既にあります'); return; }
   mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name);
   mm.snap.push(name); save(); sheetMarketMetricsMaster(); toast('追加しました');
