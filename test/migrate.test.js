@@ -256,6 +256,9 @@ describe('migrate', () => {
     expect(out.marketMetricsMaster.snap).toContain('騰落レシオ(25日)');
     expect(out.industryMetricsMaster.snap).not.toContain('騰落レシオ(25日)');
     expect(out.industryMetricsMaster.snap).toEqual(['PER', 'PBR', 'EBITDA', 'ROE', '営業利益率', '自己資本比率']);
+    expect(out.marketMetricsMaster.snap).toEqual(['予想PER(市場全体)', 'PBR(市場全体)', '長期金利(10年)', '為替(USD/JPY)', '騰落レシオ(25日)', 'VIX指数']);
+    // 日次で動く株価指数そのものは既定に含めない(証券アプリの役割)
+    expect(out.marketMetricsMaster.snap.some(x => /日経平均|TOPIX|移動平均/.test(x))).toBe(false);
     // 市場専用のカテゴリ(金融環境)は業界には無い
     const cats = m => m.map(c => c.cat);
     expect(cats(out.marketSectionMaster)).toContain('金融環境');
@@ -277,6 +280,25 @@ describe('migrate', () => {
       industryMetricsMaster: { snap: ['市場規模', '独自に足した指標'], hiddenSnap: [] },
     };
     expect(migrate(db).industryMetricsMaster.snap).toEqual(['市場規模', '独自に足した指標']);
+  });
+
+  test('市場の既定指標が旧既定のままなら新しい既定に差し替える', () => {
+    const db = {
+      stocks: [], hypotheses: [], reminders: [],
+      marketMetricsMaster: { snap: ['予想PER(市場全体)', 'PBR(市場全体)', '配当利回り(市場全体)', '騰落レシオ(25日)', '信用評価損益率', '長期金利(10年)'], hiddenSnap: [] },
+    };
+    const snap = migrate(db).marketMetricsMaster.snap;
+    expect(snap).toContain('為替(USD/JPY)');
+    expect(snap).toContain('VIX指数');
+    expect(snap).not.toContain('配当利回り(市場全体)');
+  });
+
+  test('市場の指標をユーザーが編集していれば差し替えない', () => {
+    const db = {
+      stocks: [], hypotheses: [], reminders: [],
+      marketMetricsMaster: { snap: ['長期金利(10年)', '独自に足した指標'], hiddenSnap: [] },
+    };
+    expect(migrate(db).marketMetricsMaster.snap).toEqual(['長期金利(10年)', '独自に足した指標']);
   });
 
   test('粒度が未設定の既存の市場カードは「市場」扱いにする', () => {

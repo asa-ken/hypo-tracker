@@ -196,7 +196,9 @@ function seed(){
     // 市場カードは粒度(scope)ごとに語彙が違うので、指標マスターを分けて持つ。
     // 例: 「日本株市場」に騰落レシオは効くが「データセンター業界」には無意味
     marketMetricsMaster:{   // scope:'市場' … 日本株市場、米国株市場など
-      snap:['予想PER(市場全体)','PBR(市場全体)','配当利回り(市場全体)','騰落レシオ(25日)','信用評価損益率','長期金利(10年)'],
+      // 日次で動く株価指数・移動平均は入れない(証券アプリの役割)。
+      // 数か月単位で水準を比べられるもの＝バリュエーション・金利・為替・過熱度に絞る
+      snap:['予想PER(市場全体)','PBR(市場全体)','長期金利(10年)','為替(USD/JPY)','騰落レシオ(25日)','VIX指数'],
       hiddenSnap:[]
     },
     industryMetricsMaster:{ // scope:'業界' … 半導体、データセンターなど。個社ではなく業界の代表値(中央値)で見る
@@ -319,11 +321,16 @@ function migrate(db){
     if(!db[k].snap) db[k].snap=[];
     if(!db[k].hiddenSnap) db[k].hiddenSnap=[];
   });
-  // 業界の既定指標を財務指標に入れ替えた。ユーザーが編集していない(旧既定のままの)場合だけ差し替える
+  // 既定指標を入れ替えた分は、ユーザーが編集していない(旧既定のままの)場合だけ差し替える
   {
-    const OLD=['市場規模','市場成長率(YoY)','設備投資額'];
-    const cur=db.industryMetricsMaster.snap||[];
-    if(cur.length===OLD.length && cur.every((x,i)=>x===OLD[i])) db.industryMetricsMaster.snap=s0.industryMetricsMaster.snap.slice();
+    const RESET=[
+      {k:'industryMetricsMaster', old:['市場規模','市場成長率(YoY)','設備投資額']},
+      {k:'marketMetricsMaster', old:['予想PER(市場全体)','PBR(市場全体)','配当利回り(市場全体)','騰落レシオ(25日)','信用評価損益率','長期金利(10年)']},
+    ];
+    RESET.forEach(({k,old})=>{
+      const cur=db[k].snap||[];
+      if(cur.length===old.length && cur.every((x,i)=>x===old[i])) db[k].snap=s0[k].snap.slice();
+    });
   }
   if(!db.industrySectionMaster) db.industrySectionMaster=s0.industrySectionMaster;
   if(!db.themeSectionMaster) db.themeSectionMaster=s0.themeSectionMaster;
@@ -784,6 +791,9 @@ function briefingText(){
   値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
   銘柄の話のときによく使う指標名: ${snap}
   市場全体の話のときによく使う指標名: ${mktSnap}
+    ※市場の話は数値より「今どういう地合いか」の説明が主役です。指標は水準の裏付けとして添える程度で構いません。
+      株価指数の値・移動平均・日々のボラティリティは書かないでください(証券アプリで見ます)。
+      CPI・PMIなど発表日が決まっているものは、指標にするより「## 注目ポイント」にイベント日つきで書いてください。
   業界の話のときによく使う指標名: ${indSnap}
     ※業界の指標は特定1社ではなく、業界の代表値(中央値)でお願いします。平均は外れ値に引っ張られるため中央値が望ましく、
       難しい場合は「上位◯社の中央値」のように範囲を本文で補足してください。資本集約型かサービス型かで水準が変わる点も一言添えてください。
