@@ -117,6 +117,12 @@
   .scrim{position:fixed; inset:0; background:rgba(20,30,40,.4); z-index:40; display:none; align-items:flex-end; justify-content:center;}
   .scrim.show{display:flex;}
   .sheet{position:relative; background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto;}
+  /* 画面端スワイプで閉じるための専用の細い帯。ここだけtouch-action:pan-yにして、
+     ブラウザ自身の「画面端スワイプで戻る」機能に横方向の操作を渡さないようにする。
+     帯をシート全体ではなくこの細い領域に限定するのは、分析項目の横スワイプページャー
+     (シート内の.pages)の水平スクロールを巻き込んで壊さないため */
+  .edge-swipe-zone{position:fixed; top:0; bottom:0; left:0; width:28px; z-index:41; touch-action:pan-y; pointer-events:none;}
+  .edge-swipe-zone.show{pointer-events:auto;}
   .sheet h3{font-size:15px; font-weight:700; margin:2px 0 12px; text-align:center;}
   /* 背景タップで閉じられるが、それに気づかず「戻れない」と感じる人のための明示的な閉じるボタン */
   .sheet-close{position:absolute; top:10px; right:10px; width:28px; height:28px; border-radius:50%; border:none; background:var(--line2); color:var(--ink2); font-size:14px; line-height:1; cursor:pointer; z-index:1;}
@@ -164,6 +170,7 @@
   </div>
 </div>
 <div class="scrim" id="scrim" onclick="if(event.target===this)requestCloseSheet()"><div class="sheet" id="sheet"></div></div>
+<div class="edge-swipe-zone" id="edgeSwipeZone"></div>
 <div class="exit-confirm" id="exitConfirm">
   <div class="exit-confirm-card">
     <div class="exit-confirm-msg">保存されていない変更があります。破棄しますか?</div>
@@ -1342,9 +1349,10 @@ function openSheet(html){
   $('#sheet').innerHTML='<button class="sheet-close" onclick="requestCloseSheet()" aria-label="閉じる">✕</button>'+html;
   $('#sheet').style.transform='';
   $('#scrim').classList.add('show');
+  $('#edgeSwipeZone').classList.add('show');
   STATE._sheetSnap=sheetSnapshot();
 }
-function closeSheet(){ $('#scrim').classList.remove('show'); $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; STATE._sheetSnap=undefined; }
+function closeSheet(){ $('#scrim').classList.remove('show'); $('#edgeSwipeZone').classList.remove('show'); $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; STATE._sheetSnap=undefined; }
 // シート内の自由入力(テキスト)だけを対象に、開いた時点からの変更有無を見る。
 // セレクト/チェックボックスだけの画面(メニューや確認ダイアログ)は対象にならず、常に即閉じでよい
 function sheetSnapshot(){
@@ -1360,25 +1368,25 @@ function requestCloseSheet(){
 function cancelCloseSheet(){ $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; }
 function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeSheet(); }
 // 右エッジからのスワイプでシートを閉じる(ブラウザの戻るジェスチャーに合わせる)。
-// シート内の横スワイプページャー(分析項目の詳細送りなど)と誤反応しないよう、
-// 画面左端付近から始まった横方向優位のドラッグだけを対象にする
+// 画面左端の細い専用帯(#edgeSwipeZone)だけにタッチ操作を持たせることで、
+// ①シート内の横スワイプページャー(分析項目の詳細送りなど)を巻き込まず、
+// ②ブラウザ/OS自身の「画面端スワイプで戻る」にタッチを奪われないようにしている
 (function(){
-  const EDGE=24, THRESH=70;
+  const THRESH=70;
   let sx=0, sy=0, dragging=false;
-  const scrim=$('#scrim'), sheet=$('#sheet'), phone=document.querySelector('.phone');
-  scrim.addEventListener('touchstart', e=>{
-    if(!scrim.classList.contains('show')||$('#exitConfirm').classList.contains('show')) return;
-    const t=e.touches[0]; const left=phone.getBoundingClientRect().left;
-    if(t.clientX-left>EDGE){ dragging=false; return; }
+  const zone=$('#edgeSwipeZone'), sheet=$('#sheet');
+  zone.addEventListener('touchstart', e=>{
+    if($('#exitConfirm').classList.contains('show')) return;
+    const t=e.touches[0];
     sx=t.clientX; sy=t.clientY; dragging=true;
   }, {passive:true});
-  scrim.addEventListener('touchmove', e=>{
+  zone.addEventListener('touchmove', e=>{
     if(!dragging) return;
     const t=e.touches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
     if(dx<=0) return;
     if(Math.abs(dx)>Math.abs(dy)){ sheet.style.transform=`translateX(${dx}px)`; if(e.cancelable) e.preventDefault(); }
   }, {passive:false});
-  scrim.addEventListener('touchend', ()=>{
+  zone.addEventListener('touchend', ()=>{
     if(!dragging) return; dragging=false;
     const m=sheet.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
     sheet.style.transition='transform .15s ease-out'; sheet.style.transform='translateX(0)';
