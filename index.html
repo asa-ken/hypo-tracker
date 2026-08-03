@@ -199,8 +199,8 @@ function seed(){
       snap:['予想PER(市場全体)','PBR(市場全体)','配当利回り(市場全体)','騰落レシオ(25日)','信用評価損益率','長期金利(10年)'],
       hiddenSnap:[]
     },
-    industryMetricsMaster:{ // scope:'業界' … 半導体、データセンターなど
-      snap:['市場規模','市場成長率(YoY)','設備投資額'],
+    industryMetricsMaster:{ // scope:'業界' … 半導体、データセンターなど。個社ではなく業界の代表値(中央値)で見る
+      snap:['PER','PBR','EBITDA','ROE','営業利益率','自己資本比率'],
       hiddenSnap:[]
     },
     themeMetricsMaster:{    // scope:'テーマ' … AI、脱炭素など。数値化しにくいので既定は置かず取り込みで育てる
@@ -319,6 +319,12 @@ function migrate(db){
     if(!db[k].snap) db[k].snap=[];
     if(!db[k].hiddenSnap) db[k].hiddenSnap=[];
   });
+  // 業界の既定指標を財務指標に入れ替えた。ユーザーが編集していない(旧既定のままの)場合だけ差し替える
+  {
+    const OLD=['市場規模','市場成長率(YoY)','設備投資額'];
+    const cur=db.industryMetricsMaster.snap||[];
+    if(cur.length===OLD.length && cur.every((x,i)=>x===OLD[i])) db.industryMetricsMaster.snap=s0.industryMetricsMaster.snap.slice();
+  }
   if(!db.industrySectionMaster) db.industrySectionMaster=s0.industrySectionMaster;
   if(!db.themeSectionMaster) db.themeSectionMaster=s0.themeSectionMaster;
   // 既存の市場カードは粒度が未設定なので「市場」扱いにする(従来の語彙がそのまま使える)
@@ -624,7 +630,7 @@ function renderMarketDetail(v){
   detailHeader(s, sc);
   const hy=hyposOf(s.id);
   let h=blkChips(hy)+blkTheme(s);
-  const METLBL={'市場':'市場の水準','業界':'業界の規模・成長','テーマ':'テーマの指標'};
+  const METLBL={'市場':'市場の水準','業界':'業界の水準(代表値)','テーマ':'テーマの指標'};
   const keys=metricsMasterFor(s).snap;
   if(keys.length) h+=blkMetrics(s,METLBL[sc],keys,'sheetMarketMetricsMaster()','mktmetrics');
   else h+=lblWithEdit(METLBL[sc],'sheetMarketMetricsMaster()','margin-top:2px')+'<div class="muted" style="padding:0 2px 4px">まだありません。会話を取り込むと自動で増えます。</div>';
@@ -779,6 +785,8 @@ function briefingText(){
   銘柄の話のときによく使う指標名: ${snap}
   市場全体の話のときによく使う指標名: ${mktSnap}
   業界の話のときによく使う指標名: ${indSnap}
+    ※業界の指標は特定1社ではなく、業界の代表値(中央値)でお願いします。平均は外れ値に引っ張られるため中央値が望ましく、
+      難しい場合は「上位◯社の中央値」のように範囲を本文で補足してください。資本集約型かサービス型かで水準が変わる点も一言添えてください。
   これ以外の指標名も自由に使えます(取り込み時に自動で追加されます)。
   現在株価や当日の値動きは不要です(リアルタイム性が要るものは証券アプリで見ます)。
   ここで扱いたいのは、決算や指標の更新に合わせて数か月単位で見直す数字です。
@@ -2083,7 +2091,7 @@ function restoreMarketMetric(name){
 }
 function sheetAddMarketMetric(){
   const sc=curScopeName();
-  const PH={'市場':'例: VIX指数 / ドル円 / 空売り比率','業界':'例: 稼働率 / 平均単価(ASP) / 受注残','テーマ':'例: 関連予算規模 / 導入社数'};
+  const PH={'市場':'例: VIX指数 / ドル円 / 空売り比率','業界':'例: EV/EBITDA / 総資産回転率 / 売上成長率','テーマ':'例: 関連予算規模 / 導入社数'};
   openSheet(`<h3>${esc(sc)}の指標を追加</h3>
     <div class="muted" style="margin-bottom:10px">「${esc(sc)}」全体の水準を表す指標</div>
     <label class="fld"><span class="t">指標名</span><input id="amm_name" placeholder="${esc(PH[sc]||PH['市場'])}"></label>
