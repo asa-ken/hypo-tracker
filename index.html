@@ -708,9 +708,14 @@ function briefingText(){
 # 銘柄: 銘柄名 (証券コード)
 (市場・業界などテーマの話なら) # テーマ: テーマ名
 
+■ 書き方のお願い
+専門用語はできるだけ避け、避けられない場合は「◯◯(=平たく言うと△△)」のように短い補足を添えてください。
+後から読み返して意味が分かることが目的なので、業界用語で圧縮せず、平易な日本語でお願いします。
+出典やURLは書かないでください。確からしさは「確信度(高/中/低)」で示してください。
+
 ■ 指標(数値のスナップショット)
 ## 指標
-- 指標名: 値 | 単位:◯◯ | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)
+- 指標名: 値 | 単位:◯◯ | 基準日(YYYY/M/D) | 確信度(高/中/低)
   値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
   銘柄の話のときによく使う指標名: ${snap}
   市場・テーマの話のときによく使う指標名: ${mktSnap}
@@ -720,15 +725,15 @@ function briefingText(){
 
 ■ 業績推移
 ## 業績推移
-- 指標名: 25年3月期=数値 | 26年3月期=数値 | 27年3月期(予)=数値 | 単位:◯◯ | 基準日 | 出典 | 確信度
+- 指標名: 25年3月期=数値 | 26年3月期=数値 | 27年3月期(予)=数値 | 単位:◯◯ | 基準日 | 確信度
   よく使う指標名: ${trend}
   決算期は「yy年mm月期」表記、予想には(予)を付けてください(米国株など海外企業も同じ形式で、その企業の決算月に合わせてください)。
   これは個別企業の決算のみです。市場・テーマの話では使いません。
 
 ■ 分析(定性的な内容)
 ## 分析
-- 項目名(サマリ): 2〜3文の要点 | 基準日(YYYY/M/D) | 出典 | 確信度
-- 項目名(詳細): 深掘りした長文 | 基準日(YYYY/M/D) | 出典 | 確信度
+- 項目名(サマリ): 2〜3文の要点 | 基準日(YYYY/M/D) | 確信度
+- 項目名(詳細): 深掘りした長文 | 基準日(YYYY/M/D) | 確信度
   項目名は必ず下記のいずれかを使ってください(カテゴリ名【】は付けない)。ここに無い名前を使うと取り込めません。
 ${stockCats}
   テーマ・市場の話のときは下記を使ってください:
@@ -961,7 +966,7 @@ function commitImport(){
   if(!p.rows.length && !memoTexts.length){ toast('取り込む内容がありません'); return; }
   const newWatchWithEvent=[];
   // 該当なし行: チェックされたものだけ「その他」カテゴリへ
-  (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),src:r.src||'AI',details:[]}; } });
+  (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),conf:r.conf||'',details:[]}; } });
   p.rows.forEach(r=>{
     if(r._res&&!r._res.sub) return;
     if(r._skip){ // 内容が同じ → 鮮度(取得日)のみ更新
@@ -970,7 +975,9 @@ function commitImport(){
       return;
     }
     if(/指標/.test(r.block||'')){
-      s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'};
+      // 出典は保存しない。生成AIの示す出典は実際には無関係なリンクが混ざり、
+      // 信頼の手掛かりにならないため、確信度(AI自身の不確かさ)だけを残す
+      s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),conf:r.conf||'中'};
       // マスターに無い指標名は保存しても画面に出ないため、取り込み時に自動登録する。
       // ただしユーザーが自分で非表示にした指標は、取り込みのたびに復活させない。
       // 市場・テーマは銘柄とは別の指標マスターに登録する(PERと騰落レシオを混ぜない)
@@ -988,8 +995,8 @@ function commitImport(){
       if(!res.sub) return;
       const key=res.sub, isDetail=res.layer==='詳細', val=res.value;
       const prev=s.sections[key];
-      if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),src:r.src||'AI',details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val}); }
-      else { s.sections[key]={t:val,d:normD(r.d),src:r.src||'AI',details:(prev&&prev.details)||[]}; }
+      if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),conf:r.conf||'',details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val}); }
+      else { s.sections[key]={t:val,d:normD(r.d),conf:r.conf||'',details:(prev&&prev.details)||[]}; }
     }
     else if(/注目ポイント/.test(r.block||'')){
       // 取り込まれたイベント日はカードには持たせず、リマインダー登録の候補として保持する
@@ -1072,7 +1079,7 @@ function normalizeValueUnit(value, unit){
   return {v:v.replace(/,/g,''), unit:u};
 }
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
-function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
+function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D) | 確信度(高/中/低)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
 function addStockFromImport(st){
   if(st.isMarket){ const id='mkt'+Date.now(); DB.stocks.push({id, name:st.name, code:'', kind:'市場', metrics:{}, trend:{}, sections:{}, mine:[]}); st.code=id; }
   else DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{},mine:[]});
@@ -1573,7 +1580,7 @@ function sheetAnalysisItem(sid,su){
   const cat=masterFor(s).find(c=>c.subs.includes(su));
   const pages=[`<span class="kicker">概要</span>
     <div class="txt">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}</div>
-    ${val?`<div class="meta"><span>基準日: ${esc(val.d)}</span><span>出典: ${esc(val.src||'—')}</span></div>`:''}`];
+    ${val?`<div class="meta"><span>基準日: ${esc(val.d)}</span>${val.conf?`<span>確信度: ${esc(val.conf)}</span>`:''}</div>`:''}`];
   det.forEach((dd,di)=>{
     pages.push(`<span class="kicker detail">詳細 ${di+1}${dd.title?' ・ '+esc(dd.title):''}</span>
       <div class="txt">${esc(dd.t)}</div>
@@ -1646,7 +1653,7 @@ function genOrderNew(sid){
   const head=s?(isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`):'# 銘柄またはテーマ: (会話の中で対象を明記してください)';
   let p=`以下の項目を調査し、指定フォーマットで回答してください。\n`;
   if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
-  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・出典・確信度(高/中/低) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典はサイト名のみ(URLやリンク記法は書かない)\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
+  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D)・確信度(高/中/低) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典やURLは書かない(不確かなものは確信度を下げて示す)\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
   if(s && !isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
   if(sums.length||deeps.length){
@@ -1654,7 +1661,7 @@ function genOrderNew(sid){
     sums.forEach(k=>{ p+=`- ${k}(サマリ): \n`; });
     deeps.forEach(k=>{ p+=`- ${k}(サマリ): \n- ${k}(詳細): \n`; });
   }
-  p+='\n\n## 回答フォーマット\n各行「- キー: 値 | 基準日 | 出典 | 確信度」。分析は「- 項目名(サマリ): 本文 | 基準日 | 出典 | 確信度」「- 項目名(詳細): 本文 | 基準日 | 出典 | 確信度」の2種で回答。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 出典 | 確信度」';
+  p+='\n\n## 回答フォーマット\n各行「- キー: 値 | 基準日 | 確信度」。分析は「- 項目名(サマリ): 本文 | 基準日 | 確信度」「- 項目名(詳細): 本文 | 基準日 | 確信度」の2種で回答。業績推移「- 指標名: 25年3月期=値 | 26年3月期=値 | 27年3月期(予)=値 | 単位:◯◯ | 基準日 | 確信度」';
   showPrompt(p, sid);
 }
 function showPrompt(p, backSid){
