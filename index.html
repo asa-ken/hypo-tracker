@@ -193,6 +193,12 @@ function seed(){
       trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true}],
       hiddenSnap:[], hiddenTrend:[]
     },
+    // 市場・テーマ用の指標。個別企業の指標(PER・売上高など)とは別物なので独立して持つ。
+    // 現在値・当日の値動きではなく、数か月単位で見直す水準感・センチメントを対象にする
+    marketMetricsMaster:{
+      snap:['予想PER(市場全体)','PBR(市場全体)','配当利回り(市場全体)','騰落レシオ(25日)','信用評価損益率','長期金利(10年)'],
+      hiddenSnap:[]
+    },
     sectionMaster:[
       {cat:'ビジネスモデル', on:true, subs:['収益モデル','顧客セグメント','提供価値','事業構造','収益の安定性']},
       {cat:'財務', on:true, subs:['実績財務(PL/BS/CF)','財務健全性・効率性']},
@@ -279,6 +285,10 @@ function migrate(db){
   if(!db.metricsMaster) db.metricsMaster=s0.metricsMaster;
   if(!db.metricsMaster.hiddenSnap) db.metricsMaster.hiddenSnap=[];
   if(!db.metricsMaster.hiddenTrend) db.metricsMaster.hiddenTrend=[];
+  // 市場・テーマ用の指標マスター(旧データには存在しない)
+  if(!db.marketMetricsMaster) db.marketMetricsMaster=s0.marketMetricsMaster;
+  if(!db.marketMetricsMaster.snap) db.marketMetricsMaster.snap=[];
+  if(!db.marketMetricsMaster.hiddenSnap) db.marketMetricsMaster.hiddenSnap=[];
   // 旧セクション名 → 新体系サブ項目への読み替え
   const MAP={'事業・ビジネスモデル':'事業構造','成長ドライバー':'市場成長率','リスク要因':'事業リスク','競合ポジション':'主要競合','技術':'技術力'};
   (db.stocks||[]).forEach(st=>{
@@ -389,6 +399,8 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('sh
 function stock(id){return DB.stocks.find(s=>s.id===id);}
 function isMkt(s){return s&&s.kind==='市場';}
 function masterFor(s){return isMkt(s)?DB.marketSectionMaster:DB.sectionMaster;}
+// 指標マスターも銘柄と市場で別物。市場は業績推移(trend)を持たない
+function metricsMasterFor(s){return isMkt(s)?DB.marketMetricsMaster:DB.metricsMaster;}
 function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
 function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
 function allSubs(){ const a=[]; DB.sectionMaster.forEach(c=>{ if(c.on) c.subs.forEach(su=>a.push({cat:c.cat,sub:su})); }); return a; }
@@ -413,7 +425,7 @@ function render(){
   refreshFires();
   const v=$('#view'); const act=$('#topAct'); act.style.display='none'; $('#topSub').textContent='';
   const menu=$('#topMenu'); menu.style.display='none'; menu.onclick=null;
-  if(STATE.stockId){ renderStockDetail(v); return; }
+  if(STATE.stockId){ const s0=stock(STATE.stockId); (s0&&isMkt(s0)?renderMarketDetail:renderStockDetail)(v); return; }
   ({home:renderHome, analysis:renderAnalysis, import:renderImport, reminder:renderReminder}[STATE.tab])(v);
 }
 
@@ -483,42 +495,37 @@ function renderAnalysis(v){
   v.innerHTML=h;
 }
 
-//////////////////// STOCK DETAIL ////////////////////
-function renderStockDetail(v){
-  const s=stock(STATE.stockId); if(!s){go('analysis');return;}
-  $('#topTitle').textContent=s.name;
-  $('#topSub').textContent=isMkt(s)?'市場・テーマ':(s.code+' · '+s.kind);
-  const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=()=>{STATE.stockId=null;render();};
-  const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
-  const hy=hyposOf(s.id);
-  let h='';
+//////////////////// DETAIL の共通ブロック ////////////////////
+// 銘柄・市場の詳細画面は構成が違うので描画関数を分けている。
+// ただしテーマ・分析・メモ・リンクは共通なので、ここに部品として切り出す。
+function blkChips(hy){
   const wCnt=hy.filter(x=>x.kind==='watch').length, mCnt=hy.length-wCnt;
-  if(wCnt||mCnt) h+=`<div class="pill-row" style="margin-bottom:11px">${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
+  if(!wCnt&&!mCnt) return '';
+  return `<div class="pill-row" style="margin-bottom:11px">${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
+}
+function blkTheme(s){
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
-  h+=`<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
+  return `<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
     <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(会話の切り口を決められます)'}</div></div>`;
-  if(!isMkt(s)){
-  h+=lblWithEdit('主要指標','sheetMetricsMaster()','margin-top:2px');
-  // metrics(6件を超える場合は横スワイプページャーで送る)
-  {
-    const allKeys=DB.metricsMaster.snap;
-    const chunks=[]; for(let i=0;i<allKeys.length;i+=6) chunks.push(allKeys.slice(i,i+6));
-    if(chunks.length<=1){
-      h+='<div class="metric">'+(chunks[0]||[]).map(k=>metricCellHtml(s,k)).join('')+'</div>';
-    } else {
-      const pages=chunks.map(chunk=>`<div class="metric">${chunk.map(k=>metricCellHtml(s,k)).join('')}</div>`);
-      h+=pagerBlock('metrics', pages, (idx,total)=>`指標 ${idx+1}/${total}`, 'tight');
-    }
+}
+// 指標グリッド。6件を超える場合は横スワイプページャーで送る
+function blkMetrics(s, label, keys, editAction, pagerId){
+  let h=lblWithEdit(label, editAction, 'margin-top:2px');
+  const chunks=[]; for(let i=0;i<keys.length;i+=6) chunks.push(keys.slice(i,i+6));
+  if(chunks.length<=1) h+='<div class="metric">'+(chunks[0]||[]).map(k=>metricCellHtml(s,k)).join('')+'</div>';
+  else {
+    const pages=chunks.map(chunk=>`<div class="metric">${chunk.map(k=>metricCellHtml(s,k)).join('')}</div>`);
+    h+=pagerBlock(pagerId, pages, (idx,total)=>`指標 ${idx+1}/${total}`, 'tight');
   }
-  // trend
-  h+=lblWithEdit('業績推移','sheetMetricsMaster()');
-  h+=renderTrend(s);
-  } // end !isMkt
-  // sections(カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く)
-  h+='<div class="lbl">分析</div>';
-  masterFor(s).filter(c=>c.on).forEach((c,ci)=>{
-    const filled=filledCatCount(s,c.cat,masterFor(s));
+  return h;
+}
+// カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く
+function blkSections(s){
+  let h='<div class="lbl">分析</div>';
+  const master=masterFor(s);
+  master.filter(c=>c.on).forEach((c,ci)=>{
+    const filled=filledCatCount(s,c.cat,master);
     h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:9px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:0">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
@@ -527,8 +534,10 @@ function renderStockDetail(v){
       </div>`; });
     h+=`</div></div>`;
   });
-  // メモ・注目ポイント(旧「自分の見解」を統合)
-  h+=`<div class="lbl">メモ・注目ポイント (${hy.length})</div>`;
+  return h;
+}
+function blkHypos(s, hy){
+  let h=`<div class="lbl">メモ・注目ポイント (${hy.length})</div>`;
   h+='<div class="hint" style="margin:-4px 0 7px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
   if(!hy.length) h+='<div class="muted" style="padding:0 2px 8px">まだありません。</div>';
   hy.forEach(hh=>h+=hypoMiniCard(hh));
@@ -536,11 +545,54 @@ function renderStockDetail(v){
     <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','memo')">＋ メモ</button>
     <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','watch')">＋ 注目ポイント</button>
   </div>`;
-  // links
-  h+=`<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">この銘柄のリマインダー (${remOf(s.id).length})</button>`;
-  h+=`<button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">会話を取り込む</button>`;
+  return h;
+}
+function blkLinks(s){
+  return `<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">${isMkt(s)?'この市場・テーマ':'この銘柄'}のリマインダー (${remOf(s.id).length})</button>
+    <button class="btn pri" style="margin-top:8px" onclick="openAsk('${s.id}')">会話を取り込む</button>`;
+}
+function detailHeader(s, sub){
+  $('#topTitle').textContent=s.name;
+  $('#topSub').textContent=sub;
+  const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=()=>{STATE.stockId=null;render();};
+  const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
+}
+
+//////////////////// STOCK DETAIL ////////////////////
+function renderStockDetail(v){
+  const s=stock(STATE.stockId); if(!s){go('analysis');return;}
+  detailHeader(s, s.code+' · '+s.kind);
+  const hy=hyposOf(s.id);
+  let h=blkChips(hy)+blkTheme(s);
+  h+=blkMetrics(s,'主要指標',DB.metricsMaster.snap,'sheetMetricsMaster()','metrics');
+  h+=lblWithEdit('業績推移','sheetMetricsMaster()');
+  h+=renderTrend(s);
+  h+=blkSections(s)+blkHypos(s,hy)+blkLinks(s);
   v.innerHTML=h;
   pagerInit('metrics'); pagerInit('trendchart');
+}
+
+//////////////////// MARKET DETAIL ////////////////////
+// 市場・テーマ専用。銘柄と違い業績推移は持たず、指標は市場用マスター(marketMetricsMaster)を使う。
+// 以前は銘柄画面を流用して指標を丸ごと隠していたため、市場の水準感を数値で残せなかった
+function renderMarketDetail(v){
+  const s=stock(STATE.stockId); if(!s){go('analysis');return;}
+  detailHeader(s, '市場・テーマ');
+  const hy=hyposOf(s.id);
+  let h=blkChips(hy)+blkTheme(s);
+  h+=blkMetrics(s,'市場の水準',DB.marketMetricsMaster.snap,'sheetMarketMetricsMaster()','mktmetrics');
+  h+='<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準感・センチメントを記録します。</div>';
+  h+=blkSections(s);
+  h+=blkHypos(s,hy);
+  // 市場の話は最終的に「自分の銘柄がどうなるか」に着地するので、保有・ウォッチへの導線を置く
+  const mine=DB.stocks.filter(x=>!isMkt(x));
+  if(mine.length){
+    h+='<div class="lbl">自分の銘柄を確認</div>';
+    h+=`<div class="pill-row" style="margin-bottom:2px">${mine.map(x=>`<span class="chip navy tap" style="cursor:pointer" onclick="openStock('${x.id}')">${esc(x.name)}</span>`).join('')}</div>`;
+  }
+  h+=blkLinks(s);
+  v.innerHTML=h;
+  pagerInit('mktmetrics');
 }
 // 見出しの右端に編集リンクを添える(指標の追加・削除などの設定画面への入口)
 function lblWithEdit(label, action, extraStyle){
@@ -559,7 +611,7 @@ function sheetStockMenu(sid){
   const s=stock(sid); if(!s) return;
   const mkt=isMkt(s);
   openSheet(`<h3>${esc(s.name)}</h3>
-    ${mkt?`<button class="btn" onclick="closeSheet();sheetSectionMaster('${sid}')">⚙ 分析項目の設定(市場・テーマ用)</button>`
+    ${mkt?`<button class="btn" onclick="closeSheet();sheetMarketMetricsMaster()">⚙ 水準指標・分析項目の設定(市場・テーマ用)</button>`
          :`<button class="btn" onclick="closeSheet();sheetMetricsMaster()">⚙ 収容指標・業績分析項目の設定</button>`}
     <button class="btn" style="margin-top:8px" onclick="closeSheet();sheetTheme('${sid}')">注目テーマを編集</button>
     <button class="btn danger" style="margin-top:16px" onclick="delStock('${sid}')">${mkt?'このカードを削除':'この銘柄を削除'}</button>
@@ -648,6 +700,7 @@ function briefingText(){
   const stockCats=catList(DB.sectionMaster);
   const mktCats=catList(DB.marketSectionMaster||[]);
   const snap=DB.metricsMaster.snap.join(' / ');
+  const mktSnap=DB.marketMetricsMaster.snap.join(' / ');
   const trend=DB.metricsMaster.trend.map(t=>t.name).join(' / ');
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
@@ -659,7 +712,8 @@ function briefingText(){
 ## 指標
 - 指標名: 値 | 単位:◯◯ | 基準日(YYYY/M/D) | 出典 | 確信度(高/中/低)
   値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
-  よく使う指標名: ${snap}
+  銘柄の話のときによく使う指標名: ${snap}
+  市場・テーマの話のときによく使う指標名: ${mktSnap}
   これ以外の指標名も自由に使えます(取り込み時に自動で追加されます)。
   現在株価や当日の値動きは不要です(リアルタイム性が要るものは証券アプリで見ます)。
   ここで扱いたいのは、決算や指標の更新に合わせて数か月単位で見直す数字です。
@@ -669,6 +723,7 @@ function briefingText(){
 - 指標名: 25年3月期=数値 | 26年3月期=数値 | 27年3月期(予)=数値 | 単位:◯◯ | 基準日 | 出典 | 確信度
   よく使う指標名: ${trend}
   決算期は「yy年mm月期」表記、予想には(予)を付けてください(米国株など海外企業も同じ形式で、その企業の決算月に合わせてください)。
+  これは個別企業の決算のみです。市場・テーマの話では使いません。
 
 ■ 分析(定性的な内容)
 ## 分析
@@ -825,7 +880,8 @@ function parseAndPreview(){
     const target=p.stock?stock(p.stock.code):null;
     p.rows.forEach(r=>{
       if(/分析/.test(r.block||'')){ const res=resolveSection(r.key,r.value); r._res=res; if(!res.sub) orphans.push(r); }
-      else if(target&&isMkt(target)&&/指標|業績推移/.test(r.block||'')){ r._res={sub:null}; orphans.push(r); } // 市場カードに指標・推移はない
+      // 市場カードは指標(水準)を持てるが、業績推移(企業の決算)は持たない
+      else if(target&&isMkt(target)&&/業績|推移/.test(r.block||'')){ r._res={sub:null}; orphans.push(r); }
     });
     const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
     if(orphans.length){
@@ -916,8 +972,10 @@ function commitImport(){
     if(/指標/.test(r.block||'')){
       s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d),src:r.src||'AI',conf:r.conf||'中'};
       // マスターに無い指標名は保存しても画面に出ないため、取り込み時に自動登録する。
-      // ただしユーザーが自分で非表示にした指標は、取り込みのたびに復活させない
-      if(!DB.metricsMaster.snap.includes(r.key) && !(DB.metricsMaster.hiddenSnap||[]).includes(r.key)) DB.metricsMaster.snap.push(r.key);
+      // ただしユーザーが自分で非表示にした指標は、取り込みのたびに復活させない。
+      // 市場・テーマは銘柄とは別の指標マスターに登録する(PERと騰落レシオを混ぜない)
+      const mm=metricsMasterFor(s);
+      if(!mm.snap.includes(r.key) && !(mm.hiddenSnap||[]).includes(r.key)) mm.snap.push(r.key);
     }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
       if(!DB.metricsMaster.trend.some(t=>t.name===r.key) && !(DB.metricsMaster.hiddenTrend||[]).some(t=>t.name===r.key)){
@@ -1581,7 +1639,8 @@ function catOf(su){ const c=DB.sectionMaster.find(x=>x.subs.includes(su)); retur
 function genOrderNew(sid){
   const s=sid?stock(sid):null; const pk=DB.askPrefs.picks||{};
   const sums=Object.keys(pk).filter(k=>pk[k]==='sum'), deeps=Object.keys(pk).filter(k=>pk[k]==='deep');
-  const need=[]; if(s && !isMkt(s)) DB.metricsMaster.snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
+  // 市場・テーマも指標(水準)を聞ける。銘柄用とは別のマスターを使う
+  const need=[]; if(s) metricsMasterFor(s).snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
   if(!sums.length&&!deeps.length&&!need.length){ toast('項目を選んでください'); return; }
   const theme=((DB.askPrefs.themes||{})[sid]||'').trim();
   const head=s?(isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`):'# 銘柄またはテーマ: (会話の中で対象を明記してください)';
@@ -1877,6 +1936,65 @@ function sheetMetricsMaster(){
   h+=`<button class="btn" onclick="sheetSectionMaster(null)">大カテゴリの表示/非表示を設定</button>`;
   h+=`<button class="btn ghost" style="margin-top:14px" onclick="closeSheet()">← 閉じる</button>`;
   openSheet(h);
+}
+// 市場・テーマ用の指標設定。銘柄用と違い業績推移(trend)は無く、スナップショットだけを持つ
+function sheetMarketMetricsMaster(){
+  const mm=DB.marketMetricsMaster;
+  let h=`<h3>市場の水準指標の設定</h3>
+    <div class="muted" style="margin-bottom:12px">すべての市場・テーマカードに共通の設定です。当日の値動きではなく、数か月単位で見直す水準感・センチメントを想定しています。</div>`;
+  h+=`<div class="lbl" style="margin-top:0">水準指標 (${mm.snap.length})</div>`;
+  mm.snap.forEach((k,i)=>{
+    h+=`<div class="row" style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid var(--line)">
+      <span style="flex:1;font-size:13px">${esc(k)}</span>
+      <button class="btn sm" style="width:auto;padding:3px 7px;font-size:10px" onclick="moveMarketMetric(${i},-1)" ${i===0?'disabled':''}>↑</button>
+      <button class="btn sm" style="width:auto;padding:3px 7px;font-size:10px" onclick="moveMarketMetric(${i},1)" ${i===mm.snap.length-1?'disabled':''}>↓</button>
+      <button class="del" style="border:none;background:none;padding:3px 5px" onclick="hideMarketMetric('${escArg(k)}')">非表示</button>
+    </div>`; });
+  h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMarketMetric()">＋ 指標を追加</button>`;
+  const hs=mm.hiddenSnap||[];
+  if(hs.length){
+    h+=`<div class="lbl">非表示の指標 (${hs.length})</div>`;
+    h+='<div class="muted" style="font-size:11px;margin-bottom:6px">取り込み済みのデータは保持されています。</div>';
+    hs.forEach(k=>{ h+=`<div class="row" style="display:flex;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line)"><span style="flex:1;font-size:12.5px;color:var(--ink3)">${esc(k)}</span><button class="btn sm" style="width:auto;padding:3px 9px;font-size:11px" onclick="restoreMarketMetric('${escArg(k)}')">復元</button></div>`; });
+  }
+  h+=`<div class="lbl">分析セクション</div>`;
+  h+=`<button class="btn" onclick="sheetSectionMaster(STATE.stockId)">大カテゴリの表示/非表示を設定</button>`;
+  h+=`<button class="btn ghost" style="margin-top:14px" onclick="closeSheet()">← 閉じる</button>`;
+  openSheet(h);
+}
+function moveMarketMetric(i,dir){
+  const arr=DB.marketMetricsMaster.snap; const j=i+dir;
+  if(j<0||j>=arr.length) return;
+  const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
+  save(); sheetMarketMetricsMaster();
+}
+function hideMarketMetric(name){
+  const mm=DB.marketMetricsMaster;
+  mm.snap=mm.snap.filter(x=>x!==name);
+  if(!mm.hiddenSnap) mm.hiddenSnap=[];
+  if(!mm.hiddenSnap.includes(name)) mm.hiddenSnap.push(name);
+  save(); sheetMarketMetricsMaster(); toast('非表示にしました(データは保持されます)');
+}
+function restoreMarketMetric(name){
+  const mm=DB.marketMetricsMaster;
+  mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name);
+  if(!mm.snap.includes(name)) mm.snap.push(name);
+  save(); sheetMarketMetricsMaster(); toast('復元しました');
+}
+function sheetAddMarketMetric(){
+  openSheet(`<h3>市場の水準指標を追加</h3>
+    <div class="muted" style="margin-bottom:10px">市場・テーマ全体の水準やセンチメントを表す指標</div>
+    <label class="fld"><span class="t">指標名</span><input id="amm_name" placeholder="例: VIX指数 / ドル円 / 空売り比率 / 益回りスプレッド"></label>
+    <button class="btn pri" onclick="doAddMarketMetric()">追加</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="sheetMarketMetricsMaster()">キャンセル</button>`);
+}
+function doAddMarketMetric(){
+  const name=$('#amm_name').value.trim();
+  if(!name){ toast('指標名を入力してください'); return; }
+  const mm=DB.marketMetricsMaster;
+  if(mm.snap.includes(name)){ toast('同じ指標が既にあります'); return; }
+  mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name);
+  mm.snap.push(name); save(); sheetMarketMetricsMaster(); toast('追加しました');
 }
 function moveMetric(type,i,dir){
   const arr=DB.metricsMaster[type]; const j=i+dir;
