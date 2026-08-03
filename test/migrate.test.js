@@ -234,6 +234,27 @@ describe('migrate', () => {
     expect(out.metricsMaster.hiddenSnap).toEqual([]);
   });
 
+  // 市場・テーマは銘柄とは別の指標マスターを持つ(PERと騰落レシオを混ぜない)
+  test('市場用の指標マスターが無い旧データに既定値を補完する', () => {
+    const db = { stocks: [], hypotheses: [], reminders: [] };
+    const out = migrate(db);
+    expect(Array.isArray(out.marketMetricsMaster.snap)).toBe(true);
+    expect(out.marketMetricsMaster.snap.length).toBeGreaterThan(0);
+    expect(out.marketMetricsMaster.hiddenSnap).toEqual([]);
+    // 銘柄用のマスターとは独立していること
+    expect(out.marketMetricsMaster.snap).not.toEqual(out.metricsMaster.snap);
+  });
+
+  test('すでに市場用の指標マスターがあれば上書きしない', () => {
+    const db = {
+      stocks: [], hypotheses: [], reminders: [],
+      marketMetricsMaster: { snap: ['VIX指数'], hiddenSnap: ['ドル円'] },
+    };
+    const out = migrate(db);
+    expect(out.marketMetricsMaster.snap).toEqual(['VIX指数']);
+    expect(out.marketMetricsMaster.hiddenSnap).toEqual(['ドル円']);
+  });
+
   test('null を渡すと null を返す(初回起動でバックアップが無いケース)', () => {
     expect(migrate(null)).toBeNull();
   });
