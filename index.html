@@ -116,8 +116,10 @@
   /* modal */
   .scrim{position:fixed; inset:0; background:rgba(20,30,40,.4); z-index:40; display:none; align-items:flex-end; justify-content:center;}
   .scrim.show{display:flex;}
-  .sheet{background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto;}
+  .sheet{position:relative; background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto;}
   .sheet h3{font-size:15px; font-weight:700; margin:2px 0 12px; text-align:center;}
+  /* 背景タップで閉じられるが、それに気づかず「戻れない」と感じる人のための明示的な閉じるボタン */
+  .sheet-close{position:absolute; top:10px; right:10px; width:28px; height:28px; border-radius:50%; border:none; background:var(--line2); color:var(--ink2); font-size:14px; line-height:1; cursor:pointer; z-index:1;}
   .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:12.5px; padding:9px 16px; border-radius:20px; z-index:60; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90%; text-align:center;}
   .toast.show{opacity:1;}
   .hint{font-size:11px; color:var(--ink3); margin-top:4px; line-height:1.5;}
@@ -1320,7 +1322,8 @@ function askConfirm(opts){
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">キャンセル</button>`);
 }
 function runConfirm(){ const f=window._confirmOk; window._confirmOk=null; closeSheet(); if(typeof f==='function') setTimeout(f,60); }
-function openSheet(html){ $('#sheet').innerHTML=html; $('#scrim').classList.add('show'); }
+// 全シート共通で右上に閉じるボタンを出す。背景タップに気づかない場合の逃げ道として、個々のシート側では実装しない
+function openSheet(html){ $('#sheet').innerHTML='<button class="sheet-close" onclick="closeSheet()" aria-label="閉じる">✕</button>'+html; $('#scrim').classList.add('show'); }
 function closeSheet(){ $('#scrim').classList.remove('show'); }
 function sheetAddStock(){
   openSheet(`<h3>追加</h3>
