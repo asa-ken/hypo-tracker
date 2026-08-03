@@ -252,13 +252,31 @@ describe('migrate', () => {
     expect(Array.isArray(out.themeMetricsMaster.snap)).toBe(true);
     expect(out.industrySectionMaster.length).toBeGreaterThan(0);
     expect(out.themeSectionMaster.length).toBeGreaterThan(0);
-    // 市場に効く指標(騰落レシオ)は業界には無い
+    // 市場に効く指標(騰落レシオ)は業界には無い。業界は財務指標で見る
     expect(out.marketMetricsMaster.snap).toContain('騰落レシオ(25日)');
     expect(out.industryMetricsMaster.snap).not.toContain('騰落レシオ(25日)');
+    expect(out.industryMetricsMaster.snap).toEqual(['PER', 'PBR', 'EBITDA', 'ROE', '営業利益率', '自己資本比率']);
     // 市場専用のカテゴリ(金融環境)は業界には無い
     const cats = m => m.map(c => c.cat);
     expect(cats(out.marketSectionMaster)).toContain('金融環境');
     expect(cats(out.industrySectionMaster)).not.toContain('金融環境');
+  });
+
+  // 業界の既定指標を差し替えたが、ユーザーが編集済みの設定は尊重する
+  test('業界の既定指標が旧既定のままなら新しい既定に差し替える', () => {
+    const db = {
+      stocks: [], hypotheses: [], reminders: [],
+      industryMetricsMaster: { snap: ['市場規模', '市場成長率(YoY)', '設備投資額'], hiddenSnap: [] },
+    };
+    expect(migrate(db).industryMetricsMaster.snap).toEqual(['PER', 'PBR', 'EBITDA', 'ROE', '営業利益率', '自己資本比率']);
+  });
+
+  test('業界の指標をユーザーが編集していれば差し替えない', () => {
+    const db = {
+      stocks: [], hypotheses: [], reminders: [],
+      industryMetricsMaster: { snap: ['市場規模', '独自に足した指標'], hiddenSnap: [] },
+    };
+    expect(migrate(db).industryMetricsMaster.snap).toEqual(['市場規模', '独自に足した指標']);
   });
 
   test('粒度が未設定の既存の市場カードは「市場」扱いにする', () => {
