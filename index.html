@@ -50,9 +50,24 @@
   .chip.red{background:var(--red-bg); color:var(--red-tx);}
   .chip.gray{background:var(--bg); color:var(--ink2); border:1px solid var(--line);}
   .muted{color:var(--ink3); font-size:12px;}
-  .lbl{font-size:11px; color:var(--ink3); font-weight:600; text-transform:none; letter-spacing:.02em; margin:16px 0 7px;}
+  /* 画面の区切り。以前は11pxのグレーで本文より弱く、どこからどこまでが一塊か読み取れなかった */
+  .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
   .lbl:first-child{margin-top:2px;}
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
+  /* 「対応が必要」など、いま見てほしいものだけ地色を変える。
+     全部が同じ白カードだと重要度の差が出ず、目がどこにも止まらない */
+  .card.attn{background:var(--navy-bg); border-color:#cfdde8;}
+  /* 一覧は「カードを積む」のではなく「1枚の枠に行を並べる」。
+     カード1件ごとに影と余白が付くと、件数が増えたときに全部が同じ強さで主張してしまう */
+  .list{background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:var(--sp3);}
+  .list-row{display:flex; align-items:center; justify-content:space-between; gap:var(--sp3); padding:11px 14px; min-height:44px; cursor:pointer; border-top:1px solid var(--line);}
+  .list-row:first-child{border-top:none;}
+  .list-row:active{background:var(--navy-bg);}
+  .list-row .lt{min-width:0; flex:1;}
+  .list-row .ttl{font-size:13px; font-weight:600; line-height:1.4;}
+  .list-row .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
+  .list-row .rt{display:flex; align-items:center; gap:var(--sp2); font-size:12px; color:var(--ink2); white-space:nowrap; flex:none;}
+  .list-row .arrow{color:var(--ink3); font-size:15px;}
   .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--line2); background:var(--card); color:var(--ink); border-radius:9px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; width:100%;}
   .btn:active{background:#f0f2f4;}
   .btn.pri{background:var(--navy); border-color:var(--navy); color:#fff;}
@@ -522,10 +537,11 @@ function renderHome(v){
   const pend=pendingHints();
   let h='';
   h+='<div class="lbl">対応が必要</div>';
-  if(todayRem.length) h+=`<div class="card"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">☀ 今日のまとめ確認をコピー</button></div><div style="margin-top:5px;font-size:13px">${esc(todayRem[0].title)} ほか</div></div>`;
+  // 「対応が必要」だけ地色を変えて前に出す。下の「今週の予定」は同じ白カードだと同格に見えてしまう
+  if(todayRem.length) h+=`<div class="card attn"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">☀ 今日のまとめ確認をコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
   // 取り込みで日付が入ったのにリマインダー未登録の注目ポイント。
   // 日付はリマインダーでしか管理しないので、ここで登録を促さないと予定として現れない
-  if(pend.length) h+=`<div class="card tap" onclick="openStock('${pend[0].stockId}')"><div class="row"><span class="chip amber">リマインド未登録 ${pend.length}件</span></div><div class="muted" style="margin-top:4px">日付つきの注目ポイントがあります: ${pend.slice(0,3).map(p=>esc((stock(p.stockId)?.name||'')+' '+p.remindHint.date)).join('、')}</div></div>`;
+  if(pend.length) h+=`<div class="card attn tap" onclick="openStock('${pend[0].stockId}')"><div class="row"><span class="chip amber">リマインド未登録 ${pend.length}件</span><span class="arrow" style="color:var(--ink3);font-size:15px">›</span></div><div class="muted" style="margin-top:4px">日付つきの注目ポイントがあります: ${pend.slice(0,3).map(p=>esc((stock(p.stockId)?.name||'')+' '+p.remindHint.date)).join('、')}</div></div>`;
   if(!todayRem.length&&!pend.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
   // 予定はリマインダーだけを載せる。
   // 以前は「注目イベント」も並べていたが、リマインダーの日付が「次に通知する日」なのに対し
@@ -535,8 +551,8 @@ function renderHome(v){
   items.sort((a,b)=>a.d-b.d);
   h+='<div class="lbl">今週の予定</div>';
   if(!items.length) h+='<div class="muted">予定はありません</div>';
-  items.slice(0,6).forEach(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
-    h+=`<div class="card tap" onclick="${it.act}"><div class="row"><span style="font-size:13px;font-weight:600">🔔 ${esc(it.label)}</span><span class="muted">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div><div class="muted" style="margin-top:2px">次回の通知</div></div>`; });
+  else h+='<div class="list">'+items.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
+    return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})<span class="arrow">›</span></span></div>`; }).join('')+'</div>';
   v.innerHTML=h;
 }
 
@@ -549,34 +565,36 @@ function renderAnalysis(v){
   let h=`<div class="seg">${sorts.map(k=>`<button class="${anaSort===k?'on':''}" onclick="anaSort='${k}';render()">${k}</button>`).join('')}</div>`;
 
   if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
-  const card=(s)=>{ const hy=hyposOf(s.id).length;
-    return `<div class="card tap" onclick="openStock('${s.id}')">
-      <div class="row"><h2 class="blk">${esc(s.name)}</h2>${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}</div>
-      <div class="row" style="margin-top:3px"><span class="muted">${esc(s.code)} · ${esc(s.kind)}</span></div>
+  // 1件ずつを独立カードにすると全部が同じ強さで並ぶので、区分ごとに1枚の枠へ行として並べる
+  // 保有/ウォッチで見出しを分ける並びでは種別を行に出さない(見出しと重複する)。
+  // 名前順のときだけ種別を添える
+  const row=(s)=>{ const hy=hyposOf(s.id).length;
+    const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
+    return `<div class="list-row" onclick="openStock('${s.id}')">
+      <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div></div>
+      <span class="rt">${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}<span class="arrow">›</span></span>
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
-  const mcard=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
-    return `<div class="card tap" onclick="openStock('${s.id}')">
-      <div class="row"><h2 class="blk">◆ ${esc(s.name)}</h2><span class="chip gray">${esc(scopeOf(s))}</span></div>
-      ${th?`<div class="muted" style="margin-top:3px">注目: ${esc(th)}</div>`:''}
+  const mrow=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+    return `<div class="list-row" onclick="openStock('${s.id}')">
+      <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${th?`<div class="meta">注目: ${esc(th)}</div>`:''}</div>
+      <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span><span class="arrow">›</span></span>
     </div>`; };
+  const group=(label,rows)=>`<div class="lbl">${label}</div>`+(rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
   if(mkts.length){
     // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
-    h+=`<div class="lbl">市場・業界・テーマ (${mkts.length})</div>`;
-    SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>h+=mcard(s)));
+    const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
+    h+=group(`市場・業界・テーマ (${mkts.length})`, rows);
   }
   if(anaSort==='保有優先'){
     [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
       const list=DB.stocks.filter(s=>s.kind===k);
-      h+=`<div class="lbl">${label} (${list.length})</div>`;
-      if(!list.length) h+='<div class="muted" style="padding:2px 2px 8px">なし</div>';
-      list.forEach(s=>h+=card(s));
+      h+=group(`${label} (${list.length})`, list.map(row));
     });
   } else {
     let list=DB.stocks.filter(s=>!isMkt(s));
     list.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
-    h+=`<div class="lbl">銘柄 (${list.length})</div>`;
-    list.forEach(s=>h+=card(s));
+    h+=group(`銘柄 (${list.length})`, list.map(row));
   }
   v.innerHTML=h;
 }
@@ -1231,19 +1249,22 @@ function renderReminder(v){
   let h='';
   if(filt) h+=`<div class="banner">${esc(stock(filt)?.name||'')} のリマインダーを表示中 · <span style="text-decoration:underline;cursor:pointer" onclick="go('reminder')">すべて表示</span></div>`;
   const active=list.filter(r=>!r.paused), paused=list.filter(r=>r.paused);
-  if(active.length){ h+='<div class="lbl">有効</div>';
-    active.forEach(r=>{ h+=remCard(r); }); }
+  if(active.length) h+='<div class="lbl">有効</div><div class="list">'+active.map(remCard).join('')+'</div>';
   if(!list.length) h+='<div class="empty"><div class="big">リマインダーはありません</div><div>右上の「＋ 登録」から作成できます。</div></div>';
-  if(paused.length){ h+='<div class="lbl">休止中</div>'; paused.forEach(r=>h+=remCard(r)); }
+  if(paused.length) h+='<div class="lbl">休止中</div><div class="list">'+paused.map(remCard).join('')+'</div>';
   v.innerHTML=h;
 }
 function remCard(r){
   const cat={'テクニカル':'navy','報道確認':'gray','決算プレビュー':'amber','需給確認':'red'}[r.cat]||'gray';
-  return `<div class="card tap" onclick="openReminder('${r.id}')">
-    <div class="row"><span class="chip ${cat}">${esc(r.cat)}</span><span class="muted">${esc(r.freq)} ${esc((r.times||[]).join(','))}</span></div>
-    ${r.endDate&&parseD(r.endDate)<new Date()?'<div class="muted" style="font-size:11px;margin-top:2px">終了日を過ぎています</div>':''}
-    <h2 class="blk" style="margin-top:5px">${esc(r.title)}</h2>
-    <div class="muted" style="margin-top:2px">${esc(stock(r.stockId)?.name||'')} · ${r.paused?'休止中':(r.startDate&&parseD(r.startDate)>new Date()?'開始待ち('+esc(r.startDate)+'〜) · 次回 ':'次回 ')+esc(r.nextFire||'—')}</div>
+  const sub=esc(stock(r.stockId)?.name||'')+' · '+(r.paused?'休止中':(r.startDate&&parseD(r.startDate)>new Date()?'開始待ち('+esc(r.startDate)+'〜) · 次回 ':'次回 ')+esc(r.nextFire||'—'));
+  return `<div class="list-row" style="align-items:flex-start" onclick="openReminder('${r.id}')">
+    <div class="lt">
+      <div class="row" style="justify-content:flex-start;gap:6px"><span class="chip ${cat}">${esc(r.cat)}</span><span class="meta">${esc(r.freq)} ${esc((r.times||[]).join(','))}</span></div>
+      <div class="ttl" style="margin-top:4px">${esc(r.title)}</div>
+      <div class="meta">${sub}</div>
+      ${r.endDate&&parseD(r.endDate)<new Date()?'<div class="meta">終了日を過ぎています</div>':''}
+    </div>
+    <span class="rt" style="padding-top:4px"><span class="arrow">›</span></span>
   </div>`;
 }
 function openReminder(id){
