@@ -648,11 +648,11 @@ function blkSections(s){
   const master=masterFor(s);
   master.filter(c=>c.on).forEach((c,ci)=>{
     const filled=filledCatCount(s,c.cat,master);
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':''}</span></div><div class="b" style="padding:0">`;
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span><span class="m">${filled}/${c.subs.length} 項目</span></div><div class="b" style="padding:0">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
-        <span class="row-right"><span class="m">${val?esc(val.d.slice(5)):''}</span><span class="arrow">›</span></span>
+        <span class="row-right"><span class="m">${val?esc(val.d.replace(/^\d{2}/,'')):''}</span><span class="arrow">›</span></span>
       </div>`; });
     h+=`</div></div>`;
   });
