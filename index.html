@@ -580,9 +580,14 @@ function blkChips(hy){
 }
 function blkTheme(s){
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+  // 市場・業界・テーマは「どの指数・ETFを指しているか」で数値の意味が変わるので、
+  // 基準を1つ決められるようにする(例: AIというテーマ → グローバルX AI&ビッグデータETF)
+  const bm=isMkt(s)?(s.benchmark||''):null;
   return `<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetTheme('${s.id}')">
     <div class="row"><span class="muted" style="font-size:10px">注目テーマ</span><span class="muted" style="font-size:10px">タップで編集</span></div>
-    <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(会話の切り口を決められます)'}</div></div>`;
+    <div style="font-size:13px;font-weight:600;margin-top:2px;${theme?'':'color:var(--ink3);font-weight:400'}">${theme?esc(theme):'未設定(会話の切り口を決められます)'}</div>
+    ${bm!==null?`<div class="row" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--line)"><span class="muted" style="font-size:10px">代表指数・ETF</span></div>
+    <div style="font-size:12.5px;margin-top:1px;${bm?'':'color:var(--ink3)'}">${bm?esc(bm):'未設定(決めるとAIの答える数値がぶれません)'}</div>`:''}</div>`;
 }
 // 指標グリッド。6件を超える場合は横スワイプページャーで送る
 function blkMetrics(s, label, keys, editAction, pagerId){
@@ -660,7 +665,7 @@ function renderMarketDetail(v){
   const keys=metricsMasterFor(s).snap;
   if(keys.length) h+=blkMetrics(s,METLBL[sc],keys,'sheetMarketMetricsMaster()','mktmetrics');
   else h+=lblWithEdit(METLBL[sc],'sheetMarketMetricsMaster()','margin-top:2px')+'<div class="muted" style="padding:0 2px 4px">まだありません。会話を取り込むと自動で増えます。</div>';
-  h+='<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。</div>';
+  h+=`<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。${s.benchmark?`基準: ${esc(s.benchmark)}`:''}</div>`;
   h+=blkSections(s);
   h+=blkHypos(s,hy);
   // 市場の話は最終的に「自分の銘柄がどうなるか」に着地するので、保有・ウォッチへの導線を置く
@@ -695,7 +700,7 @@ function sheetStockMenu(sid){
       <div class="hint">${esc(SCOPE_INFO[scopeOf(s)].desc)} 切り替えると指標・分析項目の既定が変わります(入力済みの内容は残ります)。</div></label>
       <button class="btn" onclick="closeSheet();sheetMarketMetricsMaster()">⚙ 指標・分析項目の設定(${esc(scopeOf(s))}用)</button>`
          :`<button class="btn" onclick="closeSheet();sheetMetricsMaster()">⚙ 収容指標・業績分析項目の設定</button>`}
-    <button class="btn" style="margin-top:8px" onclick="closeSheet();sheetTheme('${sid}')">注目テーマを編集</button>
+    <button class="btn" style="margin-top:8px" onclick="closeSheet();sheetTheme('${sid}')">${mkt?'注目テーマ・代表指数を編集':'注目テーマを編集'}</button>
     <button class="btn danger" style="margin-top:16px" onclick="delStock('${sid}')">${mkt?'このカードを削除':'この銘柄を削除'}</button>
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">閉じる</button>`);
 }
@@ -704,14 +709,27 @@ function setScope(sid, sc){
   const s=stock(sid); if(!s||!SCOPES.includes(sc)) return;
   s.scope=sc; save(); render(); sheetStockMenu(sid); toast(sc+'に変更しました');
 }
+const BM_PH={'市場':'例: TOPIX / S&P500','業界':'例: 東証業種別指数(電気機器) / SOX指数','テーマ':'例: グローバルX AI&ビッグデータETF (2638)'};
 function sheetTheme(sid){
+  const s=stock(sid); const mkt=s&&isMkt(s);
   const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[sid]||'';
-  openSheet(`<h3>注目テーマ</h3>
-    <div class="muted" style="margin-bottom:10px">この銘柄を見るときの切り口。「聞くことが思いつかない時は」で作る質問文やリマインダー設定に反映されます。</div>
+  const bm=(s&&s.benchmark)||'';
+  openSheet(`<h3>${mkt?'注目テーマ・代表指数':'注目テーマ'}</h3>
+    <div class="muted" style="margin-bottom:10px">${mkt?'この':'この銘柄を'}見るときの切り口。「聞くことが思いつかない時は」で作る質問文やリマインダー設定に反映されます。</div>
     <label class="fld"><span class="t">テーマ</span><input id="th_in" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術"></label>
+    ${mkt?`<label class="fld"><span class="t">代表指数・ETF(任意)</span>
+      <input id="th_bm" value="${esc(bm)}" placeholder="${esc(BM_PH[scopeOf(s)]||'')}">
+      <div class="hint">AIに数値を聞くときの基準になります。「AI」のように広いテーマでも、どの指数・ETFを指すか決まっていれば答えがぶれません。</div></label>`:''}
     <button class="btn pri" onclick="doSaveTheme('${sid}')">保存</button>`);
 }
-function doSaveTheme(sid){ const v=$('#th_in').value.trim(); if(!DB.askPrefs.themes)DB.askPrefs.themes={}; DB.askPrefs.themes[sid]=v; save(); closeSheet(); render(); toast(v?'テーマを保存しました':'テーマを削除しました'); }
+function doSaveTheme(sid){
+  const v=$('#th_in').value.trim();
+  if(!DB.askPrefs.themes)DB.askPrefs.themes={};
+  DB.askPrefs.themes[sid]=v;
+  const bmEl=$('#th_bm'), s=stock(sid);
+  if(bmEl&&s){ const b=bmEl.value.trim(); if(b) s.benchmark=b; else delete s.benchmark; }
+  save(); closeSheet(); render(); toast('保存しました');
+}
 function delStock(sid){
   const s=stock(sid); const hy=hyposOf(sid).length, rm=remOf(sid).length;
   let msg=`「${s.name}」を削除します。`;
@@ -1780,6 +1798,8 @@ function genOrderNew(sid){
   const head=s?(isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`):'# 銘柄またはテーマ: (会話の中で対象を明記してください)';
   let p=`以下の項目を調査し、指定フォーマットで回答してください。\n`;
   if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
+  // 基準となる指数・ETFを指定できると、広いテーマでもAIの数値がぶれない
+  if(s&&isMkt(s)&&s.benchmark) p+=`\n■基準とする指数・ETF: ${s.benchmark}\n指標や水準は、これを基準に答えてください。別の対象で答える場合は、何を見たかを本文に書いてください。\n`;
   p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典・URL・確信度は書かない。不確かなことは無理に書かず、分からない項目は省く\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
   if(s && !isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
