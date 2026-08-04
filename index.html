@@ -35,7 +35,10 @@
   /* scroll body */
   /* 横方向のドラッグはアプリ側(詳細画面の戻るスワイプ)で使うので、ブラウザに渡さない。
      横スクロールする部品(.pages / .xscroll)だけ touch-action を戻す */
-  .body{flex:1; overflow-y:auto; padding:14px 16px 90px; touch-action:pan-y pinch-zoom;}
+  .body{flex:1; position:relative; z-index:1; background:var(--app); overflow-y:auto; padding:14px 16px 90px; touch-action:pan-y pinch-zoom;}
+  /* 戻るスワイプの下敷き。#view と同じ位置・大きさに JS で合わせる */
+  .back-prev{position:absolute; left:0; right:0; z-index:0; display:none; overflow:hidden; padding:14px 16px 90px; background:var(--app); opacity:.5; pointer-events:none;}
+  .back-prev.show{display:block;}
   .xscroll{overflow-x:auto; touch-action:manipulation;}
   /* bottom tab */
   .tabbar{position:sticky; bottom:0; z-index:20; background:var(--card); border-top:1px solid var(--line); display:flex; padding:6px 4px 8px;}
@@ -60,7 +63,7 @@
   /* 開閉できる区切り。見出し全体がタップ領域になる */
   .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
   .lbl.grp:active{color:var(--navy);}
-  .lbl.grp .caret{color:var(--ink3); font-size:15px; transition:transform .15s;}
+  .lbl.grp .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
   .lbl.grp .caret.closed{transform:rotate(-90deg);}
   @media (prefers-reduced-motion: reduce){ .lbl.grp .caret{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
@@ -203,6 +206,8 @@
       <button class="act" id="topMenu" style="display:none;font-size:17px;line-height:1">☰</button>
     </div>
   </div>
+  <!-- 戻るスワイプ中に、送り出される本文の下から見える「戻り先の画面」。表示専用 -->
+  <div class="back-prev" id="backPrev"><div id="backPrevInner"></div></div>
   <div class="body" id="view"></div>
   <div class="tabbar">
     <button data-tab="home" class="on" onclick="go('home')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>ホーム</button>
@@ -541,8 +546,34 @@ function go(tab){
 function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
 function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
 // 詳細画面から一覧へ戻る。ヘッダーの「← 戻る」と画面端スワイプで同じ動きにする
-function backFromDetail(){ STATE.stockId=null; STATE.hypoAll=false; render(); $('#view').scrollTop=0; }
-function openStock(id){ if(STATE.stockId!==id) STATE.hypoAll=false; STATE.stockId=id; render(); $('#view').scrollTop=0; }
+function backFromDetail(){
+  STATE.stockId=null; STATE.hypoAll=false; render();
+  // 一覧のどこを見ていたかに戻す。先頭に飛ばされると、長い一覧では探し直しになる
+  setViewScroll(STATE._prevScroll||0);
+  hidePrevUnder();
+}
+// 戻るスワイプ中だけ、送り出される本文の下に戻り先の画面を敷く。
+// シートを閉じるときに背景が透けて見えるのと同じ手触りにするため
+function showPrevUnder(){
+  const bp=$('#backPrev'), view=$('#view');
+  bp.style.top=view.offsetTop+'px'; bp.style.height=view.offsetHeight+'px';
+  $('#backPrevInner').innerHTML=STATE._prevHtml||'';
+  // 下敷きはドキュメント上の #view と同じ位置に置いてあるので、
+  // 「戻ったときに見えるはずの位置」が窓に来るように中身をずらす
+  $('#backPrevInner').style.transform=`translateY(${viewScroll()-(STATE._prevScroll||0)}px)`;
+  bp.classList.add('show');
+}
+function hidePrevUnder(){ $('#backPrev').classList.remove('show'); $('#backPrevInner').innerHTML=''; }
+// .phone は min-height:100vh の縦フレックスなので #view は中身の高さまで伸び、
+// 実際にスクロールしているのはドキュメント側。#view.scrollTop を触っても何も起きない
+function viewScroll(){ const e=document.scrollingElement; return e?e.scrollTop:(window.pageYOffset||0); }
+function setViewScroll(y){ const e=document.scrollingElement; if(e) e.scrollTop=y; $('#view').scrollTop=y; }
+function openStock(id){
+  // 一覧から詳細に入るときだけ、直前の画面を控える(詳細から詳細へ渡り歩いても最初の一覧を保つ)
+  if(!STATE.stockId){ STATE._prevHtml=$('#view').innerHTML; STATE._prevScroll=viewScroll(); }
+  if(STATE.stockId!==id) STATE.hypoAll=false;
+  STATE.stockId=id; render(); setViewScroll(0);
+}
 
 function render(){
   refreshFires();
@@ -584,6 +615,10 @@ let anaSort='保有優先';
 // 一覧で畳んでいる区分。リロードしても畳んだままにしたいのでDBに持たせる
 function anaClosedList(){ const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]}); if(!Array.isArray(u.anaClosed)) u.anaClosed=[]; return u.anaClosed; }
 function anaGroupClosed(key){ return anaClosedList().includes(key); }
+// 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く
+function caretSvg(closed){
+  return `<svg class="caret${closed?' closed':''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+}
 function toggleAnaGroup(key){
   const a=anaClosedList(); const i=a.indexOf(key);
   if(i<0) a.push(key); else a.splice(i,1);
@@ -616,7 +651,7 @@ function renderAnalysis(v){
   const group=(key,label,rows)=>{
     const closed=anaGroupClosed(key);
     return `<div class="lbl grp" onclick="toggleAnaGroup('${escArg(key)}')">
-        <span>${label}</span><span class="caret${closed?' closed':''}">▾</span>
+        <span>${label}</span>${caretSvg(closed)}
       </div>`
       +(closed?'':(rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>'));
   };
@@ -1693,7 +1728,7 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
 // 帯を重ねると、その下にあるメモ行・分析項目のタップや指標ページャーの横スワイプを奪ってしまうため
 (function(){
   const THRESH=70, DECIDE=10, START_RATIO=.3;
-  const view=$('#view'), phone=document.querySelector('.phone');
+  const view=$('#view');
   let sx=0, sy=0, state='idle'; // idle|pending|swipe
   view.addEventListener('touchstart', e=>{
     state='idle';
@@ -1713,16 +1748,23 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
       if(Math.abs(dx)<DECIDE && Math.abs(dy)<DECIDE) return;       // タップか縦スクロールかまだ様子見
       if(!(dx>0 && Math.abs(dx)>Math.abs(dy))){ state='idle'; return; } // 縦スクロールと左方向は邪魔しない
       state='swipe';
+      showPrevUnder();
+      view.style.boxShadow='-6px 0 18px rgba(20,30,40,.16)';
     }
-    phone.style.transform=`translateX(${Math.max(0,dx)}px)`;
+    view.style.transform=`translateX(${Math.max(0,dx)}px)`;
     if(e.cancelable) e.preventDefault();
   }, {passive:false});
   function endSwipe(){
     if(state==='swipe'){
-      const m=phone.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
-      phone.style.transition='transform .15s ease-out'; phone.style.transform='translateX(0)';
-      setTimeout(()=>{ phone.style.transition=''; phone.style.transform=''; }, 150);
-      if(dx>THRESH) backFromDetail();
+      const m=view.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
+      const back=dx>THRESH;
+      view.style.transition='transform .15s ease-out';
+      // 戻るときは画面の外まで送り出してから差し替える。途中で止めたときだけ元の位置に戻す
+      view.style.transform=back?`translateX(${view.offsetWidth}px)`:'translateX(0)';
+      setTimeout(()=>{
+        view.style.transition=''; view.style.transform=''; view.style.boxShadow='';
+        if(back) backFromDetail(); else hidePrevUnder();
+      }, 150);
     }
     state='idle';
   }
