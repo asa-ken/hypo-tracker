@@ -33,7 +33,10 @@
   .top .sub{font-size:11px; color:var(--ink3); font-weight:400;}
   .top .act{font-size:13px; color:var(--navy); font-weight:600; cursor:pointer; border:none; background:none; display:inline-flex; align-items:center; min-height:44px; padding:0 2px;}
   /* scroll body */
-  .body{flex:1; overflow-y:auto; padding:14px 16px 90px;}
+  /* 横方向のドラッグはアプリ側(詳細画面の戻るスワイプ)で使うので、ブラウザに渡さない。
+     横スクロールする部品(.pages / .xscroll)だけ touch-action を戻す */
+  .body{flex:1; overflow-y:auto; padding:14px 16px 90px; touch-action:pan-y pinch-zoom;}
+  .xscroll{overflow-x:auto; touch-action:manipulation;}
   /* bottom tab */
   .tabbar{position:sticky; bottom:0; z-index:20; background:var(--card); border-top:1px solid var(--line); display:flex; padding:6px 4px 8px;}
   .tabbar button{flex:1; border:none; background:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:4px; cursor:pointer; color:var(--ink3); font-size:11px; font-weight:600;}
@@ -123,7 +126,7 @@
   .pager-top .ti{font-size:15px; font-weight:700;}
   .pager-top .cat{font-size:11px; color:var(--ink3); margin-top:1px;}
   .pages-wrap{position:relative;}
-  .pages{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .pages{display:flex; overflow-x:auto; touch-action:manipulation; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
   .pages::-webkit-scrollbar{display:none;}
   .page{flex:0 0 100%; scroll-snap-align:start; padding:14px 20px; min-height:140px;}
   .page.tight{padding:2px 0 4px; min-height:0;}
@@ -527,6 +530,8 @@ function go(tab){
 }
 function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
 function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
+// 詳細画面から一覧へ戻る。ヘッダーの「← 戻る」と画面端スワイプで同じ動きにする
+function backFromDetail(){ STATE.stockId=null; STATE.hypoAll=false; render(); $('#view').scrollTop=0; }
 function openStock(id){ if(STATE.stockId!==id) STATE.hypoAll=false; STATE.stockId=id; render(); $('#view').scrollTop=0; }
 
 function render(){
@@ -684,7 +689,7 @@ function blkLinks(s){
 function detailHeader(s, sub){
   $('#topTitle').textContent=s.name;
   $('#topSub').textContent=sub;
-  const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=()=>{STATE.stockId=null;render();};
+  const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=backFromDetail;
   const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
 }
 
@@ -813,7 +818,7 @@ function renderTrend(s){
     else { h+=pagerBlock('trendchart', inds.map(chartHtml), (idx)=>`${idx+1} / ${inds.length}`, 'tight'); }
   }
   // table
-  h+='<div style="overflow-x:auto"><table style="white-space:nowrap"><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
+  h+='<div class="xscroll"><table style="white-space:nowrap"><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
   DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name]; if(!o)return;
     h+=`<tr><td>${esc(t.name)}</td>`+ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')+'</tr>'; });
   h+='</table></div></div>';
@@ -1070,7 +1075,7 @@ function parseAndPreview(){
     }
     h+='<div class="lbl">読み込みプレビュー</div>';
     h+='<div class="difflegend"><span>セルをタップで全文表示</span><span class="d-del">削除される部分</span><span class="d-add">新しく追加される部分</span></div>';
-    h+='<div style="overflow-x:auto"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
+    h+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
       const afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
@@ -1656,6 +1661,47 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
     }
     state='idle'; tapTarget=null;
   }, {passive:true});
+})();
+// 詳細画面(銘柄・市場)を、画面左側からの右スワイプで閉じて一覧に戻す。
+// シートのエッジスワイプ(#edgeSwipeZone)と違い、こちらは帯を重ねず #view 上で直接判定する。
+// 帯を重ねると、その下にあるメモ行・分析項目のタップや指標ページャーの横スワイプを奪ってしまうため
+(function(){
+  const THRESH=70, DECIDE=10, START_RATIO=.3;
+  const view=$('#view'), phone=document.querySelector('.phone');
+  let sx=0, sy=0, state='idle'; // idle|pending|swipe
+  view.addEventListener('touchstart', e=>{
+    state='idle';
+    if(!STATE.stockId) return;                                    // 詳細画面以外では効かせない
+    if($('#scrim').classList.contains('show')) return;             // シートが開いている間はシート側の担当
+    if(e.touches.length!==1) return;
+    const t=e.touches[0];
+    if(t.clientX > window.innerWidth*START_RATIO) return;          // 左30%から始まったものだけ拾う
+    const xs=e.target.closest && e.target.closest('.pages,.xscroll');
+    if(xs && xs.scrollWidth>xs.clientWidth+2) return;              // 実際に横スクロールする部品の中では譲る
+    sx=t.clientX; sy=t.clientY; state='pending';
+  }, {passive:true});
+  view.addEventListener('touchmove', e=>{
+    if(state==='idle') return;
+    const t=e.touches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
+    if(state==='pending'){
+      if(Math.abs(dx)<DECIDE && Math.abs(dy)<DECIDE) return;       // タップか縦スクロールかまだ様子見
+      if(!(dx>0 && Math.abs(dx)>Math.abs(dy))){ state='idle'; return; } // 縦スクロールと左方向は邪魔しない
+      state='swipe';
+    }
+    phone.style.transform=`translateX(${Math.max(0,dx)}px)`;
+    if(e.cancelable) e.preventDefault();
+  }, {passive:false});
+  function endSwipe(){
+    if(state==='swipe'){
+      const m=phone.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
+      phone.style.transition='transform .15s ease-out'; phone.style.transform='translateX(0)';
+      setTimeout(()=>{ phone.style.transition=''; phone.style.transform=''; }, 150);
+      if(dx>THRESH) backFromDetail();
+    }
+    state='idle';
+  }
+  view.addEventListener('touchend', endSwipe, {passive:true});
+  view.addEventListener('touchcancel', endSwipe, {passive:true});
 })();
 function sheetAddStock(){
   openSheet(`<h3>追加</h3>
