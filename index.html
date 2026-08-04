@@ -57,6 +57,12 @@
   /* 画面の区切り。以前は11pxのグレーで本文より弱く、どこからどこまでが一塊か読み取れなかった */
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
   .lbl:first-child{margin-top:2px;}
+  /* 開閉できる区切り。見出し全体がタップ領域になる */
+  .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
+  .lbl.grp:active{color:var(--navy);}
+  .lbl.grp .caret{color:var(--ink3); font-size:15px; transition:transform .15s;}
+  .lbl.grp .caret.closed{transform:rotate(-90deg);}
+  @media (prefers-reduced-motion: reduce){ .lbl.grp .caret{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
   /* 「対応が必要」など、いま見てほしいものだけ地色を変える。
      全部が同じ白カードだと重要度の差が出ず、目がどこにも止まらない */
@@ -289,6 +295,8 @@ function seed(){
       {cat:'自分の銘柄への影響', on:true, subs:['保有・ウォッチ銘柄への影響']}
     ],
     askPrefs:{mode:'new', level:'標準', picks:{}, themes:{}},
+    // 一覧の見た目の好み。閉じている区分の名前を持つ(件数が増えると縦に長くなるため畳めるようにした)
+    uiPrefs:{anaClosed:[]},
     stocks:[
       {id:'5803', name:'フジクラ', code:'5803', kind:'保有',
        metrics:{'PER(予想)':{v:'36.2',unit:'',d:'2026/7/13'},
@@ -342,6 +350,8 @@ function migrate(db){
   }
   if(!db.askPrefs) db.askPrefs={mode:'new', level:'標準', picks:{}, themes:{}};
   if(!db.askPrefs.themes) db.askPrefs.themes={};
+  if(!db.uiPrefs) db.uiPrefs={anaClosed:[]};
+  if(!Array.isArray(db.uiPrefs.anaClosed)) db.uiPrefs.anaClosed=[];
   // 回数(count)→終了日(endDate)へ移行。回数は概念ごと廃止
   (db.reminders||[]).forEach(r=>{
     if(r.endDate===undefined) r.endDate=null;
@@ -571,6 +581,14 @@ function renderHome(v){
 
 //////////////////// ANALYSIS list ////////////////////
 let anaSort='保有優先';
+// 一覧で畳んでいる区分。リロードしても畳んだままにしたいのでDBに持たせる
+function anaClosedList(){ const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]}); if(!Array.isArray(u.anaClosed)) u.anaClosed=[]; return u.anaClosed; }
+function anaGroupClosed(key){ return anaClosedList().includes(key); }
+function toggleAnaGroup(key){
+  const a=anaClosedList(); const i=a.indexOf(key);
+  if(i<0) a.push(key); else a.splice(i,1);
+  save(); render();
+}
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
   const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
@@ -593,21 +611,29 @@ function renderAnalysis(v){
       <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${th?`<div class="meta">注目: ${esc(th)}</div>`:''}</div>
       <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span><span class="arrow">›</span></span>
     </div>`; };
-  const group=(label,rows)=>`<div class="lbl">${label}</div>`+(rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
+  // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
+  // 下の区分にたどり着くまで延々スクロールすることになるため
+  const group=(key,label,rows)=>{
+    const closed=anaGroupClosed(key);
+    return `<div class="lbl grp" onclick="toggleAnaGroup('${escArg(key)}')">
+        <span>${label}</span><span class="caret${closed?' closed':''}">▾</span>
+      </div>`
+      +(closed?'':(rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>'));
+  };
   if(mkts.length){
     // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
     const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
-    h+=group(`市場・業界・テーマ (${mkts.length})`, rows);
+    h+=group('市場', `市場・業界・テーマ (${mkts.length})`, rows);
   }
   if(anaSort==='保有優先'){
     [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
       const list=DB.stocks.filter(s=>s.kind===k);
-      h+=group(`${label} (${list.length})`, list.map(row));
+      h+=group(k, `${label} (${list.length})`, list.map(row));
     });
   } else {
     let list=DB.stocks.filter(s=>!isMkt(s));
     list.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
-    h+=group(`銘柄 (${list.length})`, list.map(row));
+    h+=group('銘柄', `銘柄 (${list.length})`, list.map(row));
   }
   v.innerHTML=h;
 }

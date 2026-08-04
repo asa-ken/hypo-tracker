@@ -234,6 +234,22 @@ describe('migrate', () => {
     expect(out.metricsMaster.hiddenSnap).toEqual([]);
   });
 
+  // 一覧の区分をどこまで畳んでいるかは端末に残す
+  test('uiPrefs が無い旧データに空の anaClosed を補完する', () => {
+    const out = migrate({ stocks: [], hypotheses: [], reminders: [] });
+    expect(out.uiPrefs.anaClosed).toEqual([]);
+  });
+
+  test('畳んでいる区分は保持する', () => {
+    const out = migrate({ stocks: [], hypotheses: [], reminders: [], uiPrefs: { anaClosed: ['保有'] } });
+    expect(out.uiPrefs.anaClosed).toEqual(['保有']);
+  });
+
+  test('anaClosed が壊れていても配列に直す', () => {
+    const out = migrate({ stocks: [], hypotheses: [], reminders: [], uiPrefs: { anaClosed: '保有' } });
+    expect(out.uiPrefs.anaClosed).toEqual([]);
+  });
+
   // 市場・テーマは銘柄とは別の指標マスターを持つ(PERと騰落レシオを混ぜない)
   test('市場用の指標マスターが無い旧データに既定値を補完する', () => {
     const db = { stocks: [], hypotheses: [], reminders: [] };
