@@ -635,6 +635,9 @@ function blkMetrics(s, label, keys, editAction, pagerId){
     const pages=chunks.map(chunk=>`<div class="metric">${chunk.map(k=>metricCellHtml(s,k)).join('')}</div>`);
     h+=pagerBlock(pagerId, pages, (idx,total)=>`指標 ${idx+1}/${total}`, 'tight');
   }
+  // 1つも埋まっていないときだけ、埋め方を1行だけ添える。
+  // セルごとに「未取得」と書くと、新規カードを開くたびに何度も未完了を突きつけることになる
+  if(keys.length && keys.every(k=>!s.metrics[k])) h+='<div class="hint" style="margin-top:6px">会話を取り込むと、ここに数字が入ります。</div>';
   return h;
 }
 // カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く
@@ -643,11 +646,11 @@ function blkSections(s){
   const master=masterFor(s);
   master.filter(c=>c.on).forEach((c,ci)=>{
     const filled=filledCatCount(s,c.cat,master);
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':'未取得'}</span></div><div class="b" style="padding:0">`;
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span><span class="m">${filled?filled+'/'+c.subs.length+' 項目':''}</span></div><div class="b" style="padding:0">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
-        <span class="row-right"><span class="m">${val?esc(val.d.slice(5)):'未取得'}</span><span class="arrow">›</span></span>
+        <span class="row-right"><span class="m">${val?esc(val.d.slice(5)):''}</span><span class="arrow">›</span></span>
       </div>`; });
     h+=`</div></div>`;
   });
@@ -734,7 +737,7 @@ function metricCellHtml(s,k){
   const m=s.metrics[k]; const miss=!m;
   // 「要更新」の判定はせず、いつ時点の数字かを事実として見せる。
   // 何年のものか分かるよう年(下2桁)まで出す(四半期開示は数か月前の日付が正常なため)
-  return `<div class="m"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:11px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'未取得':esc(m.d.replace(/^\d{2}/,''))}</div></div>`;
+  return `<div class="m"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:11px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'':esc(m.d.replace(/^\d{2}/,''))}</div></div>`;
 }
 function sheetStockMenu(sid){
   const s=stock(sid); if(!s) return;
@@ -792,6 +795,8 @@ function renderTrend(s){
   const tr=s.trend; const inds=DB.metricsMaster.trend.filter(t=>t.graph&&tr[t.name]);
   const years=new Set(); Object.values(tr).forEach(o=>Object.keys(o).forEach(k=>{if(k!=='unit')years.add(k);}));
   const ys=[...years];
+  // 1年分も無いときは、見出しだけの空テーブルが出て「壊れている」ように見えるので出さない
+  if(!ys.length) return '<div class="hint" style="margin:0 0 4px">売上高・営業利益などを年度つきで取り込むと、ここにグラフと表が出ます。</div>';
   let h='<div class="card" style="padding:11px 12px">';
   // 棒グラフ(グラフ対象指標が複数あれば横スワイプページャーで切り替え)
   if(inds.length){
@@ -819,7 +824,7 @@ function renderImport(v){
   const sel=STATE.askStockId||'';
   const s=sel?stock(sel):null;
   let h='';
-  if(!DB.stocks.length){ v.innerHTML='<div class="empty"><div class="big">銘柄がありません</div><div>「企業分析」の右上「＋ 追加」から登録してください。</div></div>'; return; }
+  if(!DB.stocks.length){ v.innerHTML='<div class="empty"><div class="big">まだカードがありません</div><div>「市場・銘柄分析」の右上「＋ 追加」から登録してください。</div></div>'; return; }
   if(s){
     h+=`<div class="banner" style="margin-bottom:11px">対象: ${esc(s.name)}(銘柄詳細から開いたため自動で設定されています)</div>`;
   }
@@ -1775,7 +1780,7 @@ function sheetAnalysisItem(sid,su){
   const s=stock(sid); const val=s.sections[su]; const det=(val&&val.details)||[];
   const cat=masterFor(s).find(c=>c.subs.includes(su));
   const pages=[`<span class="kicker">概要</span>
-    <div class="txt">${val?esc(val.t):'<span style="color:var(--ink3)">未取得</span>'}</div>
+    <div class="txt">${val?esc(val.t):'<span style="color:var(--ink3)">ここはまだ空です。AIに聞いた内容を取り込むと要点が入ります。</span>'}</div>
     ${val?`<div class="meta"><span>基準日: ${esc(val.d)}</span></div>`:''}`];
   det.forEach((dd,di)=>{
     pages.push(`<span class="kicker detail">詳細 ${di+1}${dd.title?' ・ '+esc(dd.title):''}</span>
@@ -1805,7 +1810,7 @@ function sheetOrderNew(sid){
       <b>一度に聞くのは5項目まで(深掘りは3項目まで)がおすすめです。</b><br>
       項目が多いとAIの回答が不安定になったり、分割出力されて取り込みにくくなります。<br>
       何度かに分けて聞き、少しずつ育てるのがおすすめです。<br>
-      ${s?'<span style="font-size:11px">緑=深掘り済 / 灰=要点のみ取得済 / 無印=未取得</span>':'<span style="font-size:11px">銘柄を選ばずに使うと、視点を広げるための参考項目リストになります(取得状況は表示されません)</span>'}
+      ${s?'<span style="font-size:11px">緑=深掘り済 / 灰=要点のみ取得済 / 無印=まだ空</span>':'<span style="font-size:11px">銘柄を選ばずに使うと、視点を広げるための参考項目リストになります(取得状況は表示されません)</span>'}
     </div>
     <label class="fld"><span class="t">深掘りテーマ(任意)</span>
       <input id="ord_theme" value="${esc(th)}" placeholder="例: AI・データセンター向け液冷技術">
