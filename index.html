@@ -130,8 +130,9 @@
   .edge-hint.show{opacity:1;}
   .edge-hint.left{left:0; justify-content:flex-start; background:linear-gradient(to right, var(--app) 25%, transparent 100%);}
   .edge-hint.right{right:0; justify-content:flex-end; background:linear-gradient(to left, var(--app) 25%, transparent 100%);}
-  .swipecap{text-align:center; font-size:11px; color:var(--ink3); padding:8px 0 2px;}
-  .pager-nav{display:flex; align-items:center; justify-content:center; gap:14px; padding:8px 0 4px;}
+  /* 「指標 1/2」は単独行にすると28px使うだけなので、送りボタンの行に重ねる */
+  .swipecap{position:absolute; left:0; top:50%; transform:translateY(-50%); font-size:11px; color:var(--ink3);}
+  .pager-nav{position:relative; display:flex; align-items:center; justify-content:center; gap:var(--sp3); padding:6px 0 4px;}
   .navbtn{border:none; background:var(--navy); color:#fff; width:32px; height:32px; border-radius:50%; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex:none;}
   .navbtn:active{transform:scale(.94);}
   .navbtn:disabled{opacity:.25; cursor:default;}
@@ -166,6 +167,7 @@
   .pill-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;}
   .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
   .del{color:var(--red-tx); font-size:12px; cursor:pointer;}
+  .clip2{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5;}
   .clip3{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45;}
   .clip3.open{-webkit-line-clamp:unset; overflow:visible;}
   .dbody.open2{display:block !important;}
@@ -519,7 +521,7 @@ function go(tab){
 }
 function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
 function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
-function openStock(id){ STATE.stockId=id; render(); $('#view').scrollTop=0; }
+function openStock(id){ if(STATE.stockId!==id) STATE.hypoAll=false; STATE.stockId=id; render(); $('#view').scrollTop=0; }
 
 function render(){
   refreshFires();
@@ -645,11 +647,19 @@ function blkSections(s){
   });
   return h;
 }
+// 件数が増えるほど詳細画面が一方的に伸びていくので、既定は先頭3件だけ出して残りは畳む。
+// 1件ずつのボタン(編集/削除/リマインダー)は行から外し、行タップで開く編集シートに集約した
+const HYPO_PREVIEW=3;
 function blkHypos(s, hy){
   let h=`<div class="lbl">メモ・注目ポイント (${hy.length})</div>`;
-  h+='<div class="hint" style="margin:-4px 0 7px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
-  if(!hy.length) h+='<div class="muted" style="padding:0 2px 8px">まだありません。</div>';
-  hy.forEach(hh=>h+=hypoMiniCard(hh));
+  if(!hy.length){
+    h+='<div class="hint" style="margin:-4px 0 8px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
+  } else {
+    const all=STATE.hypoAll || hy.length<=HYPO_PREVIEW;
+    const shown=all?hy:hy.slice(0,HYPO_PREVIEW);
+    h+='<div class="list">'+shown.map(hypoMiniCard).join('')+'</div>';
+    if(!all) h+=`<button class="btn sm" style="width:100%;margin:-4px 0 10px" onclick="STATE.hypoAll=true;render()">残り ${hy.length-HYPO_PREVIEW}件を表示</button>`;
+  }
   h+=`<div class="row" style="gap:8px;margin-top:2px">
     <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','memo')">＋ メモ</button>
     <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','watch')">＋ 注目ポイント</button>
@@ -1458,19 +1468,19 @@ function hypoMiniCard(hh){
   const isMemo=hh.kind==='memo';
   const rms=remindersOf(hh.id);
   const hint=(!isMemo && !rms.length && hh.remindHint && hh.remindHint.date)?hh.remindHint:null;
-  let h=`<div class="card" style="padding:11px 12px">
-    <div class="row"><span class="chip ${isMemo?'gray':'amber'}" style="font-size:11px">${isMemo?'メモ':'注目'}</span></div>
-    <div class="clip3" style="margin-top:6px;font-size:13px;white-space:pre-wrap;cursor:pointer" onclick="this.classList.toggle('open')">${esc(hh.text)}</div>`;
-  if(hh.text.length>80) h+='<div class="muted" style="font-size:11px;margin-top:3px">本文をタップで全文表示</div>';
   // 日付の扱いはリマインダーに一本化しているので、ここでは「登録済みか/未登録か」だけを見せる
-  if(rms.length) h+=rms.map(r=>`<div class="tap" style="margin-top:6px;font-size:11px;color:var(--navy);font-weight:600" onclick="openReminder('${r.id}')">🔔 ${esc(r.title||'リマインダー')} — 次回 ${esc(fmtFire(calcNextFire(r)))}</div>`).join('');
-  else if(hint) h+=`<div class="muted" style="margin-top:6px;font-size:11px">🔔 リマインド未登録(候補: ${esc(hint.date)}${hint.note?' '+esc(hint.note):''})</div>`;
-  h+=`<div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap">
-      ${isMemo?'':`<button class="btn sm ${hint?'pri':''}" style="width:auto" onclick="addRemForHypo('${hh.id}')">${rms.length?'リマインダーを追加':'リマインダーを登録'}</button>`}
-      <button class="btn sm ghost" style="width:auto" onclick="sheetEditHypo('${hh.id}')">編集</button>
-      <button class="btn sm ghost" style="width:auto" onclick="delHypo('${hh.id}')">削除</button></div>
+  let status='';
+  if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">🔔 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
+  else if(hint) status=`<span class="chip amber">リマインド未登録</span>`;
+  return `<div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
+    <div class="lt">
+      <div class="row" style="justify-content:flex-start;gap:6px">
+        <span class="chip ${isMemo?'gray':'amber'}">${isMemo?'メモ':'注目'}</span>${status}
+      </div>
+      <div class="clip2" style="margin-top:4px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
+    </div>
+    <span class="rt" style="padding-top:4px"><span class="arrow">›</span></span>
   </div>`;
-  return h;
 }
 function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE._triageItems=null; STATE.remHypoIds=[hid]; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, [hid]); }
 // 取り込み直後に「イベント日つき注目ポイント」をまとめて確認する一覧シート。
@@ -1522,12 +1532,15 @@ function sheetEditHypo(hid, sid, forceKind){
     <div class="muted" style="margin-bottom:10px">${esc(s.name)}</div>
     <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'注目ポイント(何がどうなったら良い/悪いか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(hh?hh.text:'')}</textarea></label>`;
   // 日付欄はここには置かない。日付を持たせる＝リマインダー登録なので、保存後に登録シートへ誘導する
+  const rms=hid?remindersOf(hid):[];
   if(!isMemo){
-    const rms=hid?remindersOf(hid):[];
-    h+=`<div class="muted" style="font-size:11px;margin:-4px 0 10px">日付で思い出したい場合は、保存後に「リマインダーを登録」してください。${rms.length?`(現在 ${rms.length}件 登録済み)`:''}</div>`;
+    h+=`<div class="muted" style="font-size:11px;margin:-4px 0 10px">日付で思い出したい場合は、保存後に「リマインダーを登録」してください。</div>`;
+    // 登録済みのリマインダーはここから開けるようにする(一覧の行からボタンを外した分の受け皿)
+    if(rms.length) h+='<div class="list">'+rms.map(r=>`<div class="list-row" onclick="openReminder('${r.id}')"><div class="lt"><div class="ttl">🔔 ${esc(r.title||'リマインダー')}</div><div class="meta">次回 ${esc(fmtFire(calcNextFire(r)))}</div></div><span class="rt"><span class="arrow">›</span></span></div>`).join('')+'</div>';
   }
   h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}')">保存</button>
-    ${isMemo?'':`<button class="btn" style="margin-top:8px" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}',true)">保存してリマインダーを登録</button>`}
+    ${isMemo?'':`<button class="btn" style="margin-top:8px" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}',true)">保存して${rms.length?'リマインダーを追加':'リマインダーを登録'}</button>`}
+    ${hid?`<button class="btn danger" style="margin-top:8px" onclick="delHypo('${hid}')">削除</button>`:''}
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet();openStock('${s.id}')">キャンセル</button>`;
   openSheet(h);
 }
@@ -1720,8 +1733,8 @@ function pagerBlock(id, pageHtmls, capFn, pageClass){
   const edges=/\btight\b/.test(pageClass||'')?'':`<div class="edge-hint left" id="${id}_el">‹</div><div class="edge-hint right" id="${id}_er">›</div>`;
   return `<div class="pages-wrap"><div class="pages" id="${id}_pages">${pagesHtml}</div>
       ${edges}</div>
-    ${total>1?`<div class="swipecap" id="${id}_cap"></div>
-    <div class="pager-nav">
+    ${total>1?`<div class="pager-nav">
+      <span class="swipecap" id="${id}_cap"></span>
       <button class="navbtn" id="${id}_prev" onclick="pagerGoto('${id}',_pagerState['${id}'].activeIdx-1)">‹</button>
       <div class="dots" id="${id}_dots">${dotsHtml}</div>
       <button class="navbtn" id="${id}_next" onclick="pagerGoto('${id}',_pagerState['${id}'].activeIdx+1)">›</button>
