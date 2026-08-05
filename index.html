@@ -1526,8 +1526,19 @@ function openReminder(id){
     <div class="muted" style="margin-top:3px">次回: ${r.paused?'(休止中)':esc(fmtFire(calcNextFire(r)))}</div>
     ${(r.changes||[]).map(c=>`<div class="muted" style="margin-top:3px">頻度変更: ${esc(c.cond)} → ${esc(c.freq)} ${esc(c.times||'')}</div>`).join('')}
     <div class="muted" style="margin-top:3px">作: ${esc(r.src||'手動')} ${esc(r.srcDate||'')}</div></div>`;
+  // プロンプトは「編集」画面の一番下にもあるが、表示されているこの場から直せないと見つけられない。
+  // 見出しの右に編集の入口を置き、まだ無いときも書き足せるようカード自体は常に出す
   const actP=activePrompt(r);
-  if(actP.text){ h+=`<div class="card"><div class="lbl" style="margin-top:0">リマインド時に外部AIへ指示するプロンプト${actP.label?` <span class="chip navy" style="font-size:11px">${esc(actP.label)}</span>`:''}</div><div class="muted mono" style="font-size:11px;white-space:pre-wrap">${esc(actP.text.slice(0,110))}${actP.text.length>110?'…':''}</div><button class="btn sm" style="margin-top:8px" onclick='copy(${JSON.stringify(actP.text)},"プロンプトをコピーしました")'>⧉ コピー</button></div>`; }
+  h+=`<div class="card">
+    <div class="lbl" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
+      <span>リマインド時に外部AIへ指示するプロンプト${actP.label?` <span class="chip navy" style="font-size:11px">${esc(actP.label)}</span>`:''}</span>
+      <span style="color:var(--navy);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;min-height:44px;padding-left:16px" onclick="sheetEditPrompt('${r.id}')">編集</span>
+    </div>
+    ${actP.text?`<div class="muted mono clip3" style="font-size:11px;white-space:pre-wrap;cursor:pointer" onclick="this.classList.toggle('open')">${esc(actP.text)}</div>
+    ${actP.text.length>110?'<div class="muted" style="font-size:11px;margin-top:3px">タップで全文表示</div>':''}
+    <button class="btn sm" style="margin-top:8px" onclick='copy(${JSON.stringify(actP.text)},"プロンプトをコピーしました")'>⧉ コピー</button>`
+    :'<div class="hint">まだありません。リマインドされたときに外部AIへ投げる指示文を書いておけます。</div>'}
+  </div>`;
   if((r.changes||[]).some(c=>c.prompt)){ h+=`<div class="muted" style="font-size:11px;margin:-4px 0 8px">※ 頻度変更のタイミングで、確認ポイント(プロンプト)も自動で切り替わります</div>`; }
   h+='<div class="lbl">経過の記録</div><div class="row" style="gap:8px">';
   h+=`<button class="btn" onclick="logRem('${r.id}','変化なし')">変化なし(記録)</button><button class="btn" onclick="toast('プロトタイプでは結果貼付は簡略化')">結果を貼り付け</button></div>`;
@@ -1535,6 +1546,31 @@ function openReminder(id){
   h+='<div class="row" style="gap:8px;margin-top:10px">';
   h+=`<button class="btn sm" onclick="sheetEditReminder('${r.id}')">編集</button><button class="btn sm" onclick="togglePause('${r.id}')">${r.paused?'再開':'休止'}</button><button class="btn sm danger" onclick="delReminder('${r.id}')">削除</button></div>`;
   openSheet(h);
+}
+// プロンプトだけを直す画面。全項目の編集フォームは長く、実行プロンプトが一番下にあって
+// 「外部AIへの指示を直したいだけ」のときに辿り着きにくいため、専用の入口を用意する
+function sheetEditPrompt(id){
+  const r=DB.reminders.find(x=>x.id===id); if(!r) return;
+  const ch=(r.changes||[]).filter(c=>c.cond);
+  let h=`<h3>外部AIへの指示</h3>
+    <div class="muted" style="margin-bottom:10px">${esc(r.title||'')}</div>
+    <label class="fld"><span class="t">実行プロンプト</span><textarea id="p_main" style="min-height:150px" placeholder="例: テスト精機(9001)の1Q決算について、受注残・中国向け売上・保守比率の3点を数字を挙げて確認してください。">${esc(r.prompt||'')}</textarea></label>`;
+  // 頻度変更のタイミングで差し替わるプロンプトも、同じ画面でまとめて直せるようにする
+  if(ch.length){
+    h+='<div class="hint" style="margin:-4px 0 10px">下記は、頻度変更の条件を過ぎたあとに使われるプロンプトです。空欄なら上の実行プロンプトのままです。</div>';
+    (r.changes||[]).forEach((c,i)=>{ if(!c.cond) return;
+      h+=`<label class="fld"><span class="t">変更${i+1}(${esc(c.cond)})のあと</span><textarea id="p_c${i}" style="min-height:90px">${esc(c.prompt||'')}</textarea></label>`; });
+  }
+  h+=`<button class="btn pri" onclick="saveReminderPrompt('${r.id}')">保存</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="openReminder('${r.id}')">キャンセル</button>`;
+  openSheet(h);
+}
+function saveReminderPrompt(id){
+  const r=DB.reminders.find(x=>x.id===id); if(!r) return;
+  r.prompt=$('#p_main').value.trim();
+  (r.changes||[]).forEach((c,i)=>{ const el=$('#p_c'+i); if(!el) return;
+    const v=el.value.trim(); if(v) c.prompt=v; else delete c.prompt; });
+  save(); openReminder(id); toast('保存しました');
 }
 // ===== リマインダーの項目単位編集 =====
 const CATS=['テクニカル','報道確認','決算プレビュー','決算レビュー','指標更新','需給確認','マクロ'];
