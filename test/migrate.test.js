@@ -1,6 +1,10 @@
 import { describe, test, expect } from 'vitest';
 import { migrate } from '../lib/migrate.js';
 
+// 非表示は一覧から取り除かず名前で印を付けるだけなので、
+// 「画面に出る指標」は snap から hiddenSnap を差し引いたもの
+const visible = m => (m.snap || []).filter(k => !(m.hiddenSnap || []).includes(k));
+
 describe('migrate', () => {
   // 回帰テスト10a: 旧構造 count → endDate への移行(countキーは廃止され削除される)
   test('リマインダーの旧 count フィールドを削除する', () => {
@@ -288,7 +292,11 @@ describe('migrate', () => {
       stocks: [], hypotheses: [], reminders: [],
       industryMetricsMaster: { snap: ['市場規模', '市場成長率(YoY)', '設備投資額'], hiddenSnap: [] },
     };
-    expect(migrate(db).industryMetricsMaster.snap).toEqual(['PER', 'PBR']);
+    const out = migrate(db);
+    // 既定から外れた項目も一覧には残し、非表示の印を付けるだけにする
+    expect(visible(out.industryMetricsMaster)).toEqual(['PER', 'PBR']);
+    expect(out.industryMetricsMaster.snap).toEqual(['PER', 'PBR', '市場規模', '市場成長率(YoY)', '設備投資額']);
+    expect(out.industryMetricsMaster.hiddenSnap).toEqual(['市場規模', '市場成長率(YoY)', '設備投資額']);
   });
 
   test('業界の指標をユーザーが編集していれば差し替えない', () => {
@@ -305,8 +313,9 @@ describe('migrate', () => {
       marketMetricsMaster: { snap: ['予想PER(市場全体)', 'PBR(市場全体)', '配当利回り(市場全体)', '騰落レシオ(25日)', '信用評価損益率', '長期金利(10年)'], hiddenSnap: [] },
     };
     const out = migrate(db);
-    expect(out.marketMetricsMaster.snap).toEqual(['予想PER(市場全体)', '長期金利(10年)', '為替(USD/JPY)']);
-    // 既定から外れた項目は消さず「非表示」に送り、復元できるようにする
+    expect(visible(out.marketMetricsMaster)).toEqual(['予想PER(市場全体)', '長期金利(10年)', '為替(USD/JPY)']);
+    // 既定から外れた項目は消さず、一覧に残したまま非表示の印を付ける
+    expect(out.marketMetricsMaster.snap).toContain('配当利回り(市場全体)');
     expect(out.marketMetricsMaster.hiddenSnap).toContain('配当利回り(市場全体)');
     expect(out.marketMetricsMaster.hiddenSnap).toContain('信用評価損益率');
   });
@@ -317,7 +326,8 @@ describe('migrate', () => {
       marketMetricsMaster: { snap: ['予想PER(市場全体)', 'PBR(市場全体)', '長期金利(10年)', '為替(USD/JPY)', '騰落レシオ(25日)', 'VIX指数'], hiddenSnap: [] },
     };
     const out = migrate(db);
-    expect(out.marketMetricsMaster.snap).toEqual(['予想PER(市場全体)', '長期金利(10年)', '為替(USD/JPY)']);
+    expect(visible(out.marketMetricsMaster)).toEqual(['予想PER(市場全体)', '長期金利(10年)', '為替(USD/JPY)']);
+    expect(out.marketMetricsMaster.snap).toContain('VIX指数');
     expect(out.marketMetricsMaster.hiddenSnap).toContain('VIX指数');
   });
 
@@ -327,7 +337,8 @@ describe('migrate', () => {
       metricsMaster: { snap: ['PER(予想)', 'PBR', '時価総額', '配当利回り(予想)', '信用倍率', '目標株価コンセンサス'], trend: [], hiddenSnap: [], hiddenTrend: [] },
     };
     const out = migrate(db);
-    expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']);
+    expect(visible(out.metricsMaster)).toEqual(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']);
+    expect(out.metricsMaster.snap).toEqual(expect.arrayContaining(['時価総額', '信用倍率', '目標株価コンセンサス']));
     expect(out.metricsMaster.hiddenSnap).toEqual(expect.arrayContaining(['時価総額', '信用倍率', '目標株価コンセンサス']));
   });
 
@@ -367,8 +378,80 @@ describe('migrate', () => {
       marketMetricsMaster: { snap: ['VIX指数'], hiddenSnap: ['ドル円'] },
     };
     const out = migrate(db);
-    expect(out.marketMetricsMaster.snap).toEqual(['VIX指数']);
+    // 非表示だった項目は一覧に戻したうえで、印だけ残す
+    expect(out.marketMetricsMaster.snap).toEqual(['VIX指数', 'ドル円']);
     expect(out.marketMetricsMaster.hiddenSnap).toEqual(['ドル円']);
+    expect(visible(out.marketMetricsMaster)).toEqual(['VIX指数']);
+  });
+
+  // 非表示は以前「一覧から取り除いて別リストへ移す」実装だった。元がスナップショットだったのか
+  // 業績推移だったのかも並び順も失われるので、一覧に残したまま名前で印を付ける方式へ移行する
+  describe('非表示の指標を一覧へ戻す', () => {
+    const base = () => ({
+      stocks: [], hypotheses: [], reminders: [],
+      metricsMaster: {
+        snap: ['PER(予想)', '独自指標'],
+        trend: [{ name: '売上高', graph: true }],
+        hiddenSnap: ['信用倍率'],
+        hiddenTrend: [{ name: '営業利益', graph: true }],   // 旧形式(オブジェクト丸ごと退避)
+      },
+    });
+
+    test('別リストへ退避されていた指標を一覧に戻す', () => {
+      const out = migrate(base());
+      expect(out.metricsMaster.snap).toContain('信用倍率');
+      expect(out.metricsMaster.trend.map(t => t.name)).toContain('営業利益');
+    });
+
+    test('戻したうえで非表示中のままにする', () => {
+      const out = migrate(base());
+      expect(out.metricsMaster.hiddenSnap).toContain('信用倍率');
+      expect(out.metricsMaster.hiddenTrend).toContain('営業利益');
+      expect(visible(out.metricsMaster)).toEqual(['PER(予想)', '独自指標']);
+    });
+
+    test('hiddenTrend は名前だけの配列に揃える', () => {
+      const out = migrate(base());
+      expect(out.metricsMaster.hiddenTrend).toEqual(['営業利益']);
+    });
+
+    test('退避されていた業績推移指標のグラフ指定も失わない', () => {
+      const out = migrate(base());
+      expect(out.metricsMaster.trend.find(t => t.name === '営業利益').graph).toBe(true);
+    });
+
+    test('表示中の指標の並び順は変えない(戻す分は末尾に足す)', () => {
+      const out = migrate(base());
+      expect(out.metricsMaster.snap).toEqual(['PER(予想)', '独自指標', '信用倍率']);
+    });
+
+    test('2回流しても重複しない(冪等)', () => {
+      const out = migrate(migrate(base()));
+      expect(out.metricsMaster.snap.filter(k => k === '信用倍率')).toHaveLength(1);
+      expect(out.metricsMaster.trend.filter(t => t.name === '営業利益')).toHaveLength(1);
+      expect(out.metricsMaster.hiddenTrend).toEqual(['営業利益']);
+    });
+
+    test('市場・業界・テーマの指標マスターにも同じ移行をかける', () => {
+      const db = {
+        stocks: [], hypotheses: [], reminders: [],
+        marketMetricsMaster: { snap: ['VIX指数'], hiddenSnap: ['ドル円'] },
+        industryMetricsMaster: { snap: ['独自の業界指標'], hiddenSnap: ['EBITDA'] },
+        themeMetricsMaster: { snap: [], hiddenSnap: ['導入社数'] },
+      };
+      const out = migrate(db);
+      expect(out.marketMetricsMaster.snap).toContain('ドル円');
+      expect(out.industryMetricsMaster.snap).toContain('EBITDA');
+      expect(out.themeMetricsMaster.snap).toEqual(['導入社数']);
+      expect(visible(out.themeMetricsMaster)).toEqual([]);
+    });
+
+    test('非表示が無いデータには影響しない', () => {
+      const out = migrate({ stocks: [], hypotheses: [], reminders: [] });
+      expect(out.metricsMaster.hiddenSnap).toEqual([]);
+      expect(out.metricsMaster.hiddenTrend).toEqual([]);
+      expect(visible(out.metricsMaster)).toEqual(out.metricsMaster.snap);
+    });
   });
 
   test('null を渡すと null を返す(初回起動でバックアップが無いケース)', () => {

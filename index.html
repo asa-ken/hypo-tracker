@@ -234,6 +234,16 @@
   .pill-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;}
   .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
   .del{color:var(--red-tx); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px;}
+  /* 指標マスターの1行。非表示にしても一覧から動かさず、右端のバッジで今の状態を示す */
+  .met-row{display:flex; align-items:center; gap:8px; padding:8px 2px; border-bottom:1px solid var(--line);}
+  .met-row .nm{flex:1; min-width:0; font-size:13px;}
+  .met-row.off .nm{color:var(--ink3);}
+  /* バッジ自体がボタン。「表示」「非表示」だと押した結果か今の状態か読めないので「〜中」と書く */
+  /* 「表示中」と「非表示中」で幅が変わると、切り替えるたびに左の↑↓がずれるので幅を固定する */
+  .stat{font-size:11px; font-weight:600; padding:0 8px; min-height:36px; min-width:68px; text-align:center; border-radius:9px; white-space:nowrap;
+        border:1px solid var(--line); background:var(--bg); color:var(--ink2); cursor:pointer; font-family:inherit; flex:none;}
+  .stat.on{background:var(--navy-bg); border-color:var(--navy-bg); color:var(--navy-tx);}
+  .stat:active{opacity:.6;}
   .clip2{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5;}
   .clip3{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45;}
   .clip3.open{-webkit-line-clamp:unset; overflow:visible;}
@@ -452,6 +462,26 @@ function migrate(db){
       db[k].snap=next;
     });
   }
+  // 非表示は以前「一覧から取り除いて別リストへ移す」実装だった。そのため非表示にした瞬間に
+  // 元がスナップショットだったのか業績推移だったのかも、並び順も失われていた。
+  // 一覧には残したまま名前で印を付けるだけに改め、旧データも一覧へ戻す
+  {
+    const mm=db.metricsMaster;
+    const ht=mm.hiddenTrend||[]; mm.hiddenTrend=[];
+    ht.forEach(x=>{
+      const name=(typeof x==='string')?x:(x&&x.name);
+      if(!name) return;
+      // 旧データは {name,graph} を丸ごと退避していたので、グラフ表示の指定も一緒に戻す
+      if(!mm.trend.some(t=>t.name===name)) mm.trend.push({name, graph:!!(x&&x.graph)});
+      if(!mm.hiddenTrend.includes(name)) mm.hiddenTrend.push(name);
+    });
+    [mm, db.marketMetricsMaster, db.industryMetricsMaster, db.themeMetricsMaster].forEach(m=>{
+      if(!m) return;
+      m.snap=m.snap||[];
+      m.hiddenSnap=(m.hiddenSnap||[]).map(x=>(typeof x==='string')?x:(x&&x.name)).filter(Boolean);
+      m.hiddenSnap.forEach(k=>{ if(!m.snap.includes(k)) m.snap.push(k); });
+    });
+  }
   if(!db.industrySectionMaster) db.industrySectionMaster=s0.industrySectionMaster;
   if(!db.themeSectionMaster) db.themeSectionMaster=s0.themeSectionMaster;
   // 既存の市場カードは粒度が未設定なので「市場」扱いにする(従来の語彙がそのまま使える)
@@ -587,6 +617,11 @@ function scopeKeys(s){ return SCOPE_KEYS[scopeOf(s)]||SCOPE_KEYS['市場']; }
 function masterFor(s){return isMkt(s)?DB[scopeKeys(s).sec]:DB.sectionMaster;}
 // 指標マスターも銘柄と市場で別物。市場は業績推移(trend)を持たない
 function metricsMasterFor(s){return isMkt(s)?DB[scopeKeys(s).met]:DB.metricsMaster;}
+// 非表示は「一覧から取り除く」のではなく「使わない印を付ける」だけ。
+// 設定画面では並び順のまま残り、画面・質問文には表示中のものだけを使う
+function metOn(mm,type,name){ return !((type==='trend'?mm.hiddenTrend:mm.hiddenSnap)||[]).includes(name); }
+function snapKeys(mm){ return ((mm&&mm.snap)||[]).filter(k=>metOn(mm,'snap',k)); }
+function trendInds(mm){ return ((mm&&mm.trend)||[]).filter(t=>metOn(mm,'trend',t.name)); }
 function hyposOf(id){return DB.hypotheses.filter(h=>h.stockId===id);}
 function remOf(id){return DB.reminders.filter(r=>r.stockId===id);}
 function allSubs(){ const a=[]; DB.sectionMaster.forEach(c=>{ if(c.on) c.subs.forEach(su=>a.push({cat:c.cat,sub:su})); }); return a; }
@@ -901,7 +936,7 @@ function renderStockDetail(v){
   detailHeader(s, s.code+' · '+s.kind);
   const hy=hyposOf(s.id);
   let h=blkChips(hy)+blkTheme(s);
-  h+=blkMetrics(s,'主要指標',DB.metricsMaster.snap,'sheetMetricsMaster()','metrics');
+  h+=blkMetrics(s,'主要指標',snapKeys(DB.metricsMaster),'sheetMetricsMaster()','metrics');
   h+=lblWithEdit('業績推移','sheetMetricsMaster()');
   h+=renderTrend(s);
   h+=blkSections(s)+blkHypos(s,hy)+blkLinks(s);
@@ -919,7 +954,7 @@ function renderMarketDetail(v){
   const hy=hyposOf(s.id);
   let h=blkChips(hy)+blkTheme(s);
   const METLBL={'市場':'市場の水準','業界':'業界の水準','テーマ':'テーマの指標'};
-  const keys=metricsMasterFor(s).snap;
+  const keys=snapKeys(metricsMasterFor(s));
   if(keys.length) h+=blkMetrics(s,METLBL[sc],keys,'sheetMarketMetricsMaster()','mktmetrics');
   else h+=lblWithEdit(METLBL[sc],'sheetMarketMetricsMaster()','margin-top:2px')+'<div class="muted" style="padding:0 2px 4px">まだありません。会話を取り込むと自動で増えます。</div>';
   h+=`<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。${s.benchmark?`基準: ${esc(s.benchmark)}`:''}</div>`;
@@ -1006,7 +1041,7 @@ function renderTrend(s){
   const tr=s.trend;
   // グラフ表示に選んだ指標は、数値をまだ持っていなくても枠ごと出す。
   // 選んだのに何も出てこないと「設定が効いていないのか、データが無いのか」が区別できないため
-  const inds=DB.metricsMaster.trend.filter(t=>t.graph);
+  const inds=trendInds(DB.metricsMaster).filter(t=>t.graph);
   const years=new Set(); Object.values(tr).forEach(o=>Object.keys(o).forEach(k=>{if(k!=='unit')years.add(k);}));
   const ys=[...years];
   const hasData=t=>{ const o=tr[t.name]; return !!(o&&ys.some(y=>o[y])); };
@@ -1030,7 +1065,7 @@ function renderTrend(s){
   const cols=ys.length?ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')
                      :'<th style="text-align:center">年度</th>';
   h+='<div class="xscroll"><table style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
-  DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name];
+  trendInds(DB.metricsMaster).forEach(t=>{ const o=tr[t.name];
     // 数値が1つも無い指標は、年度のセルを1つにまとめて「データなし」と書く。
     // 年度ごとに「—」を並べるより、行まるごと空だと分かりやすい
     const cells=hasData(t)
@@ -1081,10 +1116,10 @@ function briefingText(){
   const mktCats=catList(DB.marketSectionMaster||[]);
   const indCats=catList(DB.industrySectionMaster||[]);
   const thmCats=catList(DB.themeSectionMaster||[]);
-  const snap=DB.metricsMaster.snap.join(' / ');
-  const mktSnap=DB.marketMetricsMaster.snap.join(' / ');
-  const indSnap=(DB.industryMetricsMaster.snap||[]).join(' / ');
-  const trend=DB.metricsMaster.trend.map(t=>t.name).join(' / ');
+  const snap=snapKeys(DB.metricsMaster).join(' / ');
+  const mktSnap=snapKeys(DB.marketMetricsMaster).join(' / ');
+  const indSnap=snapKeys(DB.industryMetricsMaster).join(' / ');
+  const trend=trendInds(DB.metricsMaster).map(t=>t.name).join(' / ');
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
 出力の先頭には対象を明記してください:
@@ -1398,15 +1433,16 @@ function commitImport(){
       // 確からしさの担保は外部AI側に委ね、アプリは「何をいつ時点で受け取ったか」だけを残す
       s.metrics[r.key]={v:r.value,unit:r.unit||'',d:normD(r.d)};
       // マスターに無い指標名は保存しても画面に出ないため、取り込み時に自動登録する。
-      // ただしユーザーが自分で非表示にした指標は、取り込みのたびに復活させない。
+      // 非表示にした指標も一覧には残っているので、includes だけで「非表示中のものを
+      // 取り込みのたびに表示中へ戻してしまう」ことは起きない。
       // 市場・テーマは銘柄とは別の指標マスターに登録する(PERと騰落レシオを混ぜない)
       const mm=metricsMasterFor(s);
-      if(!mm.snap.includes(r.key) && !(mm.hiddenSnap||[]).includes(r.key)) mm.snap.push(r.key);
+      if(!mm.snap.includes(r.key)) mm.snap.push(r.key);
     }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
-      if(!DB.metricsMaster.trend.some(t=>t.name===r.key) && !(DB.metricsMaster.hiddenTrend||[]).some(t=>t.name===r.key)){
+      if(!DB.metricsMaster.trend.some(t=>t.name===r.key)){
         // グラフは最大4件までの運用のため、超える分は表(グラフなし)で追加
-        DB.metricsMaster.trend.push({name:r.key, graph:DB.metricsMaster.trend.filter(t=>t.graph).length<4});
+        DB.metricsMaster.trend.push({name:r.key, graph:trendInds(DB.metricsMaster).filter(t=>t.graph).length<4});
       }
     }
     else if(/分析/.test(r.block||'')){
@@ -2114,7 +2150,7 @@ const SCOPE_INFO={
 function sheetAddMarket(sel){
   const sc=SCOPES.includes(sel)?sel:'市場';
   const info=SCOPE_INFO[sc];
-  const met=(DB[SCOPE_KEYS[sc].met].snap||[]);
+  const met=snapKeys(DB[SCOPE_KEYS[sc].met]);
   const cats=(DB[SCOPE_KEYS[sc].sec]||[]).filter(c=>c.on).map(c=>c.cat);
   openSheet(`<h3>市場・業界・テーマを追加</h3>
     <label class="fld"><span class="t">種別</span>
@@ -2302,7 +2338,7 @@ function genOrderNew(sid){
   const s=sid?stock(sid):null; const pk=DB.askPrefs.picks||{};
   const sums=Object.keys(pk).filter(k=>pk[k]==='sum'), deeps=Object.keys(pk).filter(k=>pk[k]==='deep');
   // 市場・テーマも指標(水準)を聞ける。銘柄用とは別のマスターを使う
-  const need=[]; if(s) metricsMasterFor(s).snap.forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
+  const need=[]; if(s) snapKeys(metricsMasterFor(s)).forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
   if(!sums.length&&!deeps.length&&!need.length){ toast('項目を選んでください'); return; }
   const theme=((DB.askPrefs.themes||{})[sid]||'').trim();
   const head=s?(isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`):'# 銘柄またはテーマ: (会話の中で対象を明記してください)';
@@ -2312,7 +2348,7 @@ function genOrderNew(sid){
   if(s&&isMkt(s)&&s.benchmark) p+=`\n■基準とする指数・ETF: ${s.benchmark}\n指標や水準は、これを基準に答えてください。別の対象で答える場合は、何を見たかを本文に書いてください。\n`;
   p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典・URL・確信度は書かない。不確かなことは無理に書かず、分からない項目は省く\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
-  if(s && !isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+DB.metricsMaster.trend.map(x=>x.name).join(' / ')+' を年度ごとに。';
+  if(s && !isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+trendInds(DB.metricsMaster).map(x=>x.name).join(' / ')+' を年度ごとに。';
   if(sums.length||deeps.length){
     p+='\n\n## 分析\n以下の項目について回答。「サマリ」は2〜3文で簡潔に。「詳細」は深掘りした長文(投資判断に効く具体性=数値・競合比較・持続性を重視)。\n項目名は下記の名称をそのまま使い、カテゴリ名は付けないでください。\n';
     sums.forEach(k=>{ p+=`- ${k}(サマリ): \n`; });
@@ -2565,47 +2601,51 @@ function importData(input){
       if(!obj.stocks||!obj.metricsMaster){ toast('形式が違うファイルです'); return; }
       const n=(obj.stocks||[]).length;
       askConfirm({title:'バックアップを復元', body:`読み込んだバックアップ(銘柄${n}件)で、現在のデータをすべて置き換えます。\n\n現在のデータは失われます。`, okLabel:'復元する', danger:true, onOk:()=>{
-        DB=obj; save(); go('home'); toast('バックアップを読み込みました');
+        // 古いバックアップは今のデータ構造と違うことがあるので、読み込み時にも移行を通す
+        DB=obj; migrate(DB); save(); go('home'); toast('バックアップを読み込みました');
       }});
     }catch(e){ toast('ファイルを読み込めませんでした'); }
   };
   r.readAsText(f);
 }
 // ===== 指標マスターの管理(#A-2相当) =====
+// 右端のバッジが、その指標を今どう扱っているかの状態表示を兼ねる。
+// 「表示」「非表示」だと押した結果なのか今の状態なのか読めないので「表示中/非表示中」と書く
+function statBadge(on, action){
+  return `<button class="stat${on?' on':''}" onclick="${action}">${on?'表示中':'非表示中'}</button>`;
+}
 function sheetMetricsMaster(){
   const mm=DB.metricsMaster;
-  const graphOn=mm.trend.filter(x=>x.graph).length;
+  const graphOn=trendInds(mm).filter(x=>x.graph).length;
+  const snapOn=snapKeys(mm).length, trendOn=trendInds(mm).length;
   let h=`<h3>収容指標・業績分析項目の設定</h3>
-    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。</div>`;
+    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。</div>`;
   // スナップショット指標
-  h+=`<div class="lbl" style="margin-top:0">スナップショット指標 (${mm.snap.length})</div>`;
+  h+=`<div class="lbl" style="margin-top:0">スナップショット指標 (表示中 ${snapOn}/${mm.snap.length})</div>`;
   mm.snap.forEach((k,i)=>{
-    h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
-      <span style="flex:1;font-size:13px">${esc(k)}</span>
+    const on=metOn(mm,'snap',k);
+    h+=`<div class="met-row${on?'':' off'}">
+      <span class="nm">${esc(k)}</span>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},-1)" ${i===0?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},1)" ${i===mm.snap.length-1?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↓</button>
-      <button class="del" style="border:none;background:none;padding:3px 5px" onclick="hideMetric('snap','${esc(k)}')">非表示</button>
+      ${statBadge(on, `toggleMetric('snap','${escArg(k)}')`)}
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMetric('snap')">＋ 指標を追加</button>`;
   // 業績推移指標
-  h+=`<div class="lbl">業績推移の指標 (${mm.trend.length}) · ☑=グラフ表示 (${graphOn}/4)</div>`;
+  h+=`<div class="lbl">業績推移の指標 (表示中 ${trendOn}/${mm.trend.length}) · ☑=グラフ表示 (${graphOn}/4)</div>`;
   mm.trend.forEach((o,i)=>{
-    h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
-      <button class="btn sm" style="width:auto;padding:3px 8px;font-size:11px;${o.graph?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="toggleGraph(${i})">${o.graph?'☑ グラフ':'☐ グラフ'}</button>
-      <span style="flex:1;font-size:13px">${esc(o.name)}</span>
+    const on=metOn(mm,'trend',o.name);
+    // 非表示中はそもそも画面に出ないので、グラフの指定も効かない。押せないことが分かるよう薄くする
+    h+=`<div class="met-row${on?'':' off'}">
+      <button class="btn sm" style="width:auto;padding:3px 8px;font-size:11px;${on?'':'opacity:.35;'}${on&&o.graph?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="toggleGraph(${i})">${o.graph?'☑ グラフ':'☐ グラフ'}</button>
+      <span class="nm">${esc(o.name)}</span>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},1)" ${i===mm.trend.length-1?'disabled':''}>↓</button>
-      <button class="del" style="border:none;background:none;padding:3px 5px" onclick="hideMetric('trend','${esc(o.name)}')">非表示</button>
+      ${statBadge(on, `toggleMetric('trend','${escArg(o.name)}')`)}
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMetric('trend')">＋ 指標を追加</button>`;
-  // 非表示の指標
-  const hs=mm.hiddenSnap||[], ht=mm.hiddenTrend||[];
-  if(hs.length||ht.length){
-    h+=`<div class="lbl">非表示の指標 (${hs.length+ht.length})</div>`;
-    h+='<div class="muted" style="font-size:11px;margin-bottom:6px">取り込み済みのデータは保持されています。</div>';
-    hs.forEach(k=>{ h+=`<div class="row" style="display:flex;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line)"><span style="flex:1;font-size:12px;color:var(--ink3)">${esc(k)} <span class="chip gray" style="font-size:11px">スナップ</span></span><button class="btn sm" style="width:auto;padding:3px 9px;font-size:11px" onclick="restoreMetric('snap','${esc(k)}')">復元</button></div>`; });
-    ht.forEach(o=>{ h+=`<div class="row" style="display:flex;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line)"><span style="flex:1;font-size:12px;color:var(--ink3)">${esc(o.name)} <span class="chip gray" style="font-size:11px">推移</span></span><button class="btn sm" style="width:auto;padding:3px 9px;font-size:11px" onclick="restoreMetric('trend','${esc(o.name)}')">復元</button></div>`; });
-  }
+  // 「非表示の指標」を別リストに分けるのはやめた。分けると、元がスナップショットだったのか
+  // 業績推移だったのかも、どこに並んでいたのかも分からなくなるため
   h+=`<button class="btn ghost" style="margin-top:14px" onclick="closeSheet()">← 閉じる</button>`;
   openSheet(h);
 }
@@ -2616,23 +2656,18 @@ function curScopeName(){ const s=STATE.stockId?stock(STATE.stockId):null; return
 function sheetMarketMetricsMaster(){
   const mm=curScopeMet(); const sc=curScopeName();
   let h=`<h3>${esc(sc)}の指標の設定</h3>
-    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。項目は後からいつでも追加・削除できます。</div>`;
-  h+=`<div class="lbl" style="margin-top:0">指標 (${mm.snap.length})</div>`;
+    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。</div>`;
+  h+=`<div class="lbl" style="margin-top:0">指標 (表示中 ${snapKeys(mm).length}/${mm.snap.length})</div>`;
   if(!mm.snap.length) h+='<div class="muted" style="padding:0 2px 6px">まだありません。会話を取り込むと自動で増えます。</div>';
   mm.snap.forEach((k,i)=>{
-    h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
-      <span style="flex:1;font-size:13px">${esc(k)}</span>
+    const on=metOn(mm,'snap',k);
+    h+=`<div class="met-row${on?'':' off'}">
+      <span class="nm">${esc(k)}</span>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMarketMetric(${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMarketMetric(${i},1)" ${i===mm.snap.length-1?'disabled':''}>↓</button>
-      <button class="del" style="border:none;background:none;padding:3px 5px" onclick="hideMarketMetric('${escArg(k)}')">非表示</button>
+      ${statBadge(on, `toggleMarketMetric('${escArg(k)}')`)}
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMarketMetric()">＋ 指標を追加</button>`;
-  const hs=mm.hiddenSnap||[];
-  if(hs.length){
-    h+=`<div class="lbl">非表示の指標 (${hs.length})</div>`;
-    h+='<div class="muted" style="font-size:11px;margin-bottom:6px">取り込み済みのデータは保持されています。</div>';
-    hs.forEach(k=>{ h+=`<div class="row" style="display:flex;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line)"><span style="flex:1;font-size:12px;color:var(--ink3)">${esc(k)}</span><button class="btn sm" style="width:auto;padding:3px 9px;font-size:11px" onclick="restoreMarketMetric('${escArg(k)}')">復元</button></div>`; });
-  }
   h+=`<button class="btn ghost" style="margin-top:14px" onclick="closeSheet()">← 閉じる</button>`;
   openSheet(h);
 }
@@ -2640,20 +2675,17 @@ function moveMarketMetric(i,dir){
   const arr=curScopeMet().snap; const j=i+dir;
   if(j<0||j>=arr.length) return;
   const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
-  save(); sheetMarketMetricsMaster();
+  save(); render(); sheetMarketMetricsMaster();
 }
-function hideMarketMetric(name){
+// 一覧からは動かさず、表示中/非表示中を入れ替えるだけ
+function toggleMarketMetric(name){
   const mm=curScopeMet();
-  mm.snap=mm.snap.filter(x=>x!==name);
-  if(!mm.hiddenSnap) mm.hiddenSnap=[];
-  if(!mm.hiddenSnap.includes(name)) mm.hiddenSnap.push(name);
-  save(); sheetMarketMetricsMaster(); toast('非表示にしました(データは保持されます)');
-}
-function restoreMarketMetric(name){
-  const mm=curScopeMet();
-  mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name);
-  if(!mm.snap.includes(name)) mm.snap.push(name);
-  save(); sheetMarketMetricsMaster(); toast('復元しました');
+  mm.hiddenSnap=mm.hiddenSnap||[];
+  const on=metOn(mm,'snap',name);
+  if(on) mm.hiddenSnap.push(name);
+  else mm.hiddenSnap=mm.hiddenSnap.filter(x=>x!==name);
+  save(); render(); sheetMarketMetricsMaster();
+  toast(on?'非表示にしました(データは保持されます)':'表示中にしました');
 }
 function sheetAddMarketMetric(){
   const sc=curScopeName();
@@ -2668,40 +2700,40 @@ function doAddMarketMetric(){
   const name=$('#amm_name').value.trim();
   if(!name){ toast('指標名を入力してください'); return; }
   const mm=curScopeMet();
-  if(mm.snap.includes(name)){ toast('同じ指標が既にあります'); return; }
-  mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name);
-  mm.snap.push(name); save(); sheetMarketMetricsMaster(); toast('追加しました');
+  // 非表示中の指標も一覧に残っているので、同名を足そうとしたら戻し方を案内する
+  if(mm.snap.includes(name)){ toast(metOn(mm,'snap',name)?'同じ指標が既にあります':'同名の指標が非表示中です(一覧のバッジで表示中に戻せます)'); return; }
+  mm.snap.push(name); save(); render(); sheetMarketMetricsMaster(); toast('追加しました');
 }
 function moveMetric(type,i,dir){
   const arr=DB.metricsMaster[type]; const j=i+dir;
   if(j<0||j>=arr.length) return;
   const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
-  save(); sheetMetricsMaster();
+  save(); render(); sheetMetricsMaster();
 }
 function toggleGraph(i){
-  const o=DB.metricsMaster.trend[i];
-  if(!o.graph && DB.metricsMaster.trend.filter(x=>x.graph).length>=4){ toast('グラフは4件までです'); return; }
-  o.graph=!o.graph; save(); sheetMetricsMaster();
-}
-function hideMetric(type,name){
   const mm=DB.metricsMaster;
-  if(type==='snap'){
-    mm.snap=mm.snap.filter(x=>x!==name);
-    if(!mm.hiddenSnap) mm.hiddenSnap=[];
-    if(!mm.hiddenSnap.includes(name)) mm.hiddenSnap.push(name);
-  } else {
-    const o=mm.trend.find(x=>x.name===name);
-    mm.trend=mm.trend.filter(x=>x.name!==name);
-    if(!mm.hiddenTrend) mm.hiddenTrend=[];
-    if(o&&!mm.hiddenTrend.some(x=>x.name===name)) mm.hiddenTrend.push(o);
+  const o=mm.trend[i];
+  // 非表示中の指標はそもそも画面に出ないので、グラフの指定だけしても意味がない
+  if(!metOn(mm,'trend',o.name)){ toast('非表示中の指標はグラフに出せません'); return; }
+  if(!o.graph && trendInds(mm).filter(x=>x.graph).length>=4){ toast('グラフは4件までです'); return; }
+  o.graph=!o.graph; save(); render(); sheetMetricsMaster();
+}
+// 一覧からは動かさず、表示中/非表示中を入れ替えるだけ。
+// 別リストへ移すと、元がどちらの指標だったのかも並び順も分からなくなるため
+function toggleMetric(type,name){
+  const mm=DB.metricsMaster;
+  const key=(type==='trend')?'hiddenTrend':'hiddenSnap';
+  mm[key]=mm[key]||[];
+  const on=metOn(mm,type,name);
+  if(on) mm[key].push(name);
+  else {
+    mm[key]=mm[key].filter(x=>x!==name);
+    // 表示中に戻したときグラフが5件目になってしまう場合は、表だけの扱いにする
+    const o=(type==='trend')?mm.trend.find(x=>x.name===name):null;
+    if(o&&o.graph&&trendInds(mm).filter(x=>x.graph).length>4){ o.graph=false; save(); render(); sheetMetricsMaster(); toast('表示中にしました(グラフは4件までのため表のみ)'); return; }
   }
-  save(); sheetMetricsMaster(); toast('非表示にしました(データは保持されます)');
-}
-function restoreMetric(type,name){
-  const mm=DB.metricsMaster;
-  if(type==='snap'){ mm.hiddenSnap=(mm.hiddenSnap||[]).filter(x=>x!==name); if(!mm.snap.includes(name)) mm.snap.push(name); }
-  else { const o=(mm.hiddenTrend||[]).find(x=>x.name===name); mm.hiddenTrend=(mm.hiddenTrend||[]).filter(x=>x.name!==name); if(o&&!mm.trend.some(x=>x.name===name)) mm.trend.push(o); }
-  save(); sheetMetricsMaster(); toast('復元しました');
+  save(); render(); sheetMetricsMaster();
+  toast(on?'非表示にしました(データは保持されます)':'表示中にしました');
 }
 function sheetAddMetric(type){
   const isSnap=(type==='snap');
@@ -2716,15 +2748,15 @@ function doAddMetric(type){
   const name=$('#am_name').value.trim();
   if(!name){ toast('指標名を入力してください'); return; }
   const mm=DB.metricsMaster;
-  const dup = mm.snap.includes(name)||mm.trend.some(x=>x.name===name)||(mm.hiddenSnap||[]).includes(name)||(mm.hiddenTrend||[]).some(x=>x.name===name);
-  if(dup){ toast('同名の指標が既にあります(非表示かもしれません)'); return; }
+  const dup = mm.snap.includes(name)||mm.trend.some(x=>x.name===name);
+  if(dup){ toast('同名の指標が既にあります(非表示中かもしれません)'); return; }
   if(type==='snap'){ mm.snap.push(name); }
   else {
     let g=$('#am_g_on')&&$('#am_g_on').classList.contains('on');
-    if(g && mm.trend.filter(x=>x.graph).length>=4){ g=false; toast('グラフは4件までのため、グラフ表示なしで追加します'); }
+    if(g && trendInds(mm).filter(x=>x.graph).length>=4){ g=false; toast('グラフは4件までのため、グラフ表示なしで追加します'); }
     mm.trend.push({name, graph:!!g});
   }
-  save(); sheetMetricsMaster(); toast('追加しました。会話を取り込む画面で取得できます');
+  save(); render(); sheetMetricsMaster(); toast('追加しました。会話を取り込む画面で取得できます');
 }
 function sheetBackup(){
   openSheet(`<h3>バックアップ</h3>
