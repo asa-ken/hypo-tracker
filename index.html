@@ -712,11 +712,45 @@ function blkMetrics(s, label, keys, editAction, pagerId){
   if(keys.length && keys.every(k=>!s.metrics[k])) h+='<div class="hint" style="margin-top:6px">会話を取り込むと、ここに数字が入ります。</div>';
   return h;
 }
+// 分析の先頭に置く1〜2文の全体像。個々のカテゴリを読む前に「結局どう見ているか」を
+// 掴めるようにする。カテゴリ(sectionMaster)の一項目ではなく s.summary として独立に持つ。
+// 「エグゼクティブサマリー」は初心者には専門用語に見えるため、平易な言い方にしている
+function blkSummary(s){
+  const sm=s.summary;
+  const who=isMkt(s)?'この'+scopeOf(s):'この会社';
+  return `<div class="card tap" style="padding:9px 11px;margin-bottom:11px;border-left:3px solid var(--navy)" onclick="sheetSummary('${s.id}')">
+    <div class="row"><span class="muted" style="font-size:11px">ざっくりまとめ</span><span class="muted" style="font-size:11px">タップで編集</span></div>
+    <div style="font-size:13px;font-weight:600;margin-top:3px;white-space:pre-wrap;${sm&&sm.t?'':'color:var(--ink3);font-weight:400'}">${sm&&sm.t?esc(sm.t):`まだありません。会話を取り込むと、${esc(who)}を一言でどう見ているかがここに入ります。`}</div>
+    ${sm&&sm.t?`<div class="muted" style="font-size:11px;margin-top:4px">${esc(sm.d)}</div>`:''}
+  </div>`;
+}
+function sheetSummary(sid){
+  const s=stock(sid); if(!s) return;
+  const sm=s.summary||{};
+  const who=isMkt(s)?'この'+scopeOf(s):'この会社';
+  openSheet(`<h3>ざっくりまとめ</h3>
+    <div class="muted" style="margin-bottom:10px">${esc(who)}を一言でどう見ているか。会話を取り込むと自動で入りますが、手で書いても構いません。</div>
+    <label class="fld"><span class="t">内容</span><textarea id="sm_t" style="min-height:100px" placeholder="例: 需要は堅調だが、価格転嫁の遅れで利益率が伸び悩んでいる。">${esc(sm.t||'')}</textarea></label>
+    <button class="btn pri" onclick="doSaveSummary('${sid}')">保存</button>
+    ${sm.t?`<button class="btn danger" style="margin-top:8px" onclick="delSummary('${sid}')">削除</button>`:''}
+    <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">キャンセル</button>`);
+}
+function doSaveSummary(sid){
+  const t=$('#sm_t').value.trim(); const s=stock(sid); if(!s) return;
+  if(!t){ toast('内容を入力してください'); return; }
+  s.summary={t, d:fmtToday()};
+  save(); closeSheet(); render(); toast('保存しました');
+}
+function delSummary(sid){
+  const s=stock(sid); if(!s) return;
+  delete s.summary; save(); closeSheet(); render(); toast('削除しました');
+}
 // カテゴリのアコーディオン。各項目タップで概要/詳細スワイプのシートを開く
 function blkSections(s){
   // 大カテゴリの表示/非表示は、以前は「業績推移」の編集シートの奥にしか入口が無く見つけられなかった。
   // 分析の見出しからも直接開けるようにする
   let h=lblWithEdit('分析', `sheetSectionMaster('${s.id}')`);
+  h+=blkSummary(s);
   const master=masterFor(s);
   master.filter(c=>c.on).forEach((c,ci)=>{
     const filled=filledCatCount(s,c.cat,master);
@@ -971,6 +1005,14 @@ function briefingText(){
   決算期は「yy年mm月期」表記、予想には(予)を付けてください(米国株など海外企業も同じ形式で、その企業の決算月に合わせてください)。
   これは個別企業の決算のみです。市場・テーマの話では使いません。
 
+■ ざっくりまとめ(結局のところどう見ているか、1〜2文)
+## ざっくりまとめ
+- 本文: 1〜2文で全体像 | 基準日(YYYY/M/D)
+  個別の論点に入る前に「結局プラスかマイナスか、何が一番効くか」を先に一言でお願いします。
+  ここは特に平易に、専門用語(例: モメンタム、バリュエーション、コモディティ化)を使わずに書いてください。
+  難しい概念を使う必要がある場合は「◯◯(=平たく言うと△△)」の形にしてください。
+  無理に断定せず、材料が乏しければ「様子見」で構いません。
+
 ■ 分析(定性的な内容)
 ## 分析
 - 項目名(サマリ): 2〜3文の要点 | 基準日(YYYY/M/D)
@@ -1152,6 +1194,10 @@ function parseAndPreview(){
                label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:11px">詳細</span>':'');
                const cur=cmp.sections[r._res.sub];
                if(cur){ before = (r._res.layer==='詳細') ? ((cur.details&&cur.details[0]&&cur.details[0].t)||'—') : (cur.t||'—'); }
+             }
+             else if(r.block==='ざっくりまとめ'){
+               label='ざっくりまとめ';
+               if(cmp.summary&&cmp.summary.t) before=cmp.summary.t;
              } }
       isSame = (before!=='—' && String(before).trim()===String(afterRaw).trim());
       const isNew=(before==='—');
@@ -1217,6 +1263,7 @@ function commitImport(){
     if(r._skip){ // 内容が同じ → 鮮度(取得日)のみ更新
       if(/指標/.test(r.block||'')&&s.metrics[r.key]) s.metrics[r.key].d=normD(r.d);
       else if(r._res&&r._res.sub&&s.sections[r._res.sub]&&r._res.layer!=='詳細') s.sections[r._res.sub].d=normD(r.d);
+      else if(r.block==='ざっくりまとめ'&&s.summary) s.summary.d=normD(r.d);
       return;
     }
     if(/指標/.test(r.block||'')){
@@ -1243,6 +1290,9 @@ function commitImport(){
       const prev=s.sections[key];
       if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val}); }
       else { s.sections[key]={t:val,d:normD(r.d),details:(prev&&prev.details)||[]}; }
+    }
+    else if(r.block==='ざっくりまとめ'){
+      s.summary={t:r.value,d:normD(r.d)};
     }
     else if(/注目ポイント/.test(r.block||'')){
       // 取り込まれたイベント日はカードには持たせず、リマインダー登録の候補として保持する
