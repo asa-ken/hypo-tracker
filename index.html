@@ -87,6 +87,12 @@
   .list-row .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
   .list-row .rt{display:flex; align-items:center; gap:var(--sp2); font-size:12px; color:var(--ink2); white-space:nowrap; flex:none;}
   .list-row .arrow{color:var(--ink3); font-size:15px;}
+  /* メモ・注目ポイントの行を右→左スワイプで削除できるようにする帯。
+     .list-row 自体はそのまま使い、区切り線(border-top)だけをこの帯側に付け替える
+     (行を .swipe で包むと .list-row:first-child がすべての行にマッチしてしまうため) */
+  .list .swipe{border-top:1px solid var(--line);}
+  .list .swipe:first-child{border-top:none;}
+  .list .swipe .list-row{border-top:none; position:relative; z-index:1; background:var(--card);}
   /* タップ領域は44px以上を下限にする(iOS/Androidの推奨値)。
      以前は33pxのボタンが並び、親指では隣を押しやすい状態だった。
      例外は文章に紛れるチップ・リンクで、そこは36px以上とする */
@@ -1629,14 +1635,17 @@ function hypoMiniCard(hh){
   let status='';
   if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">🔔 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
   else if(hint) status=`<span class="chip amber">リマインド未登録</span>`;
-  return `<div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
-    <div class="lt">
-      <div class="row" style="justify-content:flex-start;gap:8px">
-        <span class="chip ${isMemo?'gray':'amber'}">${isMemo?'メモ':'注目'}</span>${status}
+  return `<div class="swipe">
+    <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
+      <div class="lt">
+        <div class="row" style="justify-content:flex-start;gap:8px">
+          <span class="chip ${isMemo?'gray':'amber'}">${isMemo?'メモ':'注目'}</span>${status}
+        </div>
+        <div class="clip2" style="margin-top:4px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
       </div>
-      <div class="clip2" style="margin-top:4px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
+      <span class="rt" style="padding-top:4px"><span class="arrow">›</span></span>
     </div>
-    <span class="rt" style="padding-top:4px"><span class="arrow">›</span></span>
+    <button class="del-btn" onclick="delHypo('${hh.id}')">削除</button>
   </div>`;
 }
 function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE._triageItems=null; STATE.remHypoIds=[hid]; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, [hid]); }
@@ -1719,9 +1728,44 @@ function saveHypo(hid, sid, kind, thenRemind){
 }
 function delHypo(hid){
   const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh) return;
-  askConfirm({title:'削除', body:hh.text.slice(0,80)+(hh.text.length>80?'…':''), okLabel:'削除する', danger:true, onOk:()=>{
-    const sid=hh.stockId; DB.hypotheses=DB.hypotheses.filter(x=>x.id!==hid); save(); openStock(sid); toast('削除しました');
-  }});
+  const rms=remindersOf(hid);
+  // 紐づくリマインダーが無ければ、これまでどおり単純な確認で消す
+  if(!rms.length){
+    askConfirm({title:'削除', body:hh.text.slice(0,80)+(hh.text.length>80?'…':''), okLabel:'削除する', danger:true, onOk:()=>{
+      const sid=hh.stockId; DB.hypotheses=DB.hypotheses.filter(x=>x.id!==hid); save(); openStock(sid); toast('削除しました');
+    }});
+    return;
+  }
+  // リマインダーが紐づく場合は「内容だけ消す/リマインダーだけ消す/両方消す」を選べるようにする。
+  // 内容を消してもリマインダーは通知を続けたい、逆にリマインダーだけ止めて記録は残したい、両方あり得るため
+  openSheet(`<h3>削除</h3>
+    <div class="card" style="white-space:pre-wrap;font-size:13px;line-height:1.6;margin-bottom:10px">${esc(hh.text.slice(0,80)+(hh.text.length>80?'…':''))}</div>
+    <div class="muted" style="font-size:11px;margin-bottom:12px">この${hh.kind==='memo'?'メモ':'注目ポイント'}には${rms.length}件のリマインダーが紐づいています。</div>
+    <button class="btn danger" onclick="doDelHypoOnly('${hid}')">この内容だけ削除(リマインダーは残す)</button>
+    <button class="btn" style="margin-top:8px" onclick="doDelRemindersOnly('${hid}')">リマインダーのみ削除(内容は残す)</button>
+    <button class="btn danger" style="margin-top:8px" onclick="doDelHypoAndReminders('${hid}')">両方削除</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">キャンセル</button>`);
+}
+function doDelHypoOnly(hid){
+  const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh) return;
+  const sid=hh.stockId; DB.hypotheses=DB.hypotheses.filter(x=>x.id!==hid); save(); closeSheet(); openStock(sid); toast('削除しました');
+}
+// このメモ/注目ポイントへの紐づけを外す。他の紐づけ先が無くなったリマインダーは削除する
+// (取り込み直後の一括登録では1つのリマインダーが複数の注目ポイントに紐づくことがあるため、
+//  無条件にリマインダーごと消すと、他の注目ポイントの通知まで一緒に止めてしまう)
+function unlinkRemindersFromHypo(hid){
+  remindersOf(hid).forEach(r=>{
+    r.hypoIds=(r.hypoIds||[]).filter(x=>x!==hid);
+    if(!r.hypoIds.length) DB.reminders=DB.reminders.filter(x=>x.id!==r.id);
+  });
+}
+function doDelRemindersOnly(hid){
+  const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh) return;
+  const sid=hh.stockId; unlinkRemindersFromHypo(hid); save(); closeSheet(); openStock(sid); toast('リマインダーを削除しました');
+}
+function doDelHypoAndReminders(hid){
+  const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh) return;
+  const sid=hh.stockId; unlinkRemindersFromHypo(hid); DB.hypotheses=DB.hypotheses.filter(x=>x.id!==hid); save(); closeSheet(); openStock(sid); toast('削除しました');
 }
 
 //////////////////// SHEETS ////////////////////
@@ -1845,6 +1889,53 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
       }, 150);
     }
     state='idle';
+  }
+  view.addEventListener('touchend', endSwipe, {passive:true});
+  view.addEventListener('touchcancel', endSwipe, {passive:true});
+})();
+// メモ・注目ポイントの行を右→左スワイプで削除できるようにする。
+// 上の詳細画面スワイプ(左端からの右スワイプ)とは方向が逆で、かつ画面のどこからでも
+// 始められる(行自体をつまんで動かす感覚のため、開始位置を絞らない)。
+// #view への委譲で、render()のたびに行が作り直されても付け外し不要にする
+(function(){
+  const THRESH=32, DECIDE=10, OPEN=64; // OPEN は .del-btn の幅(CSS側)と合わせる
+  const view=$('#view');
+  let sx=0, sy=0, state='idle', fg=null, startX=0, openRow=null; // idle|pending|swipe
+  // setTimeout のコールバックは外側の可変変数(openRow/fg)ではなく、呼び出し時点の要素を
+  // ローカル変数で捕まえて参照する。外側の変数は次の操作で null に戻ってしまうため
+  function closeOpenRow(){ if(openRow){ const el=openRow; el.style.transition='transform .15s ease-out'; el.style.transform='translateX(0)'; setTimeout(()=>{ el.style.transition=''; },150); openRow=null; } }
+  view.addEventListener('touchstart', e=>{
+    state='idle'; fg=null;
+    const row=e.target.closest && e.target.closest('.list .swipe');
+    if(!row){ closeOpenRow(); return; }
+    const rowFg=row.querySelector('.list-row'); if(!rowFg) return;
+    if(openRow && openRow!==rowFg) closeOpenRow();
+    const t=e.touches[0]; sx=t.clientX; sy=t.clientY; state='pending';
+    fg=rowFg; startX=(openRow===rowFg)?-OPEN:0;
+  }, {passive:true});
+  view.addEventListener('touchmove', e=>{
+    if(state==='idle'||!fg) return;
+    const t=e.touches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
+    if(state==='pending'){
+      if(Math.abs(dx)<DECIDE && Math.abs(dy)<DECIDE) return;
+      // 左スワイプ(開く)・右スワイプ(既に開いた行を閉じる)以外、つまり縦の動きは邪魔しない
+      if(Math.abs(dy)>=Math.abs(dx)){ state='idle'; return; }
+      state='swipe';
+    }
+    let x=startX+dx; x=Math.max(-OPEN, Math.min(0,x));
+    fg.style.transform=`translateX(${x}px)`;
+    if(e.cancelable) e.preventDefault();
+  }, {passive:false});
+  function endSwipe(){
+    if(state==='swipe'){
+      const el=fg;
+      const m=el.style.transform.match(/translateX\((-?[\d.]+)px\)/); const x=m?parseFloat(m[1]):0;
+      el.style.transition='transform .15s ease-out';
+      if(x<-THRESH){ el.style.transform=`translateX(${-OPEN}px)`; openRow=el; }
+      else { el.style.transform='translateX(0)'; if(openRow===el) openRow=null; }
+      setTimeout(()=>{ el.style.transition=''; }, 150);
+    }
+    state='idle'; fg=null;
   }
   view.addEventListener('touchend', endSwipe, {passive:true});
   view.addEventListener('touchcancel', endSwipe, {passive:true});
