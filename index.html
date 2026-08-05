@@ -72,14 +72,16 @@
   /* 画面の区切り。以前は11pxのグレーで本文より弱く、どこからどこまでが一塊か読み取れなかった */
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
   .lbl:first-child{margin-top:2px;}
-  /* 開閉できる区切り。見出し全体がタップ領域になる */
-  /* アクセントバーは大カテゴリではなく中身(行)の側に付ける(詳細画面の分析と同じ使い分け)。
-     見出しは太字と矢尻だけで、区分の始まりとして十分に読める */
-  .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
+  /* 開閉できる区切り。見出し全体がタップ領域になる。
+     区分の間に細い線を1本引き、中身は字下げで表す(行ごとの線やアクセントバーは引かない)。
+     線が増えるほど画面がうるさくなるので、線は「区分の変わり目」だけに絞る */
+  .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:52px; margin:0; border-top:1px solid var(--line); font-size:13px; color:var(--ink); cursor:pointer; user-select:none;}
+  .lbl.grp:first-child{border-top:none;}
   .lbl.grp:active{color:var(--navy);}
-  /* タップで下に展開する場所は、どこでも同じ下向きの矢尻で示す(閉じているときは右向き) */
+  /* タップで下に展開する場所は、どこでも同じ矢尻で示す。
+     閉じている＝下向き(これから下に開く) / 開いている＝上向き(たたむと上に閉じる) */
   .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
-  .caret.closed{transform:rotate(-90deg);}
+  .caret.open{transform:rotate(180deg);}
   @media (prefers-reduced-motion: reduce){ .caret{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
   /* 「対応が必要」など、いま見てほしいものだけ地色を変える。
@@ -92,16 +94,12 @@
   .list-row:first-child{border-top:none;}
   .list-row:active{background:var(--navy-bg);}
   .list-row .lt{min-width:0; flex:1;}
-  /* .list.bars を付けた一覧では、行(=区分の中身)の左にアクセントバーを立てる。
-     詳細画面の分析と同じ使い分けで、バーが付くのは大カテゴリではなく中身の側。
-     色は中身の有無を表す(紺=取り込み済み / 淡いグレー=まだ空) */
-  /* バーを付ける一覧は、詳細画面の小項目と同じ扱いにする。白カードと区切り線を外して
-     ページ地色に沈め、行の左のバーだけで「区分の中身」であることを示す */
-  .list.bars{background:none; border:none; border-radius:0; overflow:visible;}
-  .list.bars .list-row{border-top:none; padding-left:0;}
-  .list.bars .list-row .lt{position:relative; padding-left:13px;}
-  .list.bars .list-row .lt::before{content:''; position:absolute; left:0; top:2px; bottom:2px; width:3px; border-radius:2px; background:var(--line2);}
-  .list.bars .list-row.filled .lt::before{background:var(--navy);}
+  /* .list.flat: 区分の中身として並ぶ一覧。白カード・枠線・区切り線を持たず、
+     字下げだけで「見出しの下にぶら下がっている」ことを示す。
+     まだ中身が無いカードだけ文字を薄く細くして、状態の手がかりを残す */
+  .list.flat{background:none; border:none; border-radius:0; overflow:visible;}
+  .list.flat .list-row{border-top:none; padding:9px 0 9px 20px;}
+  .list.flat .list-row:not(.filled) .ttl{font-weight:400; color:var(--ink3);}
   .list-row .ttl{font-size:13px; font-weight:600; line-height:1.4;}
   .list-row .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
   .list-row .rt{display:flex; align-items:center; gap:var(--sp2); font-size:12px; color:var(--ink2); white-space:nowrap; flex:none;}
@@ -150,8 +148,8 @@
   .sec{border:1px solid var(--line); border-radius:9px; margin-bottom:7px; overflow:hidden;}
   .sec .h{display:flex; justify-content:space-between; align-items:center; padding:9px 11px; min-height:44px; cursor:pointer; font-size:13px; font-weight:600; background:var(--card); transition:background .15s, color .15s;}
   /* .sec はDOMのクラス付け替えだけで開閉する(再描画しない)ので、矢尻の向きはCSS側で持つ */
-  .sec .h .caret{transform:rotate(-90deg);}
-  .sec.open .h .caret{transform:rotate(0deg);}
+  .sec .h .caret{transform:none;}
+  .sec.open .h .caret{transform:rotate(180deg);}
   .sec .b{display:none; padding:2px 11px 10px; font-size:13px; color:var(--ink2);}
   .sec.open .b{display:block;}
   /* 開いている間はカードの枠を外し、見出しだけが白(紺)のカードとして浮くようにする。
@@ -173,12 +171,11 @@
      小項目は「大項目を開いた中身」であって独立したカードではないので、白背景も区切り線も持たせず
      ページ地色に沈める。白いカードとして浮くのは大項目だけになり、
      開いた塊と次の大項目の切れ目がはっきりする */
-  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:var(--sp2); padding:9px 11px 9px 0; min-height:44px; font-size:12px; cursor:pointer;}
+  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:var(--sp2); padding:9px 0 9px 20px; min-height:44px; font-size:12px; cursor:pointer;}
   .sub-row:active{background:var(--navy-bg);}
-  /* 項目名の左のアクセントバー。取り込み済みなら紺、まだ空なら淡いグレーで状態も示す */
-  .sub-row .name{position:relative; padding-left:13px;}
-  .sub-row .name::before{content:''; position:absolute; left:0; top:3px; bottom:3px; width:3px; border-radius:2px; background:var(--line2);}
-  .sub-row.filled .name::before{background:var(--navy);}
+  /* 取り込み済みなら濃く、まだ空なら薄く細く。一覧(.list.flat)と同じ表し方 */
+  .sub-row .name{color:var(--ink); font-weight:600;}
+  .sub-row:not(.filled) .name{font-weight:400; color:var(--ink3);}
   .sub-row .row-right{display:flex; align-items:center; gap:8px;}
   .sub-row .arrow{color:var(--ink3); font-size:15px;}
   /* 概要/詳細の横スワイプページャー */
@@ -713,9 +710,10 @@ function renderHome(v){
 // 移行済みのデータを壊さないため名前はそのままにし、キーを画面ごとに分けて共用する
 function closedGroups(){ const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]}); if(!Array.isArray(u.anaClosed)) u.anaClosed=[]; return u.anaClosed; }
 function groupClosed(key){ return closedGroups().includes(key); }
-// 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く
+// 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く。
+// 素の状態が下向き(閉じている)。開いているときだけ .open を付けて上向きにする
 function caretSvg(closed){
-  return `<svg class="caret${closed?' closed':''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  return `<svg class="caret${closed?'':' open'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 }
 function toggleGroup(key){
   const a=closedGroups(); const i=a.indexOf(key);
@@ -731,7 +729,7 @@ function groupBlock(key, label, contentHtml){
 }
 
 //////////////////// ANALYSIS list ////////////////////
-// カードに何か入っているか。分析画面のアクセントバーの色(紺=あり/淡いグレー=まだ空)に使う
+// カードに何か入っているか。一覧で「まだ空のカード」を薄く見せる判定に使う
 function hasContent(s){
   return !!(s.summary&&s.summary.t)
     || Object.keys(s.metrics||{}).length>0
@@ -765,7 +763,7 @@ function renderAnalysis(v){
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
   // 下の区分にたどり着くまで延々スクロールすることになるため
   const group=(key,label,rows)=>groupBlock(key, label,
-    rows.length?`<div class="list bars">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
+    rows.length?`<div class="list flat">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
   if(mkts.length){
     // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
     const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
@@ -861,7 +859,7 @@ function blkSections(s){
     const filled=filledCatCount(s,c.cat,master);
     // 「n/m 項目」は出さない。入力済みの件数はバッジで足りるうえ、
     // 分母まで出すと「埋めきれていない」ことを毎回突きつける表示になる
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${caretSvg()}</div><div class="b">`;
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${caretSvg(true)}</div><div class="b">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row${val?' filled':''}" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
@@ -1046,7 +1044,7 @@ function renderImport(v){
   h+='<div class="lbl">① このアプリの説明書をAIに渡す(最初の1回だけ)</div>';
   h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
   h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
-  h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg()}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:8px 11px">${esc(briefingText())}</div></div>`;
+  h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg(true)}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:8px 11px">${esc(briefingText())}</div></div>`;
   // ② 会話を貼り付ける
   h+='<div class="lbl" style="margin-top:18px">② 会話を貼り付ける</div>';
   h+=`<div class="row" style="gap:8px;margin-bottom:6px">
@@ -1056,7 +1054,7 @@ function renderImport(v){
   h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
   // 困ったときは(旧STEP1・格下げ)
-  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span>${caretSvg()}</div><div class="b" style="padding:8px 11px">`;
+  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span>${caretSvg(true)}</div><div class="b" style="padding:8px 11px">`;
   h+=`<button class="btn" onclick="sheetOrderNew('${sel}')">調べる項目を選ぶ</button>`;
   h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
   h+='</div></div>';
