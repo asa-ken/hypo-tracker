@@ -144,8 +144,12 @@
   /* .sec はDOMのクラス付け替えだけで開閉する(再描画しない)ので、矢尻の向きはCSS側で持つ */
   .sec .h .caret{transform:rotate(-90deg);}
   .sec.open .h .caret{transform:rotate(0deg);}
-  .sec .b{display:none; padding:0 11px 10px; font-size:13px; color:var(--ink2);}
+  .sec .b{display:none; padding:2px 11px 10px; font-size:13px; color:var(--ink2);}
   .sec.open .b{display:block;}
+  /* 開いている間はカードの枠を外し、見出しだけが白(紺)のカードとして浮くようにする。
+     overflow:hidden も外すので、見出し側で角丸を持ち直す */
+  .sec.open{border-color:transparent; background:none; overflow:visible; margin-bottom:14px;}
+  .sec.open .h{border-radius:9px;}
   /* C1: 開いているカテゴリだけ紺地に白抜き。開閉という状態変化そのものを色で示す。
      中のチップと矢尻は、紺地の上で沈まないよう白系に振り直す
      (.caret は color を直接指定しているので、.h の color:#fff は継承されない) */
@@ -157,9 +161,16 @@
   .mine .row2{font-size:12px; color:var(--navy-tx);} .mine .ts{font-size:11px; color:var(--navy); opacity:.7;}
   .empty{text-align:center; padding:40px 20px; color:var(--ink3);}
   .empty .big{font-size:15px; font-weight:600; color:var(--ink2); margin-bottom:6px;}
-  /* 分析項目の行(タップで概要/詳細スワイプシートを開く) */
-  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:var(--sp2); padding:9px 11px; min-height:44px; font-size:12px; border-top:1px solid var(--line); cursor:pointer; background:var(--card);}
+  /* 分析項目の行(タップで概要/詳細スワイプシートを開く)。
+     小項目は「大項目を開いた中身」であって独立したカードではないので、白背景も区切り線も持たせず
+     ページ地色に沈める。白いカードとして浮くのは大項目だけになり、
+     開いた塊と次の大項目の切れ目がはっきりする */
+  .sub-row{display:flex; align-items:center; justify-content:space-between; gap:var(--sp2); padding:9px 11px 9px 0; min-height:44px; font-size:12px; cursor:pointer;}
   .sub-row:active{background:var(--navy-bg);}
+  /* 項目名の左のアクセントバー。取り込み済みなら紺、まだ空なら淡いグレーで状態も示す */
+  .sub-row .name{position:relative; padding-left:13px;}
+  .sub-row .name::before{content:''; position:absolute; left:0; top:3px; bottom:3px; width:3px; border-radius:2px; background:var(--line2);}
+  .sub-row.filled .name::before{background:var(--navy);}
   .sub-row .row-right{display:flex; align-items:center; gap:8px;}
   .sub-row .arrow{color:var(--ink3); font-size:15px;}
   /* 概要/詳細の横スワイプページャー */
@@ -829,9 +840,9 @@ function blkSections(s){
     const filled=filledCatCount(s,c.cat,master);
     // 「n/m 項目」は出さない。入力済みの件数はバッジで足りるうえ、
     // 分母まで出すと「埋めきれていない」ことを毎回突きつける表示になる
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${caretSvg()}</div><div class="b" style="padding:0">`;
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${caretSvg()}</div><div class="b">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
-      h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
+      h+=`<div class="sub-row${val?' filled':''}" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
         <span class="row-right"><span class="m">${val?esc(val.d.replace(/^\d{2}/,'')):''}</span><span class="arrow">›</span></span>
       </div>`; });
