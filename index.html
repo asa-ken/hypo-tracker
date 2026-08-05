@@ -1892,7 +1892,7 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
 // シートのエッジスワイプ(#edgeSwipeZone)と違い、こちらは帯を重ねず #view 上で直接判定する。
 // 帯を重ねると、その下にあるメモ行・分析項目のタップや指標ページャーの横スワイプを奪ってしまうため
 (function(){
-  const THRESH=70, DECIDE=10, START_RATIO=.3;
+  const THRESH=70, DECIDE=10, START_RATIO=.4;
   const view=$('#view');
   let sx=0, sy=0, state='idle'; // idle|pending|swipe
   view.addEventListener('touchstart', e=>{
@@ -1901,9 +1901,10 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
     if($('#scrim').classList.contains('show')) return;             // シートが開いている間はシート側の担当
     if(e.touches.length!==1) return;
     const t=e.touches[0];
-    if(t.clientX > window.innerWidth*START_RATIO) return;          // 左30%から始まったものだけ拾う
+    if(t.clientX > window.innerWidth*START_RATIO) return;          // 左40%から始まったものだけ拾う
     const xs=e.target.closest && e.target.closest('.pages,.xscroll');
     if(xs && xs.scrollWidth>xs.clientWidth+2) return;              // 実際に横スクロールする部品の中では譲る
+    if(e.target.closest && e.target.closest('.list .swipe')) return; // メモ・注目ポイントの削除スワイプの中でも譲る
     sx=t.clientX; sy=t.clientY; state='pending';
   }, {passive:true});
   view.addEventListener('touchmove', e=>{
