@@ -73,11 +73,9 @@
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
   .lbl:first-child{margin-top:2px;}
   /* 開閉できる区切り。見出し全体がタップ領域になる */
-  .lbl.grp{position:relative; display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; padding-left:11px; cursor:pointer; user-select:none;}
-  /* 紺のアクセントバーで区分の始まりを示す。本文の左端(カード・リストと同じ位置)に置く。
-     以前は本文より外側(bodyの左paddingの中)に出していたが、画面保護フィルムやケースの
-     外縁に隠れてしまうため内側へ寄せた */
-  .lbl.grp::before{content:''; position:absolute; left:0; top:11px; bottom:11px; width:3px; background:var(--navy); border-radius:2px;}
+  /* アクセントバーは大カテゴリではなく中身(行)の側に付ける(詳細画面の分析と同じ使い分け)。
+     見出しは太字と矢尻だけで、区分の始まりとして十分に読める */
+  .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
   .lbl.grp:active{color:var(--navy);}
   /* タップで下に展開する場所は、どこでも同じ下向きの矢尻で示す(閉じているときは右向き) */
   .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
@@ -94,6 +92,12 @@
   .list-row:first-child{border-top:none;}
   .list-row:active{background:var(--navy-bg);}
   .list-row .lt{min-width:0; flex:1;}
+  /* .list.bars を付けた一覧では、行(=区分の中身)の左にアクセントバーを立てる。
+     詳細画面の分析と同じ使い分けで、バーが付くのは大カテゴリではなく中身の側。
+     色は中身の有無を表す(紺=取り込み済み / 淡いグレー=まだ空) */
+  .list.bars .list-row .lt{position:relative; padding-left:13px;}
+  .list.bars .list-row .lt::before{content:''; position:absolute; left:0; top:2px; bottom:2px; width:3px; border-radius:2px; background:var(--line2);}
+  .list.bars .list-row.filled .lt::before{background:var(--navy);}
   .list-row .ttl{font-size:13px; font-weight:600; line-height:1.4;}
   .list-row .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
   .list-row .rt{display:flex; align-items:center; gap:var(--sp2); font-size:12px; color:var(--ink2); white-space:nowrap; flex:none;}
@@ -718,6 +722,14 @@ function groupBlock(key, label, contentHtml){
 }
 
 //////////////////// ANALYSIS list ////////////////////
+// カードに何か入っているか。分析画面のアクセントバーの色(紺=あり/淡いグレー=まだ空)に使う
+function hasContent(s){
+  return !!(s.summary&&s.summary.t)
+    || Object.keys(s.metrics||{}).length>0
+    || Object.keys(s.sections||{}).length>0
+    || Object.keys(s.trend||{}).length>0
+    || hyposOf(s.id).length>0;
+}
 let anaSort='保有優先';
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
@@ -731,20 +743,20 @@ function renderAnalysis(v){
   // 名前順のときだけ種別を添える
   const row=(s)=>{ const hy=hyposOf(s.id).length;
     const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
-    return `<div class="list-row" onclick="openStock('${s.id}')">
+    return `<div class="list-row${hasContent(s)?' filled':''}" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div></div>
       <span class="rt">${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}<span class="arrow">›</span></span>
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
   const mrow=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
-    return `<div class="list-row" onclick="openStock('${s.id}')">
+    return `<div class="list-row${hasContent(s)?' filled':''}" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${th?`<div class="meta">注目: ${esc(th)}</div>`:''}</div>
       <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span><span class="arrow">›</span></span>
     </div>`; };
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
   // 下の区分にたどり着くまで延々スクロールすることになるため
   const group=(key,label,rows)=>groupBlock(key, label,
-    rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
+    rows.length?`<div class="list bars">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
   if(mkts.length){
     // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
     const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
