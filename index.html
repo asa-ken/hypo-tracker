@@ -133,6 +133,11 @@
   table{width:100%; border-collapse:collapse; font-size:12px; margin-top:4px;}
   th{text-align:left; font-size:11px; color:var(--ink3); font-weight:600; padding:4px 6px; border-bottom:1px solid var(--line);}
   td{padding:6px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.5;}
+  /* 表示に選んだのに数値がまだ無い指標。枠は出したうえで「データなし」と言葉で書く。
+     グラフは一面に、表は年度のセルをまとめて1つに(セル結合のような見せ方) */
+  .nodata{display:flex; align-items:center; justify-content:center; border:1px dashed var(--line2); border-radius:9px; background:var(--app); color:var(--ink3); font-size:13px;}
+  .nodata-cell{text-align:center; color:var(--ink3); background:var(--app);}
+  .empty-row td:first-child{color:var(--ink3); font-weight:400;}
   .val-up{color:var(--green-tx); font-weight:700;}
   .val-dn{color:var(--red-tx); font-weight:700;}
   .val-old{color:var(--ink3); text-decoration:line-through;}
@@ -941,7 +946,9 @@ function metricCellHtml(s,k){
   const m=s.metrics[k]; const miss=!m;
   // 「要更新」の判定はせず、いつ時点の数字かを事実として見せる。
   // 何年のものか分かるよう年(下2桁)まで出す(四半期開示は数か月前の日付が正常なため)
-  return `<div class="m"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400"':''}>${miss?'—':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:11px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'':esc(m.d.replace(/^\d{2}/,''))}</div></div>`;
+  // 数値が無い指標も、表示に選んでいる以上カードごと出す。「—」だと記号の意味を読み解かせるので
+  // 「データなし」と言葉で書き、選んだのに出てこない指標が一目で分かるようにする
+  return `<div class="m"><div class="k">${esc(k)}</div><div class="v" ${miss?'style="color:var(--ink3);font-weight:400;font-size:13px"':''}>${miss?'データなし':esc(fmtNum(m.v))+(m.unit?`<span style="font-size:11px">${esc(m.unit)}</span>`:'')}</div><div class="d">${miss?'':esc(m.d.replace(/^\d{2}/,''))}</div></div>`;
 }
 function sheetStockMenu(sid){
   const s=stock(sid); if(!s) return;
@@ -996,15 +1003,20 @@ function delStock(sid){
   }});
 }
 function renderTrend(s){
-  const tr=s.trend; const inds=DB.metricsMaster.trend.filter(t=>t.graph&&tr[t.name]);
+  const tr=s.trend;
+  // グラフ表示に選んだ指標は、数値をまだ持っていなくても枠ごと出す。
+  // 選んだのに何も出てこないと「設定が効いていないのか、データが無いのか」が区別できないため
+  const inds=DB.metricsMaster.trend.filter(t=>t.graph);
   const years=new Set(); Object.values(tr).forEach(o=>Object.keys(o).forEach(k=>{if(k!=='unit')years.add(k);}));
   const ys=[...years];
-  // 1年分も無いときは、見出しだけの空テーブルが出て「壊れている」ように見えるので出さない
-  if(!ys.length) return '<div class="hint" style="margin:0 0 4px">売上高・営業利益などを年度つきで取り込むと、ここにグラフと表が出ます。</div>';
+  const hasData=t=>{ const o=tr[t.name]; return !!(o&&ys.some(y=>o[y])); };
   let h='<div class="card" style="padding:11px 12px">';
   // 棒グラフ(グラフ対象指標が複数あれば横スワイプページャーで切り替え)
   if(inds.length){
-    const chartHtml=(ind)=>{ const first=tr[ind.name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
+    const chartHtml=(ind)=>{
+      if(!hasData(ind)) return `<div class="nodata" style="height:118px;margin-bottom:8px">データなし</div>`
+        +`<div class="muted" style="font-size:11px;margin-bottom:2px">${esc(ind.name)} · まだ取り込まれていません</div>`;
+      const first=tr[ind.name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
       let ch='<div style="display:flex;align-items:flex-end;gap:8px;height:118px;margin-bottom:8px">';
       ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
         ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:11px;color:var(--ink3);text-align:center">${esc(y.replace('期','').replace(/[（(]予[）)]/,''))}</div></div>`; });
@@ -1014,11 +1026,20 @@ function renderTrend(s){
     if(inds.length<=1){ h+=chartHtml(inds[0]); }
     else { h+=pagerBlock('trendchart', inds.map(chartHtml), (idx)=>`${idx+1} / ${inds.length}`, 'tight'); }
   }
-  // table
-  h+='<div class="xscroll"><table style="white-space:nowrap"><tr><th>指標</th>'+ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')+'</tr>';
-  DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name]; if(!o)return;
-    h+=`<tr><td>${esc(t.name)}</td>`+ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')+'</tr>'; });
+  // 表。1年分も取り込んでいないときは年度の列を作れないので、見出しだけ「年度」にして行は残す
+  const cols=ys.length?ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')
+                     :'<th style="text-align:center">年度</th>';
+  h+='<div class="xscroll"><table style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
+  DB.metricsMaster.trend.forEach(t=>{ const o=tr[t.name];
+    // 数値が1つも無い指標は、年度のセルを1つにまとめて「データなし」と書く。
+    // 年度ごとに「—」を並べるより、行まるごと空だと分かりやすい
+    const cells=hasData(t)
+      ? ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')
+      : `<td class="nodata-cell" colspan="${Math.max(ys.length,1)}">データなし</td>`;
+    h+=`<tr${hasData(t)?'':' class="empty-row"'}><td>${esc(t.name)}</td>${cells}</tr>`; });
   h+='</table></div></div>';
+  // まだ1年分も無いときだけ、埋め方を1行だけ添える
+  if(!ys.length) h+='<div class="hint" style="margin:6px 0 4px">売上高・営業利益などを年度つきで取り込むと、ここにグラフと数字が入ります。</div>';
   return h;
 }
 
