@@ -809,10 +809,9 @@ function blkHypos(s, hy){
     h+='<div class="list">'+shown.map(hypoMiniCard).join('')+'</div>';
     if(!all) h+=`<button class="btn sm" style="width:100%;margin:-4px 0 10px" onclick="STATE.hypoAll=true;render()">残り ${hy.length-HYPO_PREVIEW}件を表示</button>`;
   }
-  h+=`<div class="row" style="gap:8px;margin-top:2px">
-    <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','memo')">＋ メモ</button>
-    <button class="btn sm" onclick="sheetEditHypo(null,'${s.id}','watch')">＋ 注目ポイント</button>
-  </div>`;
+  // メモ/注目ポイントの種別は、以前は追加ボタンを2つ並べて選ばせていたが、
+  // 作成画面側にセグメントを置けばボタンは1つで済む(編集時の種別変更にも同じセグメントを使い回せる)
+  h+=`<button class="btn sm" style="width:100%;margin-top:2px" onclick="sheetEditHypo(null,'${s.id}')">＋</button>`;
   return h;
 }
 function blkLinks(s){
@@ -1713,14 +1712,21 @@ function triageAddReminder(day){
   STATE.remHypoIds=ids; STATE.remStockId=STATE._triageSid; STATE._remFromStock=true;
   closeSheet(); sheetAddReminder(STATE._triageSid, ids);
 }
-function sheetEditHypo(hid, sid, forceKind){
+// kind/presetText を渡すと、種別セグメントで切り替えた直後の状態を再現する
+// (入力途中の文章を保ったまま、メモ⇄注目ポイントを行き来できるようにするため)
+function sheetEditHypo(hid, sid, kind, presetText){
   const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
   const s=stock(hh?hh.stockId:sid);
-  const kind=hh?hh.kind:(forceKind||'memo');
-  const isMemo=kind==='memo';
+  const curKind=kind||(hh?hh.kind:'memo');
+  const isMemo=curKind==='memo';
+  const text=presetText!==undefined?presetText:(hh?hh.text:'');
   let h=`<h3>${hh?(isMemo?'メモを編集':'注目ポイントを編集'):(isMemo?'メモを作成':'注目ポイントを作成')}</h3>
     <div class="muted" style="margin-bottom:10px">${esc(s.name)}</div>
-    <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'注目ポイント(何がどうなったら良い/悪いか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(hh?hh.text:'')}</textarea></label>`;
+    <div class="seg" style="margin-bottom:12px">
+      <button class="${isMemo?'on':''}" onclick="switchHypoKind('${hid||''}','${s.id}','memo')">メモ</button>
+      <button class="${isMemo?'':'on'}" onclick="switchHypoKind('${hid||''}','${s.id}','watch')">注目ポイント</button>
+    </div>
+    <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'注目ポイント(何がどうなったら良い/悪いか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(text)}</textarea></label>`;
   // 日付欄はここには置かない。日付を持たせる＝リマインダー登録なので、保存後に登録シートへ誘導する
   const rms=hid?remindersOf(hid):[];
   if(!isMemo){
@@ -1728,11 +1734,16 @@ function sheetEditHypo(hid, sid, forceKind){
     // 登録済みのリマインダーはここから開けるようにする(一覧の行からボタンを外した分の受け皿)
     if(rms.length) h+='<div class="list">'+rms.map(r=>`<div class="list-row" onclick="openReminder('${r.id}')"><div class="lt"><div class="ttl">🔔 ${esc(r.title||'リマインダー')}</div><div class="meta">次回 ${esc(fmtFire(calcNextFire(r)))}</div></div><span class="rt"><span class="arrow">›</span></span></div>`).join('')+'</div>';
   }
-  h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}')">保存</button>
-    ${isMemo?'':`<button class="btn" style="margin-top:8px" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${kind}',true)">保存して${rms.length?'リマインダーを追加':'リマインダーを登録'}</button>`}
+  h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}')">保存</button>
+    ${isMemo?'':`<button class="btn" style="margin-top:8px" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}',true)">保存して${rms.length?'リマインダーを追加':'リマインダーを登録'}</button>`}
     ${hid?`<button class="btn danger" style="margin-top:8px" onclick="delHypo('${hid}')">削除</button>`:''}
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet();openStock('${s.id}')">キャンセル</button>`;
   openSheet(h);
+}
+// セグメントで種別を切り替える。入力中の文章を読み取ってから同じシートを開き直す
+function switchHypoKind(hid, sid, kind){
+  const cur=$('#hy_text'); const text=cur?cur.value:undefined;
+  sheetEditHypo(hid||null, sid, kind, text);
 }
 function saveHypo(hid, sid, kind, thenRemind){
   const text=$('#hy_text').value.trim();
@@ -1741,6 +1752,7 @@ function saveHypo(hid, sid, kind, thenRemind){
   if(hid){
     const hh=DB.hypotheses.find(x=>x.id===hid);
     hh.text=text;
+    if(kind) hh.kind=kind; // 編集画面のセグメントでメモ⇄注目ポイントを切り替えた分を反映する
   } else {
     id='h'+Date.now();
     DB.hypotheses.push({id, stockId:sid, kind:kind||'memo', text});
