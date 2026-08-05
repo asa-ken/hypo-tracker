@@ -48,8 +48,11 @@
      translate3d/backface-visibility/will-change で強制的にGPUの独立レイヤーに乗せ、
      スクロールの再描画から切り離すのが定番の回避策 */
   .tabbar{position:fixed; left:50%; bottom:0; transform:translate3d(-50%,0,0); -webkit-backface-visibility:hidden; backface-visibility:hidden; will-change:transform; width:100%; max-width:430px; z-index:20; background:var(--card); border-top:1px solid var(--line); display:flex; padding:6px 4px calc(8px + env(safe-area-inset-bottom));}
-  .tabbar button{flex:1; border:none; background:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:4px; cursor:pointer; color:var(--ink3); font-size:11px; font-weight:600;}
-  .tabbar button.on{color:var(--navy);}
+  /* A1: 選択中のタブは文字色だけでなく薄紺のピルで囲む。
+     色の差だけだと「今どこにいるか」が弱く、画面が切り替わった感覚が出なかった */
+  .tabbar button{flex:1; margin:0 2px; border:none; background:none; border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 4px; cursor:pointer; color:var(--ink3); font-size:11px; font-weight:600; transition:background .15s, color .15s;}
+  .tabbar button.on{color:var(--navy-tx); background:var(--navy-bg);}
+  @media (prefers-reduced-motion: reduce){ .tabbar button{transition:none;} }
   .tabbar .ic{width:22px; height:22px; display:block;}
   /* components */
   .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:13px 14px; margin-bottom:11px;}
@@ -67,7 +70,10 @@
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
   .lbl:first-child{margin-top:2px;}
   /* 開閉できる区切り。見出し全体がタップ領域になる */
-  .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
+  .lbl.grp{position:relative; display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
+  /* B2: 紺のアクセントバーで区分の始まりを示す。本文の外側(bodyの左paddingの中)に置くので、
+     下に続くリストと見出しの文字の左端が揃ったまま目印だけが立つ */
+  .lbl.grp::before{content:''; position:absolute; left:-10px; top:11px; bottom:11px; width:3px; background:var(--navy); border-radius:2px;}
   .lbl.grp:active{color:var(--navy);}
   .lbl.grp .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
   .lbl.grp .caret.closed{transform:rotate(-90deg);}
@@ -129,10 +135,16 @@
   .metric .m.stale{background:var(--amber-bg); border-color:var(--amber-bg);}
   .metric .m.stale .k,.metric .m.stale .v,.metric .m.stale .d{color:var(--amber-tx);}
   .sec{border:1px solid var(--line); border-radius:9px; margin-bottom:7px; overflow:hidden;}
-  .sec .h{display:flex; justify-content:space-between; align-items:center; padding:9px 11px; min-height:44px; cursor:pointer; font-size:13px; font-weight:600; background:var(--card);}
+  .sec .h{display:flex; justify-content:space-between; align-items:center; padding:9px 11px; min-height:44px; cursor:pointer; font-size:13px; font-weight:600; background:var(--card); transition:background .15s, color .15s;}
   .sec .h .m{font-size:11px; color:var(--ink3); font-weight:400;}
   .sec .b{display:none; padding:0 11px 10px; font-size:13px; color:var(--ink2);}
   .sec.open .b{display:block;}
+  /* C1: 開いているカテゴリだけ紺地に白抜き。開閉という状態変化そのものを色で示す。
+     中の件数表示とチップは、紺地の上で沈まないよう白系に振り直す */
+  .sec.open .h{background:var(--navy); color:#fff;}
+  .sec.open .h .m{color:rgba(255,255,255,.72);}
+  .sec.open .h .chip.navy{background:rgba(255,255,255,.22); color:#fff;}
+  @media (prefers-reduced-motion: reduce){ .sec .h{transition:none;} }
   .mine{border-left:3px solid var(--navy); background:var(--navy-bg); border-radius:0 8px 8px 0; padding:9px 11px; margin-top:4px;}
   .mine .row2{font-size:12px; color:var(--navy-tx);} .mine .ts{font-size:11px; color:var(--navy); opacity:.7;}
   .empty{text-align:center; padding:40px 20px; color:var(--ink3);}
