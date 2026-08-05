@@ -490,6 +490,12 @@ function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;'
 // onclick="fn('...')" のようにJS文字列リテラルへ埋め込む値用。
 // esc() はシングルクォートを扱わないため、セクション名に ' があるとハンドラが壊れる
 function escArg(s){return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,'\\n'));}
+// リマインダー関連の目印。絵文字(🔔)は書体依存で色・太さがまちまちになり、
+// アプリの線画アイコン(タブバーなど)から浮いて見えるため、同じベル型のSVGに統一する。
+// color:currentColor で置かれた場所の文字色をそのまま拾う(navy/amber/inkなど)
+function bellIcon(size){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="width:${size||13}px;height:${size||13}px;vertical-align:-2px;flex:none;display:inline-block"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>`;
+}
 function today(){return new Date();}
 function parseD(s){ if(!s)return null; const m=String(s).match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/); if(!m)return null; return new Date(+m[1],+m[2]-1,+m[3]); }
 function daysSince(s){ const d=parseD(s); if(!d)return 999; return Math.floor((today()-d)/86400000); }
@@ -1245,7 +1251,7 @@ function parseAndPreview(){
       let confb='';
       let beforeHtml, afterHtml;
       if(isSame) r._skip=true;
-      if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw)+(r.eventDate?`<div class="muted" style="font-size:11px">🔔 リマインド候補: ${esc(r.eventDate)}</div>`:''); }
+      if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw)+(r.eventDate?`<div class="muted" style="font-size:11px">${bellIcon(11)} リマインド候補: ${esc(r.eventDate)}</div>`:''); }
       else if(isSame){ beforeHtml=esc(before); afterHtml='<span class="muted">変更なし</span>'; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
       h+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:11px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
@@ -1656,8 +1662,8 @@ function hypoMiniCard(hh){
   // 伝わらない(「未登録」なのは全部同じでは、と読める)。候補日そのものを出し、
   // 「日付の候補があるのに登録していない」ことだと分かるようにする
   let status='';
-  if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">🔔 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
-  else if(hint) status=`<span class="chip amber">🔔 候補 ${esc(hint.date)}(未登録)</span>`;
+  if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">${bellIcon()} 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
+  else if(hint) status=`<span class="chip amber">${bellIcon()} 候補 ${esc(hint.date)}(未登録)</span>`;
   return `<div class="swipe">
     <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
       <div class="lt">
@@ -1717,14 +1723,15 @@ function triageAddReminder(day){
 function sheetEditHypo(hid, sid, kind, presetText){
   const hh=hid?DB.hypotheses.find(x=>x.id===hid):null;
   const s=stock(hh?hh.stockId:sid);
-  const curKind=kind||(hh?hh.kind:'memo');
+  // 新規作成時の既定は注目ポイント(メモより利用ニーズが高い想定)。既存項目の編集時はその項目のkindに従う
+  const curKind=kind||(hh?hh.kind:'watch');
   const isMemo=curKind==='memo';
   const text=presetText!==undefined?presetText:(hh?hh.text:'');
   let h=`<h3>${hh?(isMemo?'メモを編集':'注目ポイントを編集'):(isMemo?'メモを作成':'注目ポイントを作成')}</h3>
     <div class="muted" style="margin-bottom:10px">${esc(s.name)}</div>
     <div class="seg" style="margin-bottom:12px">
-      <button class="${isMemo?'on':''}" onclick="switchHypoKind('${hid||''}','${s.id}','memo')">メモ</button>
       <button class="${isMemo?'':'on'}" onclick="switchHypoKind('${hid||''}','${s.id}','watch')">注目ポイント</button>
+      <button class="${isMemo?'on':''}" onclick="switchHypoKind('${hid||''}','${s.id}','memo')">メモ</button>
     </div>
     <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'注目ポイント(何がどうなったら良い/悪いか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(text)}</textarea></label>`;
   // 日付欄はここには置かない。日付を持たせる＝リマインダー登録なので、保存後に登録シートへ誘導する
@@ -1732,7 +1739,7 @@ function sheetEditHypo(hid, sid, kind, presetText){
   if(!isMemo){
     h+=`<div class="muted" style="font-size:11px;margin:-4px 0 10px">日付で思い出したい場合は、保存後に「リマインダーを登録」してください。</div>`;
     // 登録済みのリマインダーはここから開けるようにする(一覧の行からボタンを外した分の受け皿)
-    if(rms.length) h+='<div class="list">'+rms.map(r=>`<div class="list-row" onclick="openReminder('${r.id}')"><div class="lt"><div class="ttl">🔔 ${esc(r.title||'リマインダー')}</div><div class="meta">次回 ${esc(fmtFire(calcNextFire(r)))}</div></div><span class="rt"><span class="arrow">›</span></span></div>`).join('')+'</div>';
+    if(rms.length) h+='<div class="list">'+rms.map(r=>`<div class="list-row" onclick="openReminder('${r.id}')"><div class="lt"><div class="ttl">${bellIcon()} ${esc(r.title||'リマインダー')}</div><div class="meta">次回 ${esc(fmtFire(calcNextFire(r)))}</div></div><span class="rt"><span class="arrow">›</span></span></div>`).join('')+'</div>';
   }
   h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}')">保存</button>
     ${isMemo?'':`<button class="btn" style="margin-top:8px" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}',true)">保存して${rms.length?'リマインダーを追加':'リマインダーを登録'}</button>`}
@@ -1755,7 +1762,7 @@ function saveHypo(hid, sid, kind, thenRemind){
     if(kind) hh.kind=kind; // 編集画面のセグメントでメモ⇄注目ポイントを切り替えた分を反映する
   } else {
     id='h'+Date.now();
-    DB.hypotheses.push({id, stockId:sid, kind:kind||'memo', text});
+    DB.hypotheses.push({id, stockId:sid, kind:kind||'watch', text});
   }
   if(thenRemind){ save(); closeSheet(); addRemForHypo(id); return; }
   // 保存したらシートを閉じる。閉じないと同じ画面のまま保存を再度押せてしまい、
