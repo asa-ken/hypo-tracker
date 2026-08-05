@@ -598,7 +598,8 @@ function renderHome(v){
   let h='';
   h+='<div class="lbl">対応が必要</div>';
   // 「対応が必要」だけ地色を変えて前に出す。下の「今週の予定」は同じ白カードだと同格に見えてしまう
-  if(todayRem.length) h+=`<div class="card attn"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">☀ 今日のまとめ確認をコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
+  // 隣のチップに「今日の」と出ているため、ボタン側では繰り返さず1行に収める
+  if(todayRem.length) h+=`<div class="card attn"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">確認プロンプトをコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
   // 取り込みで日付が入ったのにリマインダー未登録の注目ポイント。
   // 日付はリマインダーでしか管理しないので、ここで登録を促さないと予定として現れない
   if(pend.length) h+=`<div class="card attn tap" onclick="openStock('${pend[0].stockId}')"><div class="row"><span class="chip amber">リマインド未登録 ${pend.length}件</span><span class="arrow" style="color:var(--ink3);font-size:15px">›</span></div><div class="muted" style="margin-top:4px">日付つきの注目ポイントがあります: ${pend.slice(0,3).map(p=>esc((stock(p.stockId)?.name||'')+' '+p.remindHint.date)).join('、')}</div></div>`;
@@ -2246,7 +2247,7 @@ function parseReminder(){
 //////////////////// util ////////////////////
 function copy(text,msg){ navigator.clipboard?.writeText(text).then(()=>toast(msg||'コピーしました'),()=>{fallbackCopy(text);toast(msg||'コピーしました');}); }
 function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); }
-function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&activePrompt(r).text); if(!rs.length){toast('今日のリマインダーはありません');return;} let p='今日の確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${activePrompt(r).text}`).join('\n\n'); copy(p,'今日のまとめ確認をコピーしました。AIに貼り付けてください'); }
+function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&activePrompt(r).text); if(!rs.length){toast('今日のリマインダーはありません');return;} let p='今日の確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${activePrompt(r).text}`).join('\n\n'); copy(p,'今日の確認プロンプトをコピーしました。AIに貼り付けてください'); }
 
 // reset for testing
 function resetDB(){
