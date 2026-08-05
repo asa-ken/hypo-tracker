@@ -73,14 +73,16 @@
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
   .lbl:first-child{margin-top:2px;}
   /* 開閉できる区切り。見出し全体がタップ領域になる */
-  .lbl.grp{position:relative; display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; cursor:pointer; user-select:none;}
-  /* B2: 紺のアクセントバーで区分の始まりを示す。本文の外側(bodyの左paddingの中)に置くので、
-     下に続くリストと見出しの文字の左端が揃ったまま目印だけが立つ */
-  .lbl.grp::before{content:''; position:absolute; left:-10px; top:11px; bottom:11px; width:3px; background:var(--navy); border-radius:2px;}
+  .lbl.grp{position:relative; display:flex; align-items:center; justify-content:space-between; min-height:44px; margin:12px 0 4px; padding-left:11px; cursor:pointer; user-select:none;}
+  /* 紺のアクセントバーで区分の始まりを示す。本文の左端(カード・リストと同じ位置)に置く。
+     以前は本文より外側(bodyの左paddingの中)に出していたが、画面保護フィルムやケースの
+     外縁に隠れてしまうため内側へ寄せた */
+  .lbl.grp::before{content:''; position:absolute; left:0; top:11px; bottom:11px; width:3px; background:var(--navy); border-radius:2px;}
   .lbl.grp:active{color:var(--navy);}
-  .lbl.grp .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
-  .lbl.grp .caret.closed{transform:rotate(-90deg);}
-  @media (prefers-reduced-motion: reduce){ .lbl.grp .caret{transition:none;} }
+  /* タップで下に展開する場所は、どこでも同じ下向きの矢尻で示す(閉じているときは右向き) */
+  .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
+  .caret.closed{transform:rotate(-90deg);}
+  @media (prefers-reduced-motion: reduce){ .caret{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
   /* 「対応が必要」など、いま見てほしいものだけ地色を変える。
      全部が同じ白カードだと重要度の差が出ず、目がどこにも止まらない */
@@ -139,13 +141,16 @@
   .metric .m.stale .k,.metric .m.stale .v,.metric .m.stale .d{color:var(--amber-tx);}
   .sec{border:1px solid var(--line); border-radius:9px; margin-bottom:7px; overflow:hidden;}
   .sec .h{display:flex; justify-content:space-between; align-items:center; padding:9px 11px; min-height:44px; cursor:pointer; font-size:13px; font-weight:600; background:var(--card); transition:background .15s, color .15s;}
-  .sec .h .m{font-size:11px; color:var(--ink3); font-weight:400;}
+  /* .sec はDOMのクラス付け替えだけで開閉する(再描画しない)ので、矢尻の向きはCSS側で持つ */
+  .sec .h .caret{transform:rotate(-90deg);}
+  .sec.open .h .caret{transform:rotate(0deg);}
   .sec .b{display:none; padding:0 11px 10px; font-size:13px; color:var(--ink2);}
   .sec.open .b{display:block;}
   /* C1: 開いているカテゴリだけ紺地に白抜き。開閉という状態変化そのものを色で示す。
-     中の件数表示とチップは、紺地の上で沈まないよう白系に振り直す */
+     中のチップと矢尻は、紺地の上で沈まないよう白系に振り直す
+     (.caret は color を直接指定しているので、.h の color:#fff は継承されない) */
   .sec.open .h{background:var(--navy); color:#fff;}
-  .sec.open .h .m{color:rgba(255,255,255,.72);}
+  .sec.open .h .caret{color:#fff;}
   .sec.open .h .chip.navy{background:rgba(255,255,255,.22); color:#fff;}
   @media (prefers-reduced-motion: reduce){ .sec .h{transition:none;} }
   .mine{border-left:3px solid var(--navy); background:var(--navy-bg); border-radius:0 8px 8px 0; padding:9px 11px; margin-top:4px;}
@@ -822,7 +827,9 @@ function blkSections(s){
   const master=masterFor(s);
   master.filter(c=>c.on).forEach((c,ci)=>{
     const filled=filledCatCount(s,c.cat,master);
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span><span class="m">${filled}/${c.subs.length} 項目</span></div><div class="b" style="padding:0">`;
+    // 「n/m 項目」は出さない。入力済みの件数はバッジで足りるうえ、
+    // 分母まで出すと「埋めきれていない」ことを毎回突きつける表示になる
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${caretSvg()}</div><div class="b" style="padding:0">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
@@ -1007,7 +1014,7 @@ function renderImport(v){
   h+='<div class="lbl">① このアプリの説明書をAIに渡す(最初の1回だけ)</div>';
   h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
   h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
-  h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span><span class="m">開閉</span></div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:8px 11px">${esc(briefingText())}</div></div>`;
+  h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg()}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:8px 11px">${esc(briefingText())}</div></div>`;
   // ② 会話を貼り付ける
   h+='<div class="lbl" style="margin-top:18px">② 会話を貼り付ける</div>';
   h+=`<div class="row" style="gap:8px;margin-bottom:6px">
@@ -1017,7 +1024,7 @@ function renderImport(v){
   h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
   // 困ったときは(旧STEP1・格下げ)
-  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span><span class="m">開閉</span></div><div class="b" style="padding:8px 11px">`;
+  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span>${caretSvg()}</div><div class="b" style="padding:8px 11px">`;
   h+=`<button class="btn" onclick="sheetOrderNew('${sel}')">調べる項目を選ぶ</button>`;
   h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
   h+='</div></div>';
