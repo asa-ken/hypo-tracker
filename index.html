@@ -31,7 +31,7 @@
   .top{position:sticky; top:0; z-index:20; background:var(--app); border-bottom:1px solid var(--line); padding:14px 16px 10px; display:flex; align-items:center; justify-content:space-between;}
   .top h1{font-size:17px; font-weight:700; margin:0; letter-spacing:.01em;}
   .top .sub{font-size:11px; color:var(--ink3); font-weight:400;}
-  .top .act{font-size:13px; color:var(--navy); font-weight:600; cursor:pointer; border:none; background:none; display:inline-flex; align-items:center; min-height:44px; padding:0 2px;}
+  .top .act{font-size:13px; color:var(--navy); font-weight:600; cursor:pointer; border:none; background:none; display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 2px;}
   /* scroll body */
   /* 横方向のドラッグはアプリ側(詳細画面の戻るスワイプ)で使うので、ブラウザに渡さない。
      横スクロールする部品(.pages / .xscroll)だけ touch-action を戻す */
@@ -95,6 +95,10 @@
   /* .list.bars を付けた一覧では、行(=区分の中身)の左にアクセントバーを立てる。
      詳細画面の分析と同じ使い分けで、バーが付くのは大カテゴリではなく中身の側。
      色は中身の有無を表す(紺=取り込み済み / 淡いグレー=まだ空) */
+  /* バーを付ける一覧は、詳細画面の小項目と同じ扱いにする。白カードと区切り線を外して
+     ページ地色に沈め、行の左のバーだけで「区分の中身」であることを示す */
+  .list.bars{background:none; border:none; border-radius:0; overflow:visible;}
+  .list.bars .list-row{border-top:none; padding-left:0;}
   .list.bars .list-row .lt{position:relative; padding-left:13px;}
   .list.bars .list-row .lt::before{content:''; position:absolute; left:0; top:2px; bottom:2px; width:3px; border-radius:2px; background:var(--line2);}
   .list.bars .list-row.filled .lt::before{background:var(--navy);}
@@ -531,6 +535,11 @@ function escArg(s){return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace
 function bellIcon(size){
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="width:${size||13}px;height:${size||13}px;vertical-align:-2px;flex:none;display:inline-block"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>`;
 }
+// バックアップ(書き出し・復元)の目印。⚙ の絵文字は書体依存で色付き・厚みもまちまちに描かれ、
+// タブバーなどの線画アイコンから浮くため、同じ線画の「保管箱」に置き換える
+function archiveIcon(size){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${size||15}px;height:${size||15}px;flex:none"><path d="M3 8h18v12H3z"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>`;
+}
 function today(){return new Date();}
 function parseD(s){ if(!s)return null; const m=String(s).match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/); if(!m)return null; return new Date(+m[1],+m[2]-1,+m[3]); }
 function daysSince(s){ const d=parseD(s); if(!d)return 999; return Math.floor((today()-d)/86400000); }
@@ -648,7 +657,7 @@ function render(){
 //////////////////// HOME ////////////////////
 function renderHome(v){
   $('#topTitle').textContent='ホーム';
-  const act=$('#topAct'); act.style.display='block'; act.textContent='⚙ バックアップ'; act.onclick=sheetBackup;
+  const act=$('#topAct'); act.style.display='inline-flex'; act.innerHTML=archiveIcon()+'<span>バックアップ</span>'; act.onclick=sheetBackup;
   const todayRem=DB.reminders.filter(r=>!r.paused);
   const pend=pendingHints();
   // 「対応が必要」だけ地色を変えて前に出す。下の「今週の予定」は同じ白カードだと同格に見えてしまう
@@ -733,7 +742,7 @@ function hasContent(s){
 let anaSort='保有優先';
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
-  const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
+  const act=$('#topAct'); act.style.display='inline-flex'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
   const sorts=['保有優先','名前順'];
   let h=`<div class="seg">${sorts.map(k=>`<button class="${anaSort===k?'on':''}" onclick="anaSort='${k}';render()">${k}</button>`).join('')}</div>`;
 
@@ -887,7 +896,7 @@ function blkLinks(s){
 function detailHeader(s, sub){
   $('#topTitle').textContent=s.name;
   $('#topSub').textContent=sub;
-  const act=$('#topAct'); act.style.display='block'; act.textContent='← 戻る'; act.onclick=backFromDetail;
+  const act=$('#topAct'); act.style.display='inline-flex'; act.textContent='← 戻る'; act.onclick=backFromDetail;
   const menu=$('#topMenu'); menu.style.display='block'; menu.onclick=()=>sheetStockMenu(s.id);
 }
 
@@ -1502,7 +1511,7 @@ function addStockFromImport(st){
 //////////////////// REMINDER ////////////////////
 function renderReminder(v){
   $('#topTitle').textContent='リマインダー';
-  const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 登録'; act.onclick=()=>sheetAddReminder(STATE.remStockId);
+  const act=$('#topAct'); act.style.display='inline-flex'; act.textContent='＋ 登録'; act.onclick=()=>sheetAddReminder(STATE.remStockId);
   const filt=STATE.remFilter; STATE.remFilter=null;
   let list=DB.reminders; if(filt) list=list.filter(r=>r.stockId===filt);
   let h='';
