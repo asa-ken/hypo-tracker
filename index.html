@@ -159,8 +159,12 @@
   .edge-hint.show{opacity:1;}
   .edge-hint.left{left:0; justify-content:flex-start; background:linear-gradient(to right, var(--app) 25%, transparent 100%);}
   .edge-hint.right{right:0; justify-content:flex-end; background:linear-gradient(to left, var(--app) 25%, transparent 100%);}
-  /* 「指標 1/2」は単独行にすると28px使うだけなので、送りボタンの行に重ねる */
-  .swipecap{position:absolute; left:0; top:50%; transform:translateY(-50%); font-size:11px; color:var(--ink3);}
+  .swipecap{font-size:11px; color:var(--ink3);}
+  /* 「指標 1/2」のような短いキャプションは、単独行にすると28px使うだけなので送りボタンの行に重ねる。
+     「左にスワイプして詳細を見る」のような長い文章は重ねると欠けて読めないため、
+     ボタン行の上に独立した行として中央揃えで置く(swipecap-line) */
+  .pager-nav .swipecap{position:absolute; left:0; top:50%; transform:translateY(-50%);}
+  .swipecap-line{text-align:center; padding:0 0 2px;}
   .pager-nav{position:relative; display:flex; align-items:center; justify-content:center; gap:var(--sp3); padding:6px 0 4px;}
   .navbtn{border:none; background:var(--navy); color:#fff; width:44px; height:44px; border-radius:50%; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex:none;}
   .navbtn:active{transform:scale(.94);}
@@ -1221,7 +1225,16 @@ function parseAndPreview(){
              else if(r._res&&r._res.sub){
                label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:11px">詳細</span>':'');
                const cur=cmp.sections[r._res.sub];
-               if(cur){ before = (r._res.layer==='詳細') ? ((cur.details&&cur.details[0]&&cur.details[0].t)||'—') : (cur.t||'—'); }
+               if(cur){
+                 if(r._res.layer==='詳細'){
+                   // 過去に貼った内容と完全一致するか(先頭だけでなく全件を見る)、
+                   // または以前削除した内容と一致するなら「新規」扱いにしない
+                   const dupExisting=(cur.details||[]).some(d2=>d2.t===afterRaw);
+                   const dupDeleted=!dupExisting && (cur.delSig||[]).includes(afterRaw);
+                   if(dupExisting||dupDeleted){ before=afterRaw; if(dupDeleted) label+=' <span class="chip gray" style="font-size:11px">削除済み・スキップ</span>'; }
+                   else before=(cur.details&&cur.details[0]&&cur.details[0].t)||'—';
+                 } else before = cur.t||'—';
+               }
              }
              else if(r.block==='ざっくりまとめ'){
                label='ざっくりまとめ';
@@ -1316,7 +1329,15 @@ function commitImport(){
       if(!res.sub) return;
       const key=res.sub, isDetail=res.layer==='詳細', val=res.value;
       const prev=s.sections[key];
-      if(isDetail){ if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),details:[]}; if(!s.sections[key].details)s.sections[key].details=[]; s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val}); }
+      if(isDetail){
+        if(!s.sections[key]) s.sections[key]={t:'(要点のみ未取得)',d:normD(r.d),details:[]};
+        if(!s.sections[key].details) s.sections[key].details=[];
+        // 既にある内容・過去に削除した内容と完全一致する場合は積み増さない。
+        // プレビュー側の判定(_res.dup)が正しく効いていればここには来ないはずだが、
+        // 直接呼ばれる経路もあり得るため二重にガードしておく
+        const dup=s.sections[key].details.some(d2=>d2.t===val) || (s.sections[key].delSig||[]).includes(val);
+        if(!dup) s.sections[key].details.unshift({ts:normD(r.d),title:'AI深掘り',t:val});
+      }
       else { s.sections[key]={t:val,d:normD(r.d),details:(prev&&prev.details)||[]}; }
     }
     else if(r.block==='ざっくりまとめ'){
@@ -1631,10 +1652,13 @@ function hypoMiniCard(hh){
   const isMemo=hh.kind==='memo';
   const rms=remindersOf(hh.id);
   const hint=(!isMemo && !rms.length && hh.remindHint && hh.remindHint.date)?hh.remindHint:null;
-  // 日付の扱いはリマインダーに一本化しているので、ここでは「登録済みか/未登録か」だけを見せる
+  // 日付の扱いはリマインダーに一本化しているので、ここでは「登録済みか/未登録か」だけを見せる。
+  // 「リマインド未登録」とだけ書くと、日付候補が無いだけの注目ポイント(バッジ無し)との違いが
+  // 伝わらない(「未登録」なのは全部同じでは、と読める)。候補日そのものを出し、
+  // 「日付の候補があるのに登録していない」ことだと分かるようにする
   let status='';
   if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">🔔 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
-  else if(hint) status=`<span class="chip amber">リマインド未登録</span>`;
+  else if(hint) status=`<span class="chip amber">🔔 候補 ${esc(hint.date)}(未登録)</span>`;
   return `<div class="swipe">
     <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
       <div class="lt">
@@ -2003,7 +2027,12 @@ function delDetail(sid,sec,idx){
   const s=stock(sid); const sc=s&&s.sections[sec]; if(!sc||!sc.details) return;
   const d=sc.details[idx]; if(!d) return;
   askConfirm({title:'詳細メモを削除', body:(d.title?d.title+'\n\n':'')+d.t.slice(0,120)+(d.t.length>120?'…':''), okLabel:'削除する', danger:true, onOk:()=>{
-    sc.details.splice(idx,1); save(); render(); toast('詳細メモを削除しました');
+    sc.details.splice(idx,1);
+    // 削除した内容と同じ文章を、後で同じ会話をもう一度貼り付けたときに自動で復活させない。
+    // details[0]との比較だけで重複判定していると、削除した瞬間にその文章が「新規」扱いに戻ってしまう
+    if(!sc.delSig) sc.delSig=[];
+    if(!sc.delSig.includes(d.t)) sc.delSig.push(d.t);
+    save(); render(); toast('詳細メモを削除しました');
   }});
 }
 function sheetAddDetail(sid,sec){
@@ -2021,16 +2050,20 @@ const _pagerState={}; const _pagerCap={};
 function pagerBlock(id, pageHtmls, capFn, pageClass){
   const total=pageHtmls.length;
   _pagerCap[id]=capFn||null;
+  const tight=/\btight\b/.test(pageClass||'');
   const cls='page'+(pageClass?' '+pageClass:'');
   const pagesHtml=pageHtmls.map(ph=>`<div class="${cls}">${ph}</div>`).join('');
   const dotsHtml=total>1?Array.from({length:total},(_,i)=>`<span class="dot${i===0?' on':''}"></span>`).join(''):'';
   // tight(指標グリッド・グラフ)は左右に余白が無く端のシェブロンが中身に重なるため出さない。
   // 下の矢印ボタンとドットで送れることは伝わる
-  const edges=/\btight\b/.test(pageClass||'')?'':`<div class="edge-hint left" id="${id}_el">‹</div><div class="edge-hint right" id="${id}_er">›</div>`;
+  const edges=tight?'':`<div class="edge-hint left" id="${id}_el">‹</div><div class="edge-hint right" id="${id}_er">›</div>`;
+  // tightは「指標 1/2」など短いキャプションなので送りボタンの行に重ねる。
+  // それ以外(分析項目の「左にスワイプして詳細を見る」など)は文章が長く重ねると欠けるため、
+  // ボタン行の上に独立した中央揃えの行にする
   return `<div class="pages-wrap"><div class="pages" id="${id}_pages">${pagesHtml}</div>
       ${edges}</div>
-    ${total>1?`<div class="pager-nav">
-      <span class="swipecap" id="${id}_cap"></span>
+    ${total>1?`${tight?'':`<div class="swipecap swipecap-line" id="${id}_cap"></div>`}<div class="pager-nav">
+      ${tight?`<span class="swipecap" id="${id}_cap"></span>`:''}
       <button class="navbtn" id="${id}_prev" onclick="pagerGoto('${id}',_pagerState['${id}'].activeIdx-1)">‹</button>
       <div class="dots" id="${id}_dots">${dotsHtml}</div>
       <button class="navbtn" id="${id}_next" onclick="pagerGoto('${id}',_pagerState['${id}'].activeIdx+1)">›</button>
