@@ -37,7 +37,10 @@
      横スクロールする部品(.pages / .xscroll)だけ touch-action を戻す */
   .body{flex:1; position:relative; z-index:1; background:var(--app); overflow-y:auto; padding:14px 16px calc(90px + env(safe-area-inset-bottom)); touch-action:pan-y pinch-zoom;}
   /* 戻るスワイプの下敷き。#view と同じ位置・大きさに JS で合わせる */
-  .back-prev{position:absolute; left:0; right:0; z-index:0; display:none; overflow:hidden; padding:14px 16px calc(90px + env(safe-area-inset-bottom)); background:var(--app); opacity:.5; pointer-events:none;}
+  /* 位置と大きさ(left/width/top/height)はJSでビューポートに合わせる。
+     以前は #view(＝中身の高さまで伸びる箱)に合わせていたため、詳細が長い・スクロール
+     している状態だと下敷きが画面からずれ、上下に余白が出て全画面に広がらなかった */
+  .back-prev{position:fixed; z-index:0; display:none; overflow:hidden; padding:14px 16px calc(90px + env(safe-area-inset-bottom)); background:var(--app); opacity:.5; pointer-events:none;}
   .back-prev.show{display:block;}
   .xscroll{overflow-x:auto; touch-action:manipulation;}
   /* bottom tab */
@@ -589,12 +592,17 @@ function backFromDetail(){
 // 戻るスワイプ中だけ、送り出される本文の下に戻り先の画面を敷く。
 // シートを閉じるときに背景が透けて見えるのと同じ手触りにするため
 function showPrevUnder(){
-  const bp=$('#backPrev'), view=$('#view');
-  bp.style.top=view.offsetTop+'px'; bp.style.height=view.offsetHeight+'px';
+  const bp=$('#backPrev');
+  // ヘッダーとタブバーの内側(＝本文が見えている範囲)をちょうど覆う。
+  // ビューポート基準なので、詳細ページの高さや現在のスクロール位置に左右されない
+  const phoneR=$('.phone').getBoundingClientRect();
+  const headB=Math.max(0, $('.top').getBoundingClientRect().bottom);
+  const tabT=$('.tabbar').getBoundingClientRect().top;
+  bp.style.left=phoneR.left+'px'; bp.style.width=phoneR.width+'px';
+  bp.style.top=headB+'px'; bp.style.height=Math.max(0, tabT-headB)+'px';
   $('#backPrevInner').innerHTML=STATE._prevHtml||'';
-  // 下敷きはドキュメント上の #view と同じ位置に置いてあるので、
-  // 「戻ったときに見えるはずの位置」が窓に来るように中身をずらす
-  $('#backPrevInner').style.transform=`translateY(${viewScroll()-(STATE._prevScroll||0)}px)`;
+  // 戻った直後に見えるはずの位置(一覧を離れたときのスクロール量)を窓の先頭に合わせる
+  $('#backPrevInner').style.transform=`translateY(${-(STATE._prevScroll||0)}px)`;
   bp.classList.add('show');
 }
 function hidePrevUnder(){ $('#backPrev').classList.remove('show'); $('#backPrevInner').innerHTML=''; }
