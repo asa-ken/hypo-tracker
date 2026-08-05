@@ -623,19 +623,18 @@ function renderHome(v){
   const act=$('#topAct'); act.style.display='block'; act.textContent='⚙ バックアップ'; act.onclick=sheetBackup;
   const todayRem=DB.reminders.filter(r=>!r.paused);
   const pend=pendingHints();
-  let h='';
-  h+='<div class="lbl">対応が必要</div>';
   // 「対応が必要」だけ地色を変えて前に出す。下の「今週の予定」は同じ白カードだと同格に見えてしまう
   // 銘柄・市場を跨いだリマインダーが同時にある場合、まとめて1つのプロンプトにすると
   // 「別々のAI・別々のチャットで会話を分けている」使い方と噛み合わない。
   // 対象が1つだけのときは分ける意味が無いので、これまでどおり単一ボタンのままにする
+  let attn='';
   if(todayRem.length){
     const groups={}; todayRem.forEach(r=>{ (groups[r.stockId]=groups[r.stockId]||[]).push(r); });
     const stockIds=Object.keys(groups);
     if(stockIds.length<=1){
-      h+=`<div class="card attn"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">確認プロンプトをコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
+      attn+=`<div class="card attn"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">確認プロンプトをコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
     } else {
-      h+=`<div class="card attn">
+      attn+=`<div class="card attn">
         <div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span></div>
         <div class="hint" style="margin:4px 0 8px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
         <div class="list" style="background:var(--card)">
@@ -651,35 +650,51 @@ function renderHome(v){
   }
   // 取り込みで日付が入ったのにリマインダー未登録の注目ポイント。
   // 日付はリマインダーでしか管理しないので、ここで登録を促さないと予定として現れない
-  if(pend.length) h+=`<div class="card attn tap" onclick="openStock('${pend[0].stockId}')"><div class="row"><span class="chip amber">リマインド未登録 ${pend.length}件</span><span class="arrow" style="color:var(--ink3);font-size:15px">›</span></div><div class="muted" style="margin-top:4px">日付つきの注目ポイントがあります: ${pend.slice(0,3).map(p=>esc((stock(p.stockId)?.name||'')+' '+p.remindHint.date)).join('、')}</div></div>`;
-  if(!todayRem.length&&!pend.length) h+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
+  if(pend.length) attn+=`<div class="card attn tap" onclick="openStock('${pend[0].stockId}')"><div class="row"><span class="chip amber">リマインド未登録 ${pend.length}件</span><span class="arrow" style="color:var(--ink3);font-size:15px">›</span></div><div class="muted" style="margin-top:4px">日付つきの注目ポイントがあります: ${pend.slice(0,3).map(p=>esc((stock(p.stockId)?.name||'')+' '+p.remindHint.date)).join('、')}</div></div>`;
+  if(!todayRem.length&&!pend.length) attn+='<div class="empty"><div class="big">対応が必要なことはありません</div><div>銘柄を分析するか、リマインダーを作りましょう。</div></div>';
   // 予定はリマインダーだけを載せる。
   // 以前は「注目イベント」も並べていたが、リマインダーの日付が「次に通知する日」なのに対し
   // 注目イベントの日付は「その日に事が起きる」で意味が違い、同じ見た目で並ぶと混乱するため廃止した
   const items=[];
   DB.reminders.filter(r=>!r.paused).forEach(r=>{const d=calcNextFire(r); if(d)items.push({d,label:r.title,act:`openReminder('${r.id}')`});});
   items.sort((a,b)=>a.d-b.d);
-  h+='<div class="lbl">今週の予定</div>';
-  if(!items.length) h+='<div class="muted">予定はありません</div>';
-  else h+='<div class="list">'+items.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
+  let sched='';
+  if(!items.length) sched='<div class="muted">予定はありません</div>';
+  else sched='<div class="list">'+items.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
     return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})<span class="arrow">›</span></span></div>`; }).join('')+'</div>';
+  // 対象が複数あると「対応が必要」だけで画面が埋まり、下の「今週の予定」が見えなくなる。
+  // 市場・銘柄分析の一覧と同じ要領で、区分ごとに畳めるようにする(畳んだ状態は端末に残る)
+  const attnCnt=todayRem.length+pend.length;
+  let h=groupBlock('home:対応が必要', `対応が必要${attnCnt?` (${attnCnt})`:''}`, attn);
+  h+=groupBlock('home:今週の予定', `今週の予定 (${items.length})`, sched);
   v.innerHTML=h;
 }
 
-//////////////////// ANALYSIS list ////////////////////
-let anaSort='保有優先';
-// 一覧で畳んでいる区分。リロードしても畳んだままにしたいのでDBに持たせる
-function anaClosedList(){ const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]}); if(!Array.isArray(u.anaClosed)) u.anaClosed=[]; return u.anaClosed; }
-function anaGroupClosed(key){ return anaClosedList().includes(key); }
+//////////////////// 開閉できる区分見出し(ホーム・市場銘柄分析で共用) ////////////////////
+// 畳んでいる区分。リロードしても畳んだままにしたいのでDBに持たせる。
+// 保存先の uiPrefs.anaClosed は市場銘柄分析だけで使っていた頃の名残の名前だが、
+// 移行済みのデータを壊さないため名前はそのままにし、キーを画面ごとに分けて共用する
+function closedGroups(){ const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]}); if(!Array.isArray(u.anaClosed)) u.anaClosed=[]; return u.anaClosed; }
+function groupClosed(key){ return closedGroups().includes(key); }
 // 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く
 function caretSvg(closed){
   return `<svg class="caret${closed?' closed':''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 }
-function toggleAnaGroup(key){
-  const a=anaClosedList(); const i=a.indexOf(key);
+function toggleGroup(key){
+  const a=closedGroups(); const i=a.indexOf(key);
   if(i<0) a.push(key); else a.splice(i,1);
   save(); render();
 }
+// 見出し+中身を1組にして返す。畳んでいるときは中身を出さない
+function groupBlock(key, label, contentHtml){
+  const closed=groupClosed(key);
+  return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
+      <span>${label}</span>${caretSvg(closed)}
+    </div>`+(closed?'':contentHtml);
+}
+
+//////////////////// ANALYSIS list ////////////////////
+let anaSort='保有優先';
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
   const act=$('#topAct'); act.style.display='block'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
@@ -704,13 +719,8 @@ function renderAnalysis(v){
     </div>`; };
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
   // 下の区分にたどり着くまで延々スクロールすることになるため
-  const group=(key,label,rows)=>{
-    const closed=anaGroupClosed(key);
-    return `<div class="lbl grp" onclick="toggleAnaGroup('${escArg(key)}')">
-        <span>${label}</span>${caretSvg(closed)}
-      </div>`
-      +(closed?'':(rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>'));
-  };
+  const group=(key,label,rows)=>groupBlock(key, label,
+    rows.length?`<div class="list">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
   if(mkts.length){
     // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
     const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
