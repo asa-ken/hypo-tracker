@@ -1155,8 +1155,14 @@ function renderTrend(s){
 // 同じ要素に「縦に見える位置まで戻す」と「横に送る」を続けて出すと、端末によっては
 // あとから出した横送りのほうが取り消される。縦はページ全体(window)を動かし、
 // 横送りは次のフレームに回して、2つのスクロールがぶつからないようにする
+let _trendLock=null;   // 表の行から送っている最中の行き先
 function trendChartTo(gi){
-  syncTrendRows(gi);
+  // 送りは滑らかに動くので、途中で通り過ぎるグラフの分だけ onscroll が走る。
+  // そのまま印を追わせると、行き先の手前の行が一瞬光ってから目的の行に移る。
+  // 送っている間は行き先以外の更新を無視して、印が寄り道しないようにする
+  _trendLock=gi;
+  setTimeout(()=>{ if(_trendLock===gi) _trendLock=null; }, 700);
+  applyTrendRows(gi);
   const el=document.getElementById('trendchart_pages');
   if(!el) return;
   const r=el.getBoundingClientRect();
@@ -1167,6 +1173,10 @@ function trendChartTo(gi){
 }
 // いまグラフに出ている指標を表側にも印す。スワイプで送ったときも追従させる
 function syncTrendRows(idx){
+  if(_trendLock!==null){ if(idx!==_trendLock) return; _trendLock=null; }
+  applyTrendRows(idx);
+}
+function applyTrendRows(idx){
   document.querySelectorAll('#view tr[data-gi]').forEach(tr=>tr.classList.toggle('on', +tr.dataset.gi===idx));
 }
 
