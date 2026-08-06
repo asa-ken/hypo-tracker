@@ -78,6 +78,11 @@
   .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:52px; margin:0; border-top:1px solid var(--line); font-size:13px; color:var(--ink); cursor:pointer; user-select:none;}
   .lbl.grp:first-child{border-top:none;}
   .lbl.grp:active{color:var(--navy);}
+  /* 「編集」を添えた開閉見出し。編集リンクは見出しのタップ(開閉)とは別の行き先なので、
+     それぞれ44pxのタップ領域を確保して取り違えを防ぐ */
+  .lbl.grp .grp-right{display:inline-flex; align-items:center; flex:none;}
+  .lbl.grp .grp-edit{color:var(--navy); font-weight:600; display:inline-flex; align-items:center; min-height:44px; padding:0 12px;}
+  .lbl.grp:active .grp-edit{color:var(--navy);}
   /* タップで下に展開する場所は、どこでも同じ矢尻で示す。
      閉じている＝下向き(これから下に開く) / 開いている＝上向き(たたむと上に閉じる) */
   .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
@@ -759,6 +764,16 @@ function groupBlock(key, label, contentHtml){
       <span>${label}</span>${caretSvg(closed)}
     </div>`+(closed?'':contentHtml);
 }
+// 設定への「編集」リンクを添えた開閉見出し。指標をあまり見ない銘柄では丸ごと畳めるように、
+// 開閉は銘柄ごとに覚える(同じ指標でも銘柄によって見たいかどうかが変わるため)
+function groupBlockWithEdit(key, label, editAction, contentHtml){
+  const closed=groupClosed(key);
+  return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
+      <span>${esc(label)}</span>
+      <span class="grp-right"><span class="grp-edit" onclick="event.stopPropagation();${editAction}">編集</span>${caretSvg(closed)}</span>
+    </div>`+(closed?'':contentHtml);
+}
+function detailGroupKey(s, label){ return 'detail:'+s.id+':'+label; }
 
 //////////////////// ANALYSIS list ////////////////////
 // カードに何か入っているか。一覧で「まだ空のカード」を薄く見せる判定に使う
@@ -834,10 +849,10 @@ function blkTheme(s){
     <div style="font-size:12px;margin-top:1px;${bm?'':'color:var(--ink3)'}">${bm?esc(bm):'未設定(決めるとAIの答える数値がぶれません)'}</div>`:''}</div>`;
 }
 // 指標グリッド。6件を超える場合は横スワイプページャーで送る
-function blkMetrics(s, label, keys, editAction, pagerId){
-  let h=lblWithEdit(label, editAction, 'margin-top:2px');
+function blkMetrics(s, label, keys, editAction, pagerId, extraHtml){
+  let h='';
   const chunks=[]; for(let i=0;i<keys.length;i+=6) chunks.push(keys.slice(i,i+6));
-  if(chunks.length<=1) h+='<div class="metric">'+(chunks[0]||[]).map(k=>metricCellHtml(s,k)).join('')+'</div>';
+  if(chunks.length<=1) h+='<div class="metric" style="margin-top:2px">'+(chunks[0]||[]).map(k=>metricCellHtml(s,k)).join('')+'</div>';
   else {
     const pages=chunks.map(chunk=>`<div class="metric">${chunk.map(k=>metricCellHtml(s,k)).join('')}</div>`);
     h+=pagerBlock(pagerId, pages, (idx,total)=>`指標 ${idx+1}/${total}`, 'tight');
@@ -845,7 +860,8 @@ function blkMetrics(s, label, keys, editAction, pagerId){
   // 1つも埋まっていないときだけ、埋め方を1行だけ添える。
   // セルごとに「未取得」と書くと、新規カードを開くたびに何度も未完了を突きつけることになる
   if(keys.length && keys.every(k=>!s.metrics[k])) h+='<div class="hint" style="margin-top:6px">会話を取り込むと、ここに数字が入ります。</div>';
-  return h;
+  // 指標の読み方を添える一文も、畳んだら一緒に隠れないと見出しだけ浮いて見える
+  return groupBlockWithEdit(detailGroupKey(s,label), label, editAction, h+(extraHtml||'')+'<div style="height:10px"></div>');
 }
 // 分析の先頭に置く1〜2文の全体像。個々のカテゴリを読む前に「結局どう見ているか」を
 // 掴めるようにする。カテゴリ(sectionMaster)の一項目ではなく s.summary として独立に持つ。
@@ -937,8 +953,7 @@ function renderStockDetail(v){
   const hy=hyposOf(s.id);
   let h=blkChips(hy)+blkTheme(s);
   h+=blkMetrics(s,'主要指標',snapKeys(DB.metricsMaster),'sheetMetricsMaster()','metrics');
-  h+=lblWithEdit('業績推移','sheetMetricsMaster()');
-  h+=renderTrend(s);
+  h+=groupBlockWithEdit(detailGroupKey(s,'業績推移'),'業績推移','sheetMetricsMaster()',renderTrend(s)+'<div style="height:10px"></div>');
   h+=blkSections(s)+blkHypos(s,hy)+blkLinks(s);
   v.innerHTML=h;
   pagerInit('metrics'); pagerInit('trendchart');
@@ -955,9 +970,9 @@ function renderMarketDetail(v){
   let h=blkChips(hy)+blkTheme(s);
   const METLBL={'市場':'市場の水準','業界':'業界の水準','テーマ':'テーマの指標'};
   const keys=snapKeys(metricsMasterFor(s));
-  if(keys.length) h+=blkMetrics(s,METLBL[sc],keys,'sheetMarketMetricsMaster()','mktmetrics');
-  else h+=lblWithEdit(METLBL[sc],'sheetMarketMetricsMaster()','margin-top:2px')+'<div class="muted" style="padding:0 2px 4px">まだありません。会話を取り込むと自動で増えます。</div>';
-  h+=`<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。${s.benchmark?`基準: ${esc(s.benchmark)}`:''}</div>`;
+  const lvlHint=`<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。${s.benchmark?`基準: ${esc(s.benchmark)}`:''}</div>`;
+  if(keys.length) h+=blkMetrics(s,METLBL[sc],keys,'sheetMarketMetricsMaster()','mktmetrics',lvlHint);
+  else h+=lblWithEdit(METLBL[sc],'sheetMarketMetricsMaster()','margin-top:2px')+'<div class="muted" style="padding:0 2px 4px">まだありません。会話を取り込むと自動で増えます。</div>'+lvlHint;
   h+=blkSections(s);
   h+=blkHypos(s,hy);
   // 市場の話は最終的に「自分の銘柄がどうなるか」に着地するので、保有・ウォッチへの導線を置く
@@ -974,7 +989,8 @@ function renderMarketDetail(v){
 function lblWithEdit(label, action, extraStyle){
   return `<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;${extraStyle||''}">
     <span>${esc(label)}</span>
-    <span style="color:var(--navy);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;min-height:44px;padding-left:16px" onclick="${action}">編集</span>
+    <!-- 右の余白は、開閉見出し(.lbl.grp)側の「編集」と縦に揃えるため。矢尻の幅22px＋間隔12px分あける -->
+    <span style="color:var(--navy);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;min-height:44px;padding-left:16px;padding-right:34px" onclick="${action}">編集</span>
   </div>`;
 }
 function metricCellHtml(s,k){
