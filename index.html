@@ -260,7 +260,7 @@
   /* 取り込みで新しく増える指標の告知。表記揺れは別の指標として登録され、
      グラフも履歴も分かれてしまう。プレビューの表より上に置き、下りる前に目に入るようにする */
   .metwarn{background:var(--amber-bg); border-radius:9px; padding:10px 12px; margin-bottom:11px;}
-  .metwarn .t{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--amber-tx);}
+  .metwarn .t{display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--amber-tx);}
   .metwarn .r{background:var(--card); border-radius:8px; padding:7px 9px; margin-top:7px;}
   .metwarn .r .n{font-size:13px; font-weight:700;}
   .metwarn .r .s{font-size:11px; color:var(--amber-tx); margin-top:2px;}
@@ -273,8 +273,15 @@
   .banner.warn{background:var(--amber-bg); color:var(--amber-tx);}
   .del{color:var(--red-tx); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px;}
   /* 指標マスターの1行。非表示にしても一覧から動かさず、右端のバッジで今の状態を示す */
-  .met-row{display:flex; align-items:center; gap:8px; padding:8px 2px; border-bottom:1px solid var(--line);}
-  .met-row .nm{flex:1; min-width:0; font-size:13px;}
+  .met-row{display:flex; align-items:center; gap:8px; padding:0 2px; border-bottom:1px solid var(--line);}
+  /* 指標名を押すと、まとめる・削除の画面が開く。押せることが分かるように名前のうしろへ
+     小さな「…」を添える(矢尻は開閉の意味で使っているので、ここには持ち込まない)。
+     行の高さは名前ボタンが決める。44pxを確保し、名前の脇を突いても開くようにする */
+  .met-row .nm{flex:1; min-width:0; min-height:44px; font-size:13px; display:flex; align-items:center; gap:8px;
+               padding:0; border:none; background:none;
+               font-family:inherit; color:inherit; text-align:left; cursor:pointer;}
+  .met-row .nm .dots{width:15px; height:15px; flex:none; color:var(--ink3);}
+  .met-row .nm:active{color:var(--navy);}
   .met-row.off .nm{color:var(--ink3);}
   /* バッジ自体がボタン。「表示」「非表示」だと押した結果か今の状態か読めないので「〜中」と書く */
   /* 「表示中」と「非表示中」で幅が変わると、切り替えるたびに左の↑↓がずれるので幅を固定する */
@@ -2860,18 +2867,120 @@ function toggleMetHelp(key){
 function statBadge(on, action){
   return `<button class="stat${on?' on':''}" onclick="${action}">${on?'表示中':'非表示中'}</button>`;
 }
+// ===== 指標の整理(まとめる・削除) =====
+// 表記揺れで増えた指標は、あとから畳めないと持ち続けることになる。
+// 一覧の指標名をタップすると、その指標をどうするかを選ぶ画面を開く。
+// src … 'stock'(銘柄用マスター) / 'mkt'(いま開いている粒度の市場マスター)
+function masterBySrc(src){ return src==='mkt' ? curScopeMet() : DB.metricsMaster; }
+function backToMaster(src){ (src==='mkt'?sheetMarketMetricsMaster:sheetMetricsMaster)(); }
+// そのマスターを使っているカード。銘柄用は非市場カード、粒度別マスターは同じ粒度の市場カード
+function stocksForMaster(mm){ return DB.stocks.filter(s=>metricsMasterFor(s)===mm); }
+function metDataCount(type, name, mm){
+  return type==='trend'
+    ? DB.stocks.filter(s=>!isMkt(s)&&s.trend&&s.trend[name]).length
+    : stocksForMaster(mm).filter(s=>s.metrics&&s.metrics[name]).length;
+}
+function metNameBtn(type, name, src){
+  return `<button class="nm" onclick="sheetMetricEdit('${type}','${escArg(name)}','${src}')">${esc(name)}`
+    + `<svg class="dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>`;
+}
+function sheetMetricEdit(type, name, src){
+  const mm=masterBySrc(src);
+  const others = type==='trend' ? mm.trend.map(t=>t.name).filter(n=>n!==name) : mm.snap.filter(n=>n!==name);
+  const n=metDataCount(type,name,mm);
+  const where = type==='trend' ? '業績推移' : (src==='mkt' ? esc(curScopeName())+'の指標' : 'スナップショット指標');
+  let h=`<h3>${esc(name)}</h3>
+    <div class="muted" style="margin-bottom:12px">${where}の指標です。${n?`いま ${n}件のカードにデータがあります。`:'まだどのカードにもデータがありません。'}</div>`;
+  if(others.length){
+    // 表記揺れを畳むのが主な用途なので、似た名前を選択肢の先頭に置いて探す手間を減らす
+    const near=nearestMetric(name, others);
+    const list = near ? [near.name].concat(others.filter(k=>k!==near.name)) : others;
+    h+=`<div class="lbl" style="margin-top:0">ほかの指標にまとめる</div>`;
+    if(near) h+=`<div class="banner">「${esc(near.name)}」と名前が似ています。同じものであれば、まとめてください。</div>`;
+    h+=`<div class="muted" style="margin-bottom:8px">${type==='trend'
+        ? '年度ごとに合体します。同じ年度が両方にある場合は、まとめ先の値を残します。'
+        : '値は1つしか持てないので、取り込み日が新しいほうを残します。'}まとめたあと「${esc(name)}」は一覧から消えます。</div>
+      <label class="fld"><select id="metMergeTo">${list.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></label>
+      <button class="btn" onclick="askMergeMetric('${type}','${escArg(name)}','${src}')">まとめる</button>`;
+  }
+  h+=`<div class="lbl">この指標を削除</div>
+    <div class="muted" style="margin-bottom:8px">${n?`${n}件のカードの「${esc(name)}」のデータも一緒に消えます。`:'消えて困るデータはありません。'}元に戻せません。</div>
+    <button class="btn danger" onclick="askDeleteMetric('${type}','${escArg(name)}','${src}')">削除する</button>
+    <button class="btn ghost" style="margin-top:14px" onclick="backToMaster('${src}')">← 一覧に戻る</button>`;
+  openSheet(h);
+}
+function askMergeMetric(type, from, src){
+  const sel=document.getElementById('metMergeTo'); const to=sel?sel.value:'';
+  if(!to){ toast('まとめ先を選んでください'); return; }
+  askConfirm({title:'指標をまとめる',
+    body:`「${from}」を「${to}」にまとめます。\n\n${type==='trend'
+      ? '年度ごとに合体し、同じ年度が両方にある場合は「'+to+'」の値を残します。'
+      : '取り込み日が新しいほうの値を残します。'}\n「${from}」は一覧から消えます。`,
+    okLabel:'まとめる', onOk:()=>doMergeMetric(type,from,to,src)});
+}
+function doMergeMetric(type, from, to, src){
+  const mm=masterBySrc(src);
+  let moved=0, kept=0;
+  if(type==='trend'){
+    DB.stocks.filter(s=>!isMkt(s)).forEach(s=>{
+      const f=s.trend&&s.trend[from]; if(!f) return;
+      const t=s.trend[to]||(s.trend[to]={unit:f.unit||''});
+      if(!t.unit&&f.unit) t.unit=f.unit;
+      Object.keys(f).forEach(y=>{
+        if(y==='unit') return;
+        // 取り込み済みの値は上書きしない。同じ年度が両方にあるならまとめ先を残す
+        if(t[y]===undefined){ t[y]=f[y]; moved++; } else kept++;
+      });
+      delete s.trend[from];
+    });
+    DB.metricsMaster.trend=DB.metricsMaster.trend.filter(t=>t.name!==from);
+    DB.metricsMaster.hiddenTrend=(DB.metricsMaster.hiddenTrend||[]).filter(k=>k!==from);
+  } else {
+    stocksForMaster(mm).forEach(s=>{
+      const f=s.metrics&&s.metrics[from]; if(!f) return;
+      const t=s.metrics[to], fd=parseD(f.d), td=t?parseD(t.d):null;
+      // 値は1つしか持てないので、より新しく取り込んだほうを残す
+      if(!t || (fd && (!td || fd>td))){ s.metrics[to]=f; moved++; } else kept++;
+      delete s.metrics[from];
+    });
+    mm.snap=mm.snap.filter(k=>k!==from);
+    mm.hiddenSnap=(mm.hiddenSnap||[]).filter(k=>k!==from);
+  }
+  save(); render(); backToMaster(src);
+  toast(kept?`「${to}」にまとめました(${moved}件を移し、${kept}件は既存を残しました)`:`「${to}」にまとめました(${moved}件)`);
+}
+function askDeleteMetric(type, name, src){
+  const n=metDataCount(type,name,masterBySrc(src));
+  askConfirm({title:'指標を削除する', danger:true,
+    body:`「${name}」を一覧から削除します。\n\n${n?`${n}件のカードに入っている「${name}」のデータも一緒に消えます。`:'この指標のデータを持つカードはありません。'}\n元に戻せません。`,
+    okLabel:'削除する', onOk:()=>doDeleteMetric(type,name,src)});
+}
+function doDeleteMetric(type, name, src){
+  const mm=masterBySrc(src);
+  if(type==='trend'){
+    DB.stocks.filter(s=>!isMkt(s)).forEach(s=>{ if(s.trend) delete s.trend[name]; });
+    DB.metricsMaster.trend=DB.metricsMaster.trend.filter(t=>t.name!==name);
+    DB.metricsMaster.hiddenTrend=(DB.metricsMaster.hiddenTrend||[]).filter(k=>k!==name);
+  } else {
+    stocksForMaster(mm).forEach(s=>{ if(s.metrics) delete s.metrics[name]; });
+    mm.snap=mm.snap.filter(k=>k!==name);
+    mm.hiddenSnap=(mm.hiddenSnap||[]).filter(k=>k!==name);
+  }
+  save(); render(); backToMaster(src);
+  toast(`「${name}」を削除しました`);
+}
 function sheetMetricsMaster(){
   const mm=DB.metricsMaster;
   const graphOn=trendInds(mm).filter(x=>x.graph).length;
   const snapOn=snapKeys(mm).length, trendOn=trendInds(mm).length;
   let h=`<h3>収容指標・業績分析項目の設定</h3>
-    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。</div>`;
+    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。指標名を押すと、ほかの指標にまとめたり削除したりできます。</div>`;
   // スナップショット指標
   h+=metHelpLbl(`スナップショット指標 (表示中 ${snapOn}/${mm.snap.length})`, 'snap', 'margin-top:0');
   mm.snap.forEach((k,i)=>{
     const on=metOn(mm,'snap',k);
     h+=`<div class="met-row${on?'':' off'}">
-      <span class="nm">${esc(k)}</span>
+      ${metNameBtn('snap',k,'stock')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},-1)" ${i===0?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},1)" ${i===mm.snap.length-1?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↓</button>
       ${statBadge(on, `toggleMetric('snap','${escArg(k)}')`)}
@@ -2891,7 +3000,7 @@ function sheetMetricsMaster(){
     // 非表示中はそもそも画面に出ないので、グラフの指定も効かない。押せないことが分かるよう薄くする
     h+=`<div class="met-row${on?'':' off'}">
       <button class="btn sm" style="width:auto;padding:3px 10px;font-size:11px;${on?'':'opacity:.35;'}${on&&o.graph?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="toggleGraph(${i})">グラフ</button>
-      <span class="nm">${esc(o.name)}</span>
+      ${metNameBtn('trend',o.name,'stock')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},1)" ${i===mm.trend.length-1?'disabled':''}>↓</button>
       ${statBadge(on, `toggleMetric('trend','${escArg(o.name)}')`)}
@@ -2909,13 +3018,13 @@ function curScopeName(){ const s=STATE.stockId?stock(STATE.stockId):null; return
 function sheetMarketMetricsMaster(){
   const mm=curScopeMet(); const sc=curScopeName();
   let h=`<h3>${esc(sc)}の指標の設定</h3>
-    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。</div>`;
+    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。指標名を押すと、ほかの指標にまとめたり削除したりできます。</div>`;
   h+=metHelpLbl(`指標 (表示中 ${snapKeys(mm).length}/${mm.snap.length})`, 'mkt', 'margin-top:0');
   if(!mm.snap.length) h+='<div class="muted" style="padding:0 2px 6px">まだありません。会話を取り込むと自動で増えます。</div>';
   mm.snap.forEach((k,i)=>{
     const on=metOn(mm,'snap',k);
     h+=`<div class="met-row${on?'':' off'}">
-      <span class="nm">${esc(k)}</span>
+      ${metNameBtn('snap',k,'mkt')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMarketMetric(${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMarketMetric(${i},1)" ${i===mm.snap.length-1?'disabled':''}>↓</button>
       ${statBadge(on, `toggleMarketMetric('${escArg(k)}')`)}
