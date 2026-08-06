@@ -78,6 +78,11 @@
   .lbl.grp{display:flex; align-items:center; justify-content:space-between; min-height:52px; margin:0; border-top:1px solid var(--line); font-size:13px; color:var(--ink); cursor:pointer; user-select:none;}
   .lbl.grp:first-child{border-top:none;}
   .lbl.grp:active{color:var(--navy);}
+  /* 開閉しない区分見出し(分析・メモ・注目ポイントなど)。畳める見出しと同じ層なので、
+     大きさ・色・区切り線は揃え、矢尻が無いことだけが違いになるようにする */
+  .lbl.head{display:flex; align-items:center; justify-content:space-between; min-height:52px; margin:0;
+            border-top:1px solid var(--line); font-size:13px; color:var(--ink);}
+  .lbl.head:first-child{border-top:none;}
   /* 「編集」を添えた開閉見出し。編集リンクは見出しのタップ(開閉)とは別の行き先なので、
      取り違えないように離す:
       ・矢尻は22pxしかないので44pxの枠で包む(右端を狙えば必ず開閉になる)
@@ -955,7 +960,7 @@ function blkSections(s){
 // 1件ずつのボタン(編集/削除/リマインダー)は行から外し、行タップで開く編集シートに集約した
 const HYPO_PREVIEW=3;
 function blkHypos(s, hy){
-  let h=`<div class="lbl">メモ・注目ポイント (${hy.length})</div>`;
+  let h=`<div class="lbl head">メモ・注目ポイント (${hy.length})</div>`;
   if(!hy.length){
     h+='<div class="hint" style="margin:-4px 0 8px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
   } else {
@@ -1014,7 +1019,7 @@ function renderMarketDetail(v){
   // 市場の話は最終的に「自分の銘柄がどうなるか」に着地するので、保有・ウォッチへの導線を置く
   const mine=DB.stocks.filter(x=>!isMkt(x));
   if(mine.length){
-    h+='<div class="lbl">自分の銘柄を確認</div>';
+    h+='<div class="lbl head">自分の銘柄を確認</div>';
     h+=`<div class="pill-row" style="margin-bottom:2px">${mine.map(x=>`<span class="chip navy tap" style="cursor:pointer" onclick="openStock('${x.id}')">${esc(x.name)}</span>`).join('')}</div>`;
   }
   h+=blkLinks(s);
@@ -1023,7 +1028,7 @@ function renderMarketDetail(v){
 }
 // 見出しの右端に編集リンクを添える(指標の追加・削除などの設定画面への入口)
 function lblWithEdit(label, action, extraStyle){
-  return `<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;${extraStyle||''}">
+  return `<div class="lbl head" style="${extraStyle||''}">
     <span>${esc(label)}</span>
     <!-- 右の余白は、開閉見出し(.lbl.grp)側の「編集」と縦に揃えるため。
          矢尻の枠44px＋間隔16px＋編集の枠の右padding8px = 68px あける -->
