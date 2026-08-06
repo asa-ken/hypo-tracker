@@ -847,13 +847,13 @@ function renderAnalysis(v){
     const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
     return `<div class="list-row${hasContent(s)?' filled':''}" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div></div>
-      <span class="rt">${hy?`<span class="chip navy">メモ・注目 ${hy}</span>`:''}<span class="arrow">›</span></span>
+      ${hy?`<span class="rt"><span class="chip navy">メモ・注目 ${hy}</span></span>`:''}
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
   const mrow=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
     return `<div class="list-row${hasContent(s)?' filled':''}" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${th?`<div class="meta">注目: ${esc(th)}</div>`:''}</div>
-      <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span><span class="arrow">›</span></span>
+      <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span></span>
     </div>`; };
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
   // 下の区分にたどり着くまで延々スクロールすることになるため
