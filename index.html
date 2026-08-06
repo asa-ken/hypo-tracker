@@ -204,7 +204,6 @@
   .sub-row .name{color:var(--ink); font-weight:600;}
   .sub-row:not(.filled) .name{font-weight:400; color:var(--ink3);}
   .sub-row .row-right{display:flex; align-items:center; gap:8px;}
-  .sub-row .arrow{color:var(--ink3); font-size:15px;}
   /* 概要/詳細の横スワイプページャー */
   .pager-top{padding:2px 20px 10px; border-bottom:1px solid var(--line); margin-bottom:2px;}
   .pager-top .ti{font-size:15px; font-weight:700;}
@@ -775,7 +774,7 @@ function renderHome(v){
   let sched='';
   if(!items.length) sched='<div class="muted">予定はありません</div>';
   else sched='<div class="list">'+items.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
-    return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})<span class="arrow">›</span></span></div>`; }).join('')+'</div>';
+    return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div>`; }).join('')+'</div>';
   // 対象が複数あると「対応が必要」だけで画面が埋まり、下の「今週の予定」が見えなくなる。
   // 市場・銘柄分析の一覧と同じ要領で、区分ごとに畳めるようにする(畳んだ状態は端末に残る)
   const attnCnt=todayRem.length+pend.length;
@@ -958,7 +957,7 @@ function blkSections(s){
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row${val?' filled':''}" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
-        <span class="row-right"><span class="m">${val?esc(val.d.replace(/^\d{2}/,'')):''}</span><span class="arrow">›</span></span>
+        <span class="row-right"><span class="m">${val?esc(val.d.replace(/^\d{2}/,'')):''}</span></span>
       </div>`; });
     h+=`</div></div>`;
   });
