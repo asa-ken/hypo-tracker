@@ -2602,7 +2602,7 @@ function importData(input){
       const n=(obj.stocks||[]).length;
       askConfirm({title:'バックアップを復元', body:`読み込んだバックアップ(銘柄${n}件)で、現在のデータをすべて置き換えます。\n\n現在のデータは失われます。`, okLabel:'復元する', danger:true, onOk:()=>{
         // 古いバックアップは今のデータ構造と違うことがあるので、読み込み時にも移行を通す
-        DB=obj; migrate(DB); save(); go('home'); toast('バックアップを読み込みました');
+        DB=migrate(obj)||obj; save(); go('home'); toast('バックアップを読み込みました');
       }});
     }catch(e){ toast('ファイルを読み込めませんでした'); }
   };
