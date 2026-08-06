@@ -242,6 +242,9 @@
   .failbox .l{font-family:var(--mono); font-size:11px; color:var(--amber-tx); margin-top:3px; word-break:break-all;}
   .pill-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;}
   .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
+  /* 上限に当たったことを知らせる注意書き。トーストは数秒で消えるうえ画面の下に出るので、
+     押した場所のすぐそばに、消えない形で置く */
+  .banner.warn{background:var(--amber-bg); color:var(--amber-tx);}
   .del{color:var(--red-tx); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px;}
   /* 指標マスターの1行。非表示にしても一覧から動かさず、右端のバッジで今の状態を示す */
   .met-row{display:flex; align-items:center; gap:8px; padding:8px 2px; border-bottom:1px solid var(--line);}
@@ -641,6 +644,8 @@ function masterFor(s){return isMkt(s)?DB[scopeKeys(s).sec]:DB.sectionMaster;}
 function metricsMasterFor(s){return isMkt(s)?DB[scopeKeys(s).met]:DB.metricsMaster;}
 // 非表示は「一覧から取り除く」のではなく「使わない印を付ける」だけ。
 // 設定画面では並び順のまま残り、画面・質問文には表示中のものだけを使う
+// グラフの上限。増やすと横スワイプで送る枚数が増え、1枚あたりの意味が薄くなる
+const GRAPH_MAX=4;
 function metOn(mm,type,name){ return !((type==='trend'?mm.hiddenTrend:mm.hiddenSnap)||[]).includes(name); }
 function snapKeys(mm){ return ((mm&&mm.snap)||[]).filter(k=>metOn(mm,'snap',k)); }
 function trendInds(mm){ return ((mm&&mm.trend)||[]).filter(t=>metOn(mm,'trend',t.name)); }
@@ -1476,7 +1481,7 @@ function commitImport(){
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
       if(!DB.metricsMaster.trend.some(t=>t.name===r.key)){
         // グラフは最大4件までの運用のため、超える分は表(グラフなし)で追加
-        DB.metricsMaster.trend.push({name:r.key, graph:trendInds(DB.metricsMaster).filter(t=>t.graph).length<4});
+        DB.metricsMaster.trend.push({name:r.key, graph:trendInds(DB.metricsMaster).filter(t=>t.graph).length<GRAPH_MAX});
       }
     }
     else if(/分析/.test(r.block||'')){
@@ -2667,6 +2672,14 @@ function sheetMetricsMaster(){
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMetric('snap')">＋ 指標を追加</button>`;
   // 業績推移指標
   h+=`<div class="lbl">業績推移の指標 (表示中 ${trendOn}/${mm.trend.length}) · ☑=グラフ表示 (${graphOn}/4)</div>`;
+  // グラフに出せなかったときの理由は、押した場所のすぐ上に出す。
+  // 1回だけ出す一時的な文言なので、読み出したらすぐ消す
+  const gm=STATE._graphMsg; STATE._graphMsg=null;
+  if(gm) h+=`<div class="banner warn">${esc(gm.why==='limit'
+      ? `「${gm.name}」はグラフに出せません。グラフは4件までです。どれかの「☑ グラフ」を外してから選び直してください。`
+      : `「${gm.name}」は非表示中なのでグラフに出せません。右のバッジで「表示中」にしてから選んでください。`)}</div>`;
+  else if(graphOn>GRAPH_MAX) h+=`<div class="banner warn">グラフが上限の${GRAPH_MAX}件を超えています(${graphOn}件)。銘柄詳細ではこの${graphOn}件ぶんのグラフが並びます。減らすときは「☑ グラフ」を外してください。</div>`;
+  else if(graphOn===GRAPH_MAX) h+=`<div class="banner">グラフは上限の${GRAPH_MAX}件です。ほかの指標をグラフに出すには、どれかの「☑ グラフ」を外してください。</div>`;
   mm.trend.forEach((o,i)=>{
     const on=metOn(mm,'trend',o.name);
     // 非表示中はそもそも画面に出ないので、グラフの指定も効かない。押せないことが分かるよう薄くする
@@ -2746,12 +2759,13 @@ function moveMetric(type,i,dir){
   const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
   save(); render(); sheetMetricsMaster();
 }
+// 断られた理由は、数秒で消えるトーストではなく設定画面の中に残す
 function toggleGraph(i){
   const mm=DB.metricsMaster;
   const o=mm.trend[i];
   // 非表示中の指標はそもそも画面に出ないので、グラフの指定だけしても意味がない
-  if(!metOn(mm,'trend',o.name)){ toast('非表示中の指標はグラフに出せません'); return; }
-  if(!o.graph && trendInds(mm).filter(x=>x.graph).length>=4){ toast('グラフは4件までです'); return; }
+  if(!metOn(mm,'trend',o.name)){ STATE._graphMsg={name:o.name, why:'hidden'}; sheetMetricsMaster(); return; }
+  if(!o.graph && trendInds(mm).filter(x=>x.graph).length>=GRAPH_MAX){ STATE._graphMsg={name:o.name, why:'limit'}; sheetMetricsMaster(); return; }
   o.graph=!o.graph; save(); render(); sheetMetricsMaster();
 }
 // 旧バージョンでは、非表示から戻した指標が一覧の末尾へ飛んでいた(今は元の位置に戻る)。
@@ -2788,7 +2802,7 @@ function toggleMetric(type,name){
     mm[key]=mm[key].filter(x=>x!==name);
     // 表示中に戻したときグラフが5件目になってしまう場合は、表だけの扱いにする
     const o=(type==='trend')?mm.trend.find(x=>x.name===name):null;
-    if(o&&o.graph&&trendInds(mm).filter(x=>x.graph).length>4){ o.graph=false; save(); render(); sheetMetricsMaster(); toast('表示中にしました(グラフは4件までのため表のみ)'); return; }
+    if(o&&o.graph&&trendInds(mm).filter(x=>x.graph).length>GRAPH_MAX){ o.graph=false; save(); render(); sheetMetricsMaster(); toast(`表示中にしました(グラフは${GRAPH_MAX}件までのため表のみ)`); return; }
   }
   save(); render(); sheetMetricsMaster();
   toast(on?'非表示にしました(データは保持されます)':'表示中にしました');
@@ -2811,7 +2825,7 @@ function doAddMetric(type){
   if(type==='snap'){ mm.snap.push(name); }
   else {
     let g=$('#am_g_on')&&$('#am_g_on').classList.contains('on');
-    if(g && trendInds(mm).filter(x=>x.graph).length>=4){ g=false; toast('グラフは4件までのため、グラフ表示なしで追加します'); }
+    if(g && trendInds(mm).filter(x=>x.graph).length>=GRAPH_MAX){ g=false; toast(`グラフは${GRAPH_MAX}件までのため、グラフ表示なしで追加します`); }
     mm.trend.push({name, graph:!!g});
   }
   save(); render(); sheetMetricsMaster(); toast('追加しました。会話を取り込む画面で取得できます');
