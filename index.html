@@ -79,9 +79,13 @@
   .lbl.grp:first-child{border-top:none;}
   .lbl.grp:active{color:var(--navy);}
   /* 「編集」を添えた開閉見出し。編集リンクは見出しのタップ(開閉)とは別の行き先なので、
-     それぞれ44pxのタップ領域を確保して取り違えを防ぐ */
-  .lbl.grp .grp-right{display:inline-flex; align-items:center; flex:none;}
-  .lbl.grp .grp-edit{color:var(--navy); font-weight:600; display:inline-flex; align-items:center; min-height:44px; padding:0 12px;}
+     取り違えないように離す:
+      ・矢尻は22pxしかないので44pxの枠で包む(右端を狙えば必ず開閉になる)
+      ・編集も44pxの枠を持たせ、その間に16px空ける
+      ・間の余白は見出し側の判定に入る。押し間違えても、開くだけで済むほうへ倒す */
+  .lbl.grp .grp-right{display:inline-flex; align-items:center; gap:16px; flex:none;}
+  .lbl.grp .grp-edit{color:var(--navy); font-weight:600; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0 8px;}
+  .lbl.grp .grp-caret{display:inline-flex; align-items:center; justify-content:flex-end; width:44px; min-height:44px;}
   .lbl.grp:active .grp-edit{color:var(--navy);}
   /* タップで下に展開する場所は、どこでも同じ矢尻で示す。
      閉じている＝下向き(これから下に開く) / 開いている＝上向き(たたむと上に閉じる) */
@@ -783,7 +787,7 @@ function groupBlockWithEdit(key, label, editAction, contentHtml){
   const closed=groupClosed(key);
   return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
       <span>${esc(label)}</span>
-      <span class="grp-right"><span class="grp-edit" onclick="event.stopPropagation();${editAction}">編集</span>${caretSvg(closed)}</span>
+      <span class="grp-right"><span class="grp-edit" onclick="event.stopPropagation();${editAction}">編集</span><span class="grp-caret">${caretSvg(closed)}</span></span>
     </div>`+(closed?'':contentHtml);
 }
 function detailGroupKey(s, label){ return 'detail:'+s.id+':'+label; }
@@ -1002,8 +1006,9 @@ function renderMarketDetail(v){
 function lblWithEdit(label, action, extraStyle){
   return `<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;${extraStyle||''}">
     <span>${esc(label)}</span>
-    <!-- 右の余白は、開閉見出し(.lbl.grp)側の「編集」と縦に揃えるため。矢尻の幅22px＋間隔12px分あける -->
-    <span style="color:var(--navy);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;min-height:44px;padding-left:16px;padding-right:34px" onclick="${action}">編集</span>
+    <!-- 右の余白は、開閉見出し(.lbl.grp)側の「編集」と縦に揃えるため。
+         矢尻の枠44px＋間隔16px＋編集の枠の右padding8px = 68px あける -->
+    <span style="color:var(--navy);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;min-height:44px;padding-left:16px;padding-right:68px" onclick="${action}">編集</span>
   </div>`;
 }
 function metricCellHtml(s,k){
