@@ -160,6 +160,8 @@
   tr.trend-tap:active td{background:var(--navy-bg);}
   tr.trend-tap.on td{background:var(--navy-bg);}
   tr.trend-tap.on td:first-child{color:var(--navy-tx); font-weight:700;}
+  /* グラフに出していない指標。押すと理由が出るが、押す前から見分けが付くようにしておく */
+  tr.trend-tap.no-chart td:first-child{color:var(--ink2);}
   .empty-row td:first-child{color:var(--ink3); font-weight:400;}
   .val-up{color:var(--green-tx); font-weight:700;}
   .val-dn{color:var(--red-tx); font-weight:700;}
@@ -1133,12 +1135,15 @@ function renderTrend(s){
     const cells=hasData(t)
       ? ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')
       : `<td class="nodata-cell" colspan="${Math.max(ys.length,1)}">データなし</td>`;
-    // グラフを持つ指標は、行のどこを押してもその指標のグラフに送れるようにする。
-    // 指標名だけを狙わせると、数値の上を押した人が「反応しない」と受け取ってしまう
+    // 行のどこを押してもその指標のグラフに送れるようにする。
+    // 指標名だけを狙わせると、数値の上を押した人が「反応しない」と受け取ってしまう。
+    // グラフに出していない指標も、押したら理由を返す。無反応の行を作ると
+    // 「壊れている」としか受け取りようがない
     const gi=inds.findIndex(x=>x.name===t.name);
-    const cls=[hasData(t)?'':'empty-row', gi>=0?'trend-tap':''].filter(Boolean).join(' ');
-    h+=`<tr${cls?` class="${cls}"`:''}${gi>=0?` data-gi="${gi}" onclick="trendChartTo(${gi})"`:''}><td>${esc(t.name)}</td>${cells}</tr>`; });
-  h+='</table></div>';
+    const cls=[hasData(t)?'':'empty-row', 'trend-tap', gi<0?'no-chart':''].filter(Boolean).join(' ');
+    h+=`<tr class="${cls}"${gi>=0?` data-gi="${gi}"`:''} onclick="${gi>=0?`trendChartTo(${gi})`:`trendNoChart('${escArg(t.name)}')`}">`
+      +`<td>${esc(t.name)}${gi<0?' <span class="chip gray" style="font-size:11px">表のみ</span>':''}</td>${cells}</tr>`; });
+  h+='</table></div><div id="trendNote"></div>';
   // グラフに出ていない指標があると「なぜ全部グラフにならないのか」が画面から分からないので、
   // 表のすぐ下で理由と、表なら全部見られることを伝える
   const offGraph=trendInds(DB.metricsMaster).length-inds.length;
@@ -1156,7 +1161,15 @@ function renderTrend(s){
 // あとから出した横送りのほうが取り消される。縦はページ全体(window)を動かし、
 // 横送りは次のフレームに回して、2つのスクロールがぶつからないようにする
 let _trendLock=null;   // 表の行から送っている最中の行き先
+// グラフに出していない指標の行を押したとき。無言で終わらせず、理由と直し方をその場に出す
+function trendNoChart(name){
+  const el=document.getElementById('trendNote'); if(!el) return;
+  el.innerHTML=`<div class="banner warn" style="margin:8px 0 0">`
+    +`<div>${esc(`「${name}」はグラフに出していません。グラフは${GRAPH_MAX}件までです。`)}</div>`
+    +`<button class="btn sm" style="margin-top:8px" onclick="event.stopPropagation();sheetMetricsMaster()">グラフに出す指標を選ぶ</button></div>`;
+}
 function trendChartTo(gi){
+  const note=document.getElementById('trendNote'); if(note) note.innerHTML='';
   // 送りは滑らかに動くので、途中で通り過ぎるグラフの分だけ onscroll が走る。
   // そのまま印を追わせると、行き先の手前の行が一瞬光ってから目的の行に移る。
   // 送っている間は行き先以外の更新を無視して、印が寄り道しないようにする
