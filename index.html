@@ -97,6 +97,11 @@
   .caret{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .15s;}
   .caret.open{transform:rotate(180deg);}
   @media (prefers-reduced-motion: reduce){ .caret{transition:none;} }
+  /* 分析の大カテゴリだけは別の記号。閉じているときは＋、開くと45°回って×になる。
+     区分見出し(矢尻)の中身であって、開く方向を示す場所ではないので記号を分ける */
+  .plusmark{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .18s, color .18s;}
+  .sec.open .h .plusmark{transform:rotate(45deg); color:var(--navy);}
+  @media (prefers-reduced-motion: reduce){ .plusmark{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
   /* 「対応が必要」など、いま見てほしいものだけ地色を変える。
      全部が同じ白カードだと重要度の差が出ず、目がどこにも止まらない */
@@ -785,6 +790,11 @@ function renderHome(v){
 // 移行済みのデータを壊さないため名前はそのままにし、キーを画面ごとに分けて共用する
 function closedGroups(){ const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]}); if(!Array.isArray(u.anaClosed)) u.anaClosed=[]; return u.anaClosed; }
 function groupClosed(key){ return closedGroups().includes(key); }
+// 分析の大カテゴリだけは、区分見出しの矢尻と別の記号にする。
+// 閉=＋ / 開=×(＋を45°回す)。区分の「中身」であって、開く方向を示す場所ではないため
+function plusSvg(){
+  return `<svg class="plusmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
+}
 // 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く。
 // 素の状態が下向き(閉じている)。開いているときだけ .open を付けて上向きにする
 function caretSvg(closed){
@@ -944,7 +954,7 @@ function blkSections(s){
     const filled=filledCatCount(s,c.cat,master);
     // 「n/m 項目」は出さない。入力済みの件数はバッジで足りるうえ、
     // 分母まで出すと「埋めきれていない」ことを毎回突きつける表示になる
-    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${caretSvg(true)}</div><div class="b">`;
+    h+=`<div class="sec" id="cat${ci}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}${filled?` <span class="chip navy" style="font-size:11px">${filled}</span>`:''}</span>${plusSvg()}</div><div class="b">`;
     c.subs.forEach(su=>{ const val=s.sections[su]; const det=(val&&val.details)||[];
       h+=`<div class="sub-row${val?' filled':''}" onclick="event.stopPropagation();sheetAnalysisItem('${s.id}','${escArg(su)}')">
         <span class="name">${esc(su)}${det.length?` <span class="chip navy" style="font-size:11px">詳細${det.length}</span>`:''}</span>
