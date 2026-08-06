@@ -420,9 +420,51 @@ describe('migrate', () => {
       expect(out.metricsMaster.trend.find(t => t.name === '営業利益').graph).toBe(true);
     });
 
-    test('表示中の指標の並び順は変えない(戻す分は末尾に足す)', () => {
+    test('既定に無い指標(自分で足したもの)は末尾に戻す', () => {
+      // 信用倍率は今の既定には入っていないので、並べ直しようがなく末尾に足す
       const out = migrate(base());
       expect(out.metricsMaster.snap).toEqual(['PER(予想)', '独自指標', '信用倍率']);
+    });
+
+    // 末尾に足すと、6件ごとの指標グリッドで2ページ目に押し出され、
+    // 1ページ目が「データなし」だけになって数字が見つけられなくなる
+    test('既定にある指標は、既定の並びでの位置に差し込む(末尾に飛ばさない)', () => {
+      const db = {
+        stocks: [], hypotheses: [], reminders: [],
+        metricsMaster: {
+          snap: ['PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)'],
+          trend: [{ name: '売上高', graph: true }],
+          hiddenSnap: ['PER(予想)'],   // 既定では先頭の指標
+          hiddenTrend: [],
+        },
+      };
+      const out = migrate(db);
+      expect(out.metricsMaster.snap[0]).toBe('PER(予想)');
+      expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']);
+    });
+
+    test('差し込み位置は前後の既定項目の間になる', () => {
+      const db = {
+        stocks: [], hypotheses: [], reminders: [],
+        metricsMaster: {
+          snap: ['PER(予想)', 'PBR', '自己資本比率', '独自指標'],
+          trend: [], hiddenSnap: ['営業利益率'], hiddenTrend: [],   // 既定では PBR と 自己資本比率 の間(ROEの次)
+        },
+      };
+      const out = migrate(db);
+      expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', '営業利益率', '自己資本比率', '独自指標']);
+    });
+
+    test('業績推移の指標も既定の位置に戻す', () => {
+      const db = {
+        stocks: [], hypotheses: [], reminders: [],
+        metricsMaster: {
+          snap: [], trend: [{ name: '売上高', graph: true }, { name: 'EPS', graph: true }],
+          hiddenSnap: [], hiddenTrend: [{ name: '営業利益', graph: true }],   // 既定では 売上高 と EPS の間
+        },
+      };
+      const out = migrate(db);
+      expect(out.metricsMaster.trend.map(t => t.name)).toEqual(['売上高', '営業利益', 'EPS']);
     });
 
     test('2回流しても重複しない(冪等)', () => {

@@ -396,6 +396,16 @@ function seed(){
   };
 }
 let DB = migrate(load()) || seed();
+// 既定にある項目は、一覧に戻すとき既定の並びでの位置に差し込む(末尾に飛ばさない)。
+// 既定に無い項目(ユーザーが自分で足したもの)は並べ替えようがないので末尾に足す
+function insertByDefault(arr, item, defNames, nameOf){
+  const name=nameOf(item);
+  const di=defNames.indexOf(name);
+  if(di<0){ arr.push(item); return; }
+  let at=0;
+  for(let i=0;i<di;i++){ const j=arr.findIndex(x=>nameOf(x)===defNames[i]); if(j>=0) at=Math.max(at, j+1); }
+  arr.splice(at, 0, item);
+}
 function migrate(db){
   if(!db) return null;
   const s0=seed();
@@ -469,7 +479,9 @@ function migrate(db){
   }
   // 非表示は以前「一覧から取り除いて別リストへ移す」実装だった。そのため非表示にした瞬間に
   // 元がスナップショットだったのか業績推移だったのかも、並び順も失われていた。
-  // 一覧には残したまま名前で印を付けるだけに改め、旧データも一覧へ戻す
+  // 一覧には残したまま名前で印を付けるだけに改め、旧データも一覧へ戻す。
+  // 戻す位置は末尾ではなく既定の並びでの位置。末尾に足すと、例えばPER(予想)が
+  // 指標グリッドの2ページ目に飛び、1ページ目が「データなし」だけになって見つけられなくなる
   {
     const mm=db.metricsMaster;
     const ht=mm.hiddenTrend||[]; mm.hiddenTrend=[];
@@ -477,14 +489,15 @@ function migrate(db){
       const name=(typeof x==='string')?x:(x&&x.name);
       if(!name) return;
       // 旧データは {name,graph} を丸ごと退避していたので、グラフ表示の指定も一緒に戻す
-      if(!mm.trend.some(t=>t.name===name)) mm.trend.push({name, graph:!!(x&&x.graph)});
+      if(!mm.trend.some(t=>t.name===name)) insertByDefault(mm.trend, {name, graph:!!(x&&x.graph)}, s0.metricsMaster.trend.map(t=>t.name), t=>t.name);
       if(!mm.hiddenTrend.includes(name)) mm.hiddenTrend.push(name);
     });
-    [mm, db.marketMetricsMaster, db.industryMetricsMaster, db.themeMetricsMaster].forEach(m=>{
+    [[mm,s0.metricsMaster],[db.marketMetricsMaster,s0.marketMetricsMaster],
+     [db.industryMetricsMaster,s0.industryMetricsMaster],[db.themeMetricsMaster,s0.themeMetricsMaster]].forEach(([m,def])=>{
       if(!m) return;
       m.snap=m.snap||[];
       m.hiddenSnap=(m.hiddenSnap||[]).map(x=>(typeof x==='string')?x:(x&&x.name)).filter(Boolean);
-      m.hiddenSnap.forEach(k=>{ if(!m.snap.includes(k)) m.snap.push(k); });
+      m.hiddenSnap.forEach(k=>{ if(!m.snap.includes(k)) insertByDefault(m.snap, k, def.snap, x=>x); });
     });
   }
   if(!db.industrySectionMaster) db.industrySectionMaster=s0.industrySectionMaster;
@@ -2660,6 +2673,7 @@ function sheetMetricsMaster(){
       ${statBadge(on, `toggleMetric('trend','${escArg(o.name)}')`)}
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMetric('trend')">＋ 指標を追加</button>`;
+  h+=`<button class="btn sm" style="margin-top:18px" onclick="resetMetricOrder()">並び順を既定に戻す</button>`;
   // 「非表示の指標」を別リストに分けるのはやめた。分けると、元がスナップショットだったのか
   // 業績推移だったのかも、どこに並んでいたのかも分からなくなるため
   h+=`<button class="btn ghost" style="margin-top:14px" onclick="closeSheet()">← 閉じる</button>`;
@@ -2684,6 +2698,7 @@ function sheetMarketMetricsMaster(){
       ${statBadge(on, `toggleMarketMetric('${escArg(k)}')`)}
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMarketMetric()">＋ 指標を追加</button>`;
+  h+=`<button class="btn sm" style="margin-top:18px" onclick="resetMarketMetricOrder()">並び順を既定に戻す</button>`;
   h+=`<button class="btn ghost" style="margin-top:14px" onclick="closeSheet()">← 閉じる</button>`;
   openSheet(h);
 }
@@ -2733,6 +2748,28 @@ function toggleGraph(i){
   if(!metOn(mm,'trend',o.name)){ toast('非表示中の指標はグラフに出せません'); return; }
   if(!o.graph && trendInds(mm).filter(x=>x.graph).length>=4){ toast('グラフは4件までです'); return; }
   o.graph=!o.graph; save(); render(); sheetMetricsMaster();
+}
+// 旧バージョンでは、非表示から戻した指標が一覧の末尾へ飛んでいた(今は元の位置に戻る)。
+// 末尾に飛ぶと、6件ごとの指標グリッドで2ページ目に押し出され、1ページ目が
+// 「データなし」だけになって数字が見つけられなくなる。
+// すでに並びが崩れているデータのために、既定の並びへ組み直す入口を残す
+function orderByDefault(names, def){
+  return def.filter(k=>names.includes(k)).concat(names.filter(k=>!def.includes(k)));
+}
+function resetMetricOrder(){
+  askConfirm({title:'並び順を既定に戻す', body:'主要指標と業績推移の並び順を、既定の順序に組み直します。\n\n自分で追加した指標は、いまの順番のまま後ろに続きます。表示中/非表示中の設定と、取り込み済みの数値は変わりません。', okLabel:'並び替える', onOk:()=>{
+    const mm=DB.metricsMaster, s0=seed();
+    mm.snap=orderByDefault(mm.snap, s0.metricsMaster.snap);
+    mm.trend=orderByDefault(mm.trend.map(t=>t.name), s0.metricsMaster.trend.map(t=>t.name)).map(n=>mm.trend.find(t=>t.name===n));
+    save(); render(); sheetMetricsMaster(); toast('並び順を戻しました');
+  }});
+}
+function resetMarketMetricOrder(){
+  askConfirm({title:'並び順を既定に戻す', body:'指標の並び順を、既定の順序に組み直します。\n\n自分で追加した指標は、いまの順番のまま後ろに続きます。表示中/非表示中の設定と、取り込み済みの数値は変わりません。', okLabel:'並び替える', onOk:()=>{
+    const mm=curScopeMet(), def=seed()[(SCOPE_KEYS[curScopeName()]||SCOPE_KEYS['市場']).met].snap;
+    mm.snap=orderByDefault(mm.snap, def);
+    save(); render(); sheetMarketMetricsMaster(); toast('並び順を戻しました');
+  }});
 }
 // 一覧からは動かさず、表示中/非表示中を入れ替えるだけ。
 // 別リストへ移すと、元がどちらの指標だったのかも並び順も分からなくなるため
