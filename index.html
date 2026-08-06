@@ -792,7 +792,8 @@ function groupClosed(key){ return closedGroups().includes(key); }
 // 分析の大カテゴリだけは、区分見出しの矢尻と別の記号にする。
 // 閉=＋ / 開=×(＋を45°回す)。区分の「中身」であって、開く方向を示す場所ではないため
 function plusSvg(){
-  return `<svg class="plusmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
+  // 線の太さは矢尻(2.5)より細くする。矢尻を太字とすれば＋/×は細字くらいの関係
+  return `<svg class="plusmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
 }
 // 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く。
 // 素の状態が下向き(閉じている)。開いているときだけ .open を付けて上向きにする
