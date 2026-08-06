@@ -146,6 +146,15 @@
      グラフは一面に、表は年度のセルをまとめて1つに(セル結合のような見せ方) */
   .nodata{display:flex; align-items:center; justify-content:center; border:1px dashed var(--line2); border-radius:9px; background:var(--app); color:var(--ink3); font-size:13px;}
   .nodata-cell{text-align:center; color:var(--ink3); background:var(--app);}
+  /* 業績推移の表とグラフの対応づけ。行のどこを押してもその指標のグラフに切り替わる。
+     いまグラフに出ている行は地色を変えて、表とグラフのどちらを見ていても対応が分かるようにする */
+  /* 行がタップ対象になったので、行の高さを44pxまで広げる。
+     押せない行(グラフに出していない指標)だけ低いと表が不揃いになるので、表ごと広げる */
+  table.trend td{padding:13px 6px;}
+  tr.trend-tap{cursor:pointer;}
+  tr.trend-tap:active td{background:var(--navy-bg);}
+  tr.trend-tap.on td{background:var(--navy-bg);}
+  tr.trend-tap.on td:first-child{color:var(--navy-tx); font-weight:700;}
   .empty-row td:first-child{color:var(--ink3); font-weight:400;}
   .val-up{color:var(--green-tx); font-weight:700;}
   .val-dn{color:var(--red-tx); font-weight:700;}
@@ -979,6 +988,8 @@ function renderStockDetail(v){
   h+=blkSections(s)+blkHypos(s,hy)+blkLinks(s);
   v.innerHTML=h;
   pagerInit('metrics'); pagerInit('trendchart');
+  // グラフが1枚だけのときはページャーが無く pagerInit を通らないので、ここで印を付ける
+  syncTrendRows(0);
 }
 
 //////////////////// MARKET DETAIL ////////////////////
@@ -1103,18 +1114,38 @@ function renderTrend(s){
   // 表。1年分も取り込んでいないときは年度の列を作れないので、見出しだけ「年度」にして行は残す
   const cols=ys.length?ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')
                      :'<th style="text-align:center">年度</th>';
-  h+='<div class="xscroll"><table style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
+  h+='<div class="xscroll"><table class="trend" style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
   trendInds(DB.metricsMaster).forEach(t=>{ const o=tr[t.name];
     // 数値が1つも無い指標は、年度のセルを1つにまとめて「データなし」と書く。
     // 年度ごとに「—」を並べるより、行まるごと空だと分かりやすい
     const cells=hasData(t)
       ? ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')
       : `<td class="nodata-cell" colspan="${Math.max(ys.length,1)}">データなし</td>`;
-    h+=`<tr${hasData(t)?'':' class="empty-row"'}><td>${esc(t.name)}</td>${cells}</tr>`; });
-  h+='</table></div></div>';
+    // グラフを持つ指標は、行のどこを押してもその指標のグラフに送れるようにする。
+    // 指標名だけを狙わせると、数値の上を押した人が「反応しない」と受け取ってしまう
+    const gi=inds.findIndex(x=>x.name===t.name);
+    const cls=[hasData(t)?'':'empty-row', gi>=0?'trend-tap':''].filter(Boolean).join(' ');
+    h+=`<tr${cls?` class="${cls}"`:''}${gi>=0?` data-gi="${gi}" onclick="trendChartTo(${gi})"`:''}><td>${esc(t.name)}</td>${cells}</tr>`; });
+  h+='</table></div>';
+  if(inds.length>1) h+='<div class="muted" style="font-size:11px;margin-top:6px">グラフのある指標は、表の行をタップするとそのグラフに切り替わります。</div>';
+  h+='</div>';
   // まだ1年分も無いときだけ、埋め方を1行だけ添える
   if(!ys.length) h+='<div class="hint" style="margin:6px 0 4px">売上高・営業利益などを年度つきで取り込むと、ここにグラフと数字が入ります。</div>';
   return h;
+}
+// 表の行 → グラフ。横スワイプと同じ動きで送り、送り先のグラフが画面の外なら見える位置まで戻す
+function trendChartTo(gi){
+  pagerGoto('trendchart', gi);
+  syncTrendRows(gi);
+  const el=document.getElementById('trendchart_pages');
+  if(!el) return;
+  const r=el.getBoundingClientRect();
+  const topLimit=($('.top')?$('.top').getBoundingClientRect().bottom:0)+8;
+  if(r.top<topLimit || r.bottom>window.innerHeight) el.scrollIntoView({block:'center', behavior:'smooth'});
+}
+// いまグラフに出ている指標を表側にも印す。スワイプで送ったときも追従させる
+function syncTrendRows(idx){
+  document.querySelectorAll('#view tr[data-gi]').forEach(tr=>tr.classList.toggle('on', +tr.dataset.gi===idx));
 }
 
 //////////////////// IMPORT (parser) ////////////////////
@@ -2281,7 +2312,9 @@ function pagerBlock(id, pageHtmls, capFn, pageClass){
     </div>`:''}`;
 }
 function pagerInit(id){
-  const pagesEl=document.getElementById(id+'_pages'); if(!pagesEl) return;
+  // ページャーが無くなった画面(グラフが1枚に減ったときなど)では、前の状態を残さない。
+  // 残すと「総数5」のまま次の操作を受けてしまい、存在しない要素を触りにいく
+  const pagesEl=document.getElementById(id+'_pages'); if(!pagesEl){ delete _pagerState[id]; return; }
   const total=pagesEl.children.length;
   _pagerState[id]={activeIdx:0, total};
   pagesEl.scrollLeft=0;
@@ -2290,7 +2323,8 @@ function pagerInit(id){
 }
 function pagerGoto(id, idx){
   const st=_pagerState[id]; if(!st||idx<0||idx>=st.total) return;
-  document.getElementById(id+'_pages').scrollTo({left:idx*document.getElementById(id+'_pages').clientWidth, behavior:'smooth'});
+  const el=document.getElementById(id+'_pages'); if(!el) return;
+  el.scrollTo({left:idx*el.clientWidth, behavior:'smooth'});
 }
 function pagerUpdateNav(id){
   const st=_pagerState[id]; if(!st) return;
@@ -2304,6 +2338,8 @@ function pagerUpdateNav(id){
   if(er) er.classList.toggle('show', st.activeIdx<st.total-1);
   const cap=document.getElementById(id+'_cap');
   if(cap && _pagerCap[id]) cap.textContent=_pagerCap[id](st.activeIdx, st.total);
+  // 業績推移は表と対応づけているので、送ったら表側の印も動かす
+  if(id==='trendchart') syncTrendRows(st.activeIdx);
 }
 function sheetAnalysisItem(sid,su){
   const s=stock(sid); const val=s.sections[su]; const det=(val&&val.details)||[];
