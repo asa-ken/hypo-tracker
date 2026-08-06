@@ -257,6 +257,15 @@
   .failbox{background:var(--amber-bg); border-radius:9px; padding:9px 11px; margin-top:8px;}
   .failbox .t{font-size:12px; color:var(--amber-tx); font-weight:700;}
   .failbox .l{font-family:var(--mono); font-size:11px; color:var(--amber-tx); margin-top:3px; word-break:break-all;}
+  /* 取り込みで新しく増える指標の告知。表記揺れは別の指標として登録され、
+     グラフも履歴も分かれてしまう。プレビューの表より上に置き、下りる前に目に入るようにする */
+  .metwarn{background:var(--amber-bg); border-radius:9px; padding:10px 12px; margin-bottom:11px;}
+  .metwarn .t{display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--amber-tx);}
+  .metwarn .r{background:var(--card); border-radius:8px; padding:7px 9px; margin-top:7px;}
+  .metwarn .r .n{font-size:13px; font-weight:700;}
+  .metwarn .r .s{font-size:11px; color:var(--amber-tx); margin-top:2px;}
+  .metwarn .r .s.plain{color:var(--ink3);}
+  .metwarn .d{font-size:11px; color:var(--amber-tx); margin-top:9px; line-height:1.5;}
   .pill-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;}
   .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
   /* 上限に当たったことを知らせる注意書き。トーストは数秒で消えるうえ画面の下に出るので、
@@ -264,8 +273,15 @@
   .banner.warn{background:var(--amber-bg); color:var(--amber-tx);}
   .del{color:var(--red-tx); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px;}
   /* 指標マスターの1行。非表示にしても一覧から動かさず、右端のバッジで今の状態を示す */
-  .met-row{display:flex; align-items:center; gap:8px; padding:8px 2px; border-bottom:1px solid var(--line);}
-  .met-row .nm{flex:1; min-width:0; font-size:13px;}
+  .met-row{display:flex; align-items:center; gap:8px; padding:0 2px; border-bottom:1px solid var(--line);}
+  /* 指標名を押すと、まとめる・削除の画面が開く。押せることが分かるように名前のうしろへ
+     小さな「…」を添える(矢尻は開閉の意味で使っているので、ここには持ち込まない)。
+     行の高さは名前ボタンが決める。44pxを確保し、名前の脇を突いても開くようにする */
+  .met-row .nm{flex:1; min-width:0; min-height:44px; font-size:13px; display:flex; align-items:center; gap:8px;
+               padding:0; border:none; background:none;
+               font-family:inherit; color:inherit; text-align:left; cursor:pointer;}
+  .met-row .nm .dots{width:15px; height:15px; flex:none; color:var(--ink3);}
+  .met-row .nm:active{color:var(--navy);}
   .met-row.off .nm{color:var(--ink3);}
   /* バッジ自体がボタン。「表示」「非表示」だと押した結果か今の状態か読めないので「〜中」と書く */
   /* 「表示中」と「非表示中」で幅が変わると、切り替えるたびに左の↑↓がずれるので幅を固定する */
@@ -608,6 +624,11 @@ function bellIcon(size){
 // タブバーなどの線画アイコンから浮くため、同じ線画の「保管箱」に置き換える
 function archiveIcon(size){
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${size||15}px;height:${size||15}px;flex:none"><path d="M3 8h18v12H3z"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>`;
+}
+// 注意を促す三角。⚠ の絵文字は書体依存で色付きに描かれる端末があり、
+// 画面のほかの線画アイコンから浮くため、同じ線画で揃える
+function warnIcon(size){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:${size||15}px;height:${size||15}px;flex:none"><path d="M10.3 3.9 1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 }
 function today(){return new Date();}
 function parseD(s){ if(!s)return null; const m=String(s).match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/); if(!m)return null; return new Date(+m[1],+m[2]-1,+m[3]); }
@@ -1258,24 +1279,31 @@ function briefingText(){
 ## 指標
 - 指標名: 値 | 単位:◯◯ | 基準日(YYYY/M/D)
   値には単位や記号を含めず数値だけを書き、単位は「単位:」欄に書いてください(例: 単位:USD、単位:百万USD、単位:%、単位:倍)。
-  銘柄の話のときによく使う指標名: ${snap}
-  市場全体の話のときによく使う指標名: ${mktSnap}
+  指標名は下記の一覧から、一字一句そのままの表記で選んでください。
+  銘柄の話のときの指標名: ${snap}
+  市場全体の話のときの指標名: ${mktSnap}
     ※市場の話は数値より「今どういう地合いか」の説明が主役です。指標は水準の裏付けとして添える程度で構いません。
       株価指数の値・移動平均・日々のボラティリティは書かないでください(証券アプリで見ます)。
       CPI・PMIなど発表日が決まっているものは、指標にするより「## 注目ポイント」にイベント日つきで書いてください。
-  業界の話のときによく使う指標名: ${indSnap}
+  業界の話のときの指標名: ${indSnap}
     ※業界の指標は、東証の業種別データのように**公表されている業種別の数値**がある場合だけ書いてください。
       構成企業を集計して中央値を自分で算出する必要があるもの(業界のROE・営業利益率など)は、数値としては書かないでください。
       その場合は「## 分析」の「価格動向・採算」などに、「この業界の営業利益率は概ね10〜15%、A社は突出して高い」のように
       文章で書いてください。根拠や範囲を添えられる形のほうが、後から読み返して判断できます。
-  これ以外の指標名も自由に使えます(取り込み時に自動で追加されます)。
+  一覧に無い指標は、どうしても必要なときだけ追加して構いません。ただし、一覧にある指標と
+  同じ意味の別名は使わないでください。同じものが別々の指標として登録され、グラフも履歴も分かれてしまいます。
+    ✕「売上高」があるのに「売上」と書く
+    ✕「営業利益率」があるのに「営業利益率(%)」と書く
+    ✕「PER(予想)」があるのに「予想PER」「PER（予想）」と書く(全角括弧も別名になります)
   現在株価や当日の値動きは不要です(リアルタイム性が要るものは証券アプリで見ます)。
   ここで扱いたいのは、決算や指標の更新に合わせて数か月単位で見直す数字です。
 
 ■ 業績推移
 ## 業績推移
 - 指標名: 25年3月期=数値 | 26年3月期=数値 | 27年3月期(予)=数値 | 単位:◯◯ | 基準日
-  よく使う指標名: ${trend}
+  指標名は下記の一覧から、一字一句そのままの表記で選んでください: ${trend}
+  一覧に無い指標は、どうしても必要なときだけ追加して構いません。ただし「売上高」を「売上」と書くような
+  言い換えはしないでください。同じものが別々の指標になり、グラフも履歴も分かれてしまいます。
   決算期は「yy年mm月期」表記、予想には(予)を付けてください(米国株など海外企業も同じ形式で、その企業の決算月に合わせてください)。
   これは個別企業の決算のみです。市場・テーマの話では使いません。
 
@@ -1412,6 +1440,82 @@ async function pasteFromClipboard(){
   }
 }
 function clearPaste(){ const ta=$('#mdIn'); if(!ta) return; ta.value=''; $('#parseOut').innerHTML=''; window._parsed=null; window._orphans=null; toast('クリアしました'); }
+// ===== 指標名の表記揺れ検出 =====
+// 「売上高」と「売上」のように同じものを別名で受け取ると、別々の指標として登録され、
+// グラフも履歴も分かれてしまう。根本の対策は説明書(briefingText)で外部AIの表記を
+// 揃えることだが、それでも漏れる分をここで取り込み前に知らせる。
+// 取り込み自体は止めない。止めると取り込みそのものが億劫になるため、
+// 「増えること」と「似た既存名」を伝えるところまでにする。
+function metNorm(s){
+  return String(s)
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/（/g,'(').replace(/）/g,')')
+    .replace(/[\s　・()%％,，]/g,'')
+    .toLowerCase();
+}
+function metBigrams(s){ const a=[]; for(let i=0;i<s.length-1;i++) a.push(s.slice(i,i+2)); return a.length?a:[s]; }
+// 0〜1。1に近いほど同じ指標を指している可能性が高い
+function metSim(a,b){
+  const x=metNorm(a), y=metNorm(b);
+  if(!x||!y) return 0;
+  if(x===y) return 1;               // 括弧や記号の違いだけ (営業利益率 と 営業利益率(%))
+  if(x.includes(y)||y.includes(x)) return .9;  // 一方が他方を含む (売上高 と 売上)
+  // 語順が入れ替わっただけの別名(PER(予想) と 予想PER)を拾うため、2文字組の一致率で見る
+  const A=metBigrams(x), B=metBigrams(y), rest=B.slice();
+  let hit=0; A.forEach(g=>{ const i=rest.indexOf(g); if(i>=0){ hit++; rest.splice(i,1); } });
+  return 2*hit/(A.length+B.length);
+}
+const MET_SIM_MIN=.6;   // これ未満は別物とみなす (ROE と ROIC が引っかからない水準)
+function nearestMetric(name, list){
+  let best=null, bs=0;
+  (list||[]).forEach(k=>{ const v=metSim(name,k); if(v>bs){ bs=v; best=k; } });
+  return bs>=MET_SIM_MIN ? {name:best, score:bs} : null;
+}
+// 取り込むとマスターに新しく追加される指標を洗い出す。
+// 追加先の判定は commitImport と揃えること(スナップショットは粒度ごとのマスター、業績推移は銘柄用)
+function newMetricsIn(rows, target){
+  const mm = target ? metricsMasterFor(target) : DB.metricsMaster;
+  const trendNames = DB.metricsMaster.trend.map(t=>t.name);
+  const out=[];
+  (rows||[]).forEach(r=>{
+    if(/指標/.test(r.block||'')){
+      if(!mm.snap.includes(r.key)) out.push({name:r.key, kind:'snap', near:nearestMetric(r.key, mm.snap)});
+    } else if(/業績|推移/.test(r.block||'')){
+      if(target && isMkt(target)) return;   // 市場カードは業績推移を持たない
+      if(!trendNames.includes(r.key)) out.push({name:r.key, kind:'trend', near:nearestMetric(r.key, trendNames)});
+    }
+  });
+  // 同じ名前が複数行にあっても知らせるのは1回
+  return out.filter((x,i)=>out.findIndex(y=>y.name===x.name&&y.kind===x.kind)===i);
+}
+function newMetricsBox(newMets){
+  if(!newMets.length) return '';
+  window._newMets=newMets;
+  const near=newMets.filter(x=>x.near);
+  // 似た既存名が無いなら、単に指標が増えるだけ。警告の見た目にはしない
+  if(!near.length){
+    return `<div class="muted" style="margin:-2px 0 10px;font-size:11px">新しい指標が ${newMets.length}件 増えます: ${esc(newMets.map(x=>x.name).join(' / '))}</div>`;
+  }
+  let h=`<div class="metwarn"><div class="t">${warnIcon()} 似た名前の指標が増えます (${near.length})</div>`;
+  newMets.forEach(x=>{
+    h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>`;
+    h+= x.near
+      ? `<div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div>`
+      : `<div class="s plain">似た指標はありません</div>`;
+    h+='</div>';
+  });
+  h+=`<div class="d">同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください(このまま読み込むこともできます)。</div>
+    <button class="btn sm" style="margin-top:8px" onclick="copyMetFix()">表記をそろえる指示をコピー</button></div>`;
+  return h;
+}
+function copyMetFix(){
+  const near=(window._newMets||[]).filter(x=>x.near);
+  if(!near.length){ toast('そろえる指標がありません'); return; }
+  const t='指標名の表記をそろえてください。\n'
+    + near.map(x=>`・「${x.name}」ではなく「${x.near.name}」を使ってください。`).join('\n')
+    + '\n\n以後も、指標名は私が渡した一覧の表記を一字一句そのまま使ってください。言い換え・省略・括弧の全半角変更をしないでください。';
+  copy(t, 'コピーしました。AIに貼り付けて、出し直してもらってください');
+}
 function parseAndPreview(){
   const text=$('#mdIn').value; const out=$('#parseOut');
   if(!text.trim()){ out.innerHTML=''; return; }
@@ -1426,9 +1530,25 @@ function parseAndPreview(){
     const sc0=stock(STATE.askStockId);
     if(sc0 && isMkt(sc0)){ p.stock={name:sc0.name, code:sc0.id, isMarket:true}; fallback=true; }
   }
-  if(p.stock){ const known=stock(p.stock.code)||DB.stocks.find(x=>x.name===p.stock.name);
-    if(known&&!stock(p.stock.code)) p.stock.code=known.id;
-    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span></div>`;
+  // 行き先の判定は、上部のチップに「新しい指標」の件数を出すために先に済ませておく。
+  // 判定より後ろで出すと、プレビューの表まで下りないと気づけない
+  const known=p.stock?(stock(p.stock.code)||DB.stocks.find(x=>x.name===p.stock.name)):null;
+  if(p.stock&&known&&!stock(p.stock.code)) p.stock.code=known.id;
+  const target=p.stock?stock(p.stock.code):null;
+  // 分析行の行き先を判定し、該当なしを分離
+  const orphans=[];
+  p.rows.forEach(r=>{
+    if(/分析/.test(r.block||'')){ const res=resolveSection(r.key,r.value); r._res=res; if(!res.sub) orphans.push(r); }
+    // 市場カードは指標(水準)を持てるが、業績推移(企業の決算)は持たない
+    else if(target&&isMkt(target)&&/業績|推移/.test(r.block||'')){ r._res={sub:null}; orphans.push(r); }
+  });
+  const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
+  // 取り込むと新しく増える指標。表記揺れ(売上高→売上)もここに現れる。
+  // 取り込み先が未確定のうちは、どのマスターと突き合わせるか決まらないので出さない
+  const newMets=target?newMetricsIn(okRows, target):[];
+  const nearMets=newMets.filter(x=>x.near);
+  if(p.stock){
+    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標 ${newMets.length}</span>`:''}</div>`;
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、この銘柄に取り込みます。別の銘柄に入れる場合は、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けてください。</div>';
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>${p.stock.isMarket?'新規テーマとして登録':'新規銘柄として登録'}</button>`; }
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
@@ -1439,17 +1559,11 @@ function parseAndPreview(){
       ${DB.stocks.map(x=>`<option value="${x.id}">${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select>
       <div class="hint">次からは、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けるようAIに伝えておくと選ばずに済みます。</div></label>`;
   }
+  // 新しく増える指標の告知。取り込みは止めない(既定のまま読み込めば追加される)。
+  // 似た名前が既にある場合だけ、その名前を名指しして外部AI側の修正へ誘導する
+  h+=newMetricsBox(newMets);
   // diff table
   if(p.rows.length){
-    // 分析行の行き先を判定し、該当なしを分離
-    const orphans=[];
-    const target=p.stock?stock(p.stock.code):null;
-    p.rows.forEach(r=>{
-      if(/分析/.test(r.block||'')){ const res=resolveSection(r.key,r.value); r._res=res; if(!res.sub) orphans.push(r); }
-      // 市場カードは指標(水準)を持てるが、業績推移(企業の決算)は持たない
-      else if(target&&isMkt(target)&&/業績|推移/.test(r.block||'')){ r._res={sub:null}; orphans.push(r); }
-    });
-    const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
     if(orphans.length){
       h+=`<div class="failbox" style="background:var(--red-bg)"><div class="t" style="color:var(--red-tx)">⚠ 該当セクションが見つからない行 (${orphans.length})</div>
         <div class="muted" style="font-size:11px;color:var(--red-tx);margin:3px 0 6px">下記はどのセクションにも紐づきません。取り込むにはチェックしてください(取り込む場合は「その他」として保存されます)。</div>`;
@@ -2472,7 +2586,7 @@ function genOrderNew(sid){
   if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
   // 基準となる指数・ETFを指定できると、広いテーマでもAIの数値がぶれない
   if(s&&isMkt(s)&&s.benchmark) p+=`\n■基準とする指数・ETF: ${s.benchmark}\n指標や水準は、これを基準に答えてください。別の対象で答える場合は、何を見たかを本文に書いてください。\n`;
-  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・出典・URL・確信度は書かない。不確かなことは無理に書かず、分からない項目は省く\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
+  p+=`\n■出力ルール(厳守)\n・回答全体を1つのコードブロックで囲む\n・太字(**)や装飾を使わない。前置き後書き不要\n・各値に 基準日(YYYY/M/D) を付す\n・値は数値のみ(「億円」「兆」等の単位や記号を値に含めない)。単位は「単位:◯◯」欄に開示慣行の単位(億円/百万円等)で明記\n・決算期は「yy年mm月期」表記、予想は(予)\n・指標名(## 指標 と ## 業績推移)は、この質問文に書かれた名称を一字一句そのまま使う。言い換え・省略・括弧の全半角変更をしない(「売上高」を「売上」と書くと別の指標として登録されてしまう)\n・出典・URL・確信度は書かない。不確かなことは無理に書かず、分からない項目は省く\n・分割せず1回で出力。量が多い場合も省略せず続けて出力する\n・やむを得ず分割する場合は、各回の先頭に必ず「${head}」と該当する「## 見出し」を付ける\n\n${head}\n`;
   if(need.length) p+='\n## 指標\n'+need.map(k=>`- ${k}: `).join('\n');
   if(s && !isMkt(s)) p+='\n\n## 業績推移\n直近4期+予想1期(yy年mm月期表記)の '+trendInds(DB.metricsMaster).map(x=>x.name).join(' / ')+' を年度ごとに。';
   if(sums.length||deeps.length){
@@ -2753,18 +2867,120 @@ function toggleMetHelp(key){
 function statBadge(on, action){
   return `<button class="stat${on?' on':''}" onclick="${action}">${on?'表示中':'非表示中'}</button>`;
 }
+// ===== 指標の整理(まとめる・削除) =====
+// 表記揺れで増えた指標は、あとから畳めないと持ち続けることになる。
+// 一覧の指標名をタップすると、その指標をどうするかを選ぶ画面を開く。
+// src … 'stock'(銘柄用マスター) / 'mkt'(いま開いている粒度の市場マスター)
+function masterBySrc(src){ return src==='mkt' ? curScopeMet() : DB.metricsMaster; }
+function backToMaster(src){ (src==='mkt'?sheetMarketMetricsMaster:sheetMetricsMaster)(); }
+// そのマスターを使っているカード。銘柄用は非市場カード、粒度別マスターは同じ粒度の市場カード
+function stocksForMaster(mm){ return DB.stocks.filter(s=>metricsMasterFor(s)===mm); }
+function metDataCount(type, name, mm){
+  return type==='trend'
+    ? DB.stocks.filter(s=>!isMkt(s)&&s.trend&&s.trend[name]).length
+    : stocksForMaster(mm).filter(s=>s.metrics&&s.metrics[name]).length;
+}
+function metNameBtn(type, name, src){
+  return `<button class="nm" onclick="sheetMetricEdit('${type}','${escArg(name)}','${src}')">${esc(name)}`
+    + `<svg class="dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>`;
+}
+function sheetMetricEdit(type, name, src){
+  const mm=masterBySrc(src);
+  const others = type==='trend' ? mm.trend.map(t=>t.name).filter(n=>n!==name) : mm.snap.filter(n=>n!==name);
+  const n=metDataCount(type,name,mm);
+  const where = type==='trend' ? '業績推移' : (src==='mkt' ? esc(curScopeName())+'の指標' : 'スナップショット指標');
+  let h=`<h3>${esc(name)}</h3>
+    <div class="muted" style="margin-bottom:12px">${where}の指標です。${n?`いま ${n}件のカードにデータがあります。`:'まだどのカードにもデータがありません。'}</div>`;
+  if(others.length){
+    // 表記揺れを畳むのが主な用途なので、似た名前を選択肢の先頭に置いて探す手間を減らす
+    const near=nearestMetric(name, others);
+    const list = near ? [near.name].concat(others.filter(k=>k!==near.name)) : others;
+    h+=`<div class="lbl" style="margin-top:0">ほかの指標にまとめる</div>`;
+    if(near) h+=`<div class="banner">「${esc(near.name)}」と名前が似ています。同じものであれば、まとめてください。</div>`;
+    h+=`<div class="muted" style="margin-bottom:8px">${type==='trend'
+        ? '年度ごとに合体します。同じ年度が両方にある場合は、まとめ先の値を残します。'
+        : '値は1つしか持てないので、取り込み日が新しいほうを残します。'}まとめたあと「${esc(name)}」は一覧から消えます。</div>
+      <label class="fld"><select id="metMergeTo">${list.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></label>
+      <button class="btn" onclick="askMergeMetric('${type}','${escArg(name)}','${src}')">まとめる</button>`;
+  }
+  h+=`<div class="lbl">この指標を削除</div>
+    <div class="muted" style="margin-bottom:8px">${n?`${n}件のカードの「${esc(name)}」のデータも一緒に消えます。`:'消えて困るデータはありません。'}元に戻せません。</div>
+    <button class="btn danger" onclick="askDeleteMetric('${type}','${escArg(name)}','${src}')">削除する</button>
+    <button class="btn ghost" style="margin-top:14px" onclick="backToMaster('${src}')">← 一覧に戻る</button>`;
+  openSheet(h);
+}
+function askMergeMetric(type, from, src){
+  const sel=document.getElementById('metMergeTo'); const to=sel?sel.value:'';
+  if(!to){ toast('まとめ先を選んでください'); return; }
+  askConfirm({title:'指標をまとめる',
+    body:`「${from}」を「${to}」にまとめます。\n\n${type==='trend'
+      ? '年度ごとに合体し、同じ年度が両方にある場合は「'+to+'」の値を残します。'
+      : '取り込み日が新しいほうの値を残します。'}\n「${from}」は一覧から消えます。`,
+    okLabel:'まとめる', onOk:()=>doMergeMetric(type,from,to,src)});
+}
+function doMergeMetric(type, from, to, src){
+  const mm=masterBySrc(src);
+  let moved=0, kept=0;
+  if(type==='trend'){
+    DB.stocks.filter(s=>!isMkt(s)).forEach(s=>{
+      const f=s.trend&&s.trend[from]; if(!f) return;
+      const t=s.trend[to]||(s.trend[to]={unit:f.unit||''});
+      if(!t.unit&&f.unit) t.unit=f.unit;
+      Object.keys(f).forEach(y=>{
+        if(y==='unit') return;
+        // 取り込み済みの値は上書きしない。同じ年度が両方にあるならまとめ先を残す
+        if(t[y]===undefined){ t[y]=f[y]; moved++; } else kept++;
+      });
+      delete s.trend[from];
+    });
+    DB.metricsMaster.trend=DB.metricsMaster.trend.filter(t=>t.name!==from);
+    DB.metricsMaster.hiddenTrend=(DB.metricsMaster.hiddenTrend||[]).filter(k=>k!==from);
+  } else {
+    stocksForMaster(mm).forEach(s=>{
+      const f=s.metrics&&s.metrics[from]; if(!f) return;
+      const t=s.metrics[to], fd=parseD(f.d), td=t?parseD(t.d):null;
+      // 値は1つしか持てないので、より新しく取り込んだほうを残す
+      if(!t || (fd && (!td || fd>td))){ s.metrics[to]=f; moved++; } else kept++;
+      delete s.metrics[from];
+    });
+    mm.snap=mm.snap.filter(k=>k!==from);
+    mm.hiddenSnap=(mm.hiddenSnap||[]).filter(k=>k!==from);
+  }
+  save(); render(); backToMaster(src);
+  toast(kept?`「${to}」にまとめました(${moved}件を移し、${kept}件は既存を残しました)`:`「${to}」にまとめました(${moved}件)`);
+}
+function askDeleteMetric(type, name, src){
+  const n=metDataCount(type,name,masterBySrc(src));
+  askConfirm({title:'指標を削除する', danger:true,
+    body:`「${name}」を一覧から削除します。\n\n${n?`${n}件のカードに入っている「${name}」のデータも一緒に消えます。`:'この指標のデータを持つカードはありません。'}\n元に戻せません。`,
+    okLabel:'削除する', onOk:()=>doDeleteMetric(type,name,src)});
+}
+function doDeleteMetric(type, name, src){
+  const mm=masterBySrc(src);
+  if(type==='trend'){
+    DB.stocks.filter(s=>!isMkt(s)).forEach(s=>{ if(s.trend) delete s.trend[name]; });
+    DB.metricsMaster.trend=DB.metricsMaster.trend.filter(t=>t.name!==name);
+    DB.metricsMaster.hiddenTrend=(DB.metricsMaster.hiddenTrend||[]).filter(k=>k!==name);
+  } else {
+    stocksForMaster(mm).forEach(s=>{ if(s.metrics) delete s.metrics[name]; });
+    mm.snap=mm.snap.filter(k=>k!==name);
+    mm.hiddenSnap=(mm.hiddenSnap||[]).filter(k=>k!==name);
+  }
+  save(); render(); backToMaster(src);
+  toast(`「${name}」を削除しました`);
+}
 function sheetMetricsMaster(){
   const mm=DB.metricsMaster;
   const graphOn=trendInds(mm).filter(x=>x.graph).length;
   const snapOn=snapKeys(mm).length, trendOn=trendInds(mm).length;
   let h=`<h3>収容指標・業績分析項目の設定</h3>
-    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。</div>`;
+    <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。指標名を押すと、ほかの指標にまとめたり削除したりできます。</div>`;
   // スナップショット指標
   h+=metHelpLbl(`スナップショット指標 (表示中 ${snapOn}/${mm.snap.length})`, 'snap', 'margin-top:0');
   mm.snap.forEach((k,i)=>{
     const on=metOn(mm,'snap',k);
     h+=`<div class="met-row${on?'':' off'}">
-      <span class="nm">${esc(k)}</span>
+      ${metNameBtn('snap',k,'stock')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},-1)" ${i===0?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},1)" ${i===mm.snap.length-1?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↓</button>
       ${statBadge(on, `toggleMetric('snap','${escArg(k)}')`)}
@@ -2784,7 +3000,7 @@ function sheetMetricsMaster(){
     // 非表示中はそもそも画面に出ないので、グラフの指定も効かない。押せないことが分かるよう薄くする
     h+=`<div class="met-row${on?'':' off'}">
       <button class="btn sm" style="width:auto;padding:3px 10px;font-size:11px;${on?'':'opacity:.35;'}${on&&o.graph?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="toggleGraph(${i})">グラフ</button>
-      <span class="nm">${esc(o.name)}</span>
+      ${metNameBtn('trend',o.name,'stock')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},1)" ${i===mm.trend.length-1?'disabled':''}>↓</button>
       ${statBadge(on, `toggleMetric('trend','${escArg(o.name)}')`)}
@@ -2802,13 +3018,13 @@ function curScopeName(){ const s=STATE.stockId?stock(STATE.stockId):null; return
 function sheetMarketMetricsMaster(){
   const mm=curScopeMet(); const sc=curScopeName();
   let h=`<h3>${esc(sc)}の指標の設定</h3>
-    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。</div>`;
+    <div class="muted" style="margin-bottom:12px">「${esc(sc)}」のカードすべてに共通の設定です。当日の値動きではなく、数か月単位で見直す水準を想定しています。右端のバッジを押すと表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。指標名を押すと、ほかの指標にまとめたり削除したりできます。</div>`;
   h+=metHelpLbl(`指標 (表示中 ${snapKeys(mm).length}/${mm.snap.length})`, 'mkt', 'margin-top:0');
   if(!mm.snap.length) h+='<div class="muted" style="padding:0 2px 6px">まだありません。会話を取り込むと自動で増えます。</div>';
   mm.snap.forEach((k,i)=>{
     const on=metOn(mm,'snap',k);
     h+=`<div class="met-row${on?'':' off'}">
-      <span class="nm">${esc(k)}</span>
+      ${metNameBtn('snap',k,'mkt')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMarketMetric(${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMarketMetric(${i},1)" ${i===mm.snap.length-1?'disabled':''}>↓</button>
       ${statBadge(on, `toggleMarketMetric('${escArg(k)}')`)}
