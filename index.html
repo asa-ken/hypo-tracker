@@ -2707,20 +2707,20 @@ function sheetMetricsMaster(){
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:8px" onclick="sheetAddMetric('snap')">＋ 指標を追加</button>`;
   // 業績推移指標
-  h+=`<div class="lbl">業績推移の指標 (表示中 ${trendOn}/${mm.trend.length}) · ☑=グラフ表示 (${graphOn}/4)</div>`;
+  h+=`<div class="lbl">業績推移の指標 (表示中 ${trendOn}/${mm.trend.length}) · グラフ表示 (${graphOn}/${GRAPH_MAX})</div>`;
   // グラフに出せなかったときの理由は、押した場所のすぐ上に出す。
   // 1回だけ出す一時的な文言なので、読み出したらすぐ消す
   const gm=STATE._graphMsg; STATE._graphMsg=null;
   if(gm) h+=`<div class="banner warn">${esc(gm.why==='limit'
-      ? `「${gm.name}」はグラフに出せません。グラフは4件までです。どれかの「☑ グラフ」を外してから選び直してください。`
+      ? `グラフの上限は${GRAPH_MAX}件までです。どれかの指標を非表示に変更してください。`
       : `「${gm.name}」は非表示中なのでグラフに出せません。右のバッジで「表示中」にしてから選んでください。`)}</div>`;
-  else if(graphOn>GRAPH_MAX) h+=`<div class="banner warn">グラフが上限の${GRAPH_MAX}件を超えています(${graphOn}件)。銘柄詳細ではこの${graphOn}件ぶんのグラフが並びます。減らすときは「☑ グラフ」を外してください。</div>`;
-  else if(graphOn===GRAPH_MAX) h+=`<div class="banner">グラフは上限の${GRAPH_MAX}件です。ほかの指標をグラフに出すには、どれかの「☑ グラフ」を外してください。</div>`;
+  else if(graphOn>GRAPH_MAX) h+=`<div class="banner warn">グラフが上限の${GRAPH_MAX}件を超えています(${graphOn}件)。銘柄詳細ではこの${graphOn}件ぶんのグラフが並びます。どれかの指標を非表示に変更してください。</div>`;
+  else if(graphOn===GRAPH_MAX) h+=`<div class="banner">グラフの上限は${GRAPH_MAX}件までです。ほかの指標をグラフに出すには、どれかの指標を非表示に変更してください。</div>`;
   mm.trend.forEach((o,i)=>{
     const on=metOn(mm,'trend',o.name);
     // 非表示中はそもそも画面に出ないので、グラフの指定も効かない。押せないことが分かるよう薄くする
     h+=`<div class="met-row${on?'':' off'}">
-      <button class="btn sm" style="width:auto;padding:3px 8px;font-size:11px;${on?'':'opacity:.35;'}${on&&o.graph?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="toggleGraph(${i})">${o.graph?'☑ グラフ':'☐ グラフ'}</button>
+      <button class="btn sm" style="width:auto;padding:3px 10px;font-size:11px;${on?'':'opacity:.35;'}${on&&o.graph?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="toggleGraph(${i})">グラフ</button>
       <span class="nm">${esc(o.name)}</span>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},1)" ${i===mm.trend.length-1?'disabled':''}>↓</button>
