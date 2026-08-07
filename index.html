@@ -726,7 +726,7 @@ function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('impor
 function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
 // 詳細画面から一覧へ戻る。ヘッダーの「← 戻る」と画面端スワイプで同じ動きにする
 function backFromDetail(){
-  STATE.stockId=null; STATE.hypoAll=false; render();
+  STATE.stockId=null; render();
   // 一覧のどこを見ていたかに戻す。先頭に飛ばされると、長い一覧では探し直しになる
   setViewScroll(STATE._prevScroll||0);
   hidePrevUnder();
@@ -755,7 +755,6 @@ function setViewScroll(y){ const e=document.scrollingElement; if(e) e.scrollTop=
 function openStock(id){
   // 一覧から詳細に入るときだけ、直前の画面を控える(詳細から詳細へ渡り歩いても最初の一覧を保つ)
   if(!STATE.stockId){ STATE._prevHtml=$('#view').innerHTML; STATE._prevScroll=viewScroll(); }
-  if(STATE.stockId!==id) STATE.hypoAll=false;
   STATE.stockId=id; render(); setViewScroll(0);
 }
 
@@ -851,11 +850,12 @@ function groupBlock(key, label, contentHtml){
 }
 // 設定への「編集」リンクを添えた開閉見出し。指標をあまり見ない銘柄では丸ごと畳めるように、
 // 開閉は銘柄ごとに覚える(同じ指標でも銘柄によって見たいかどうかが変わるため)
-function groupBlockWithEdit(key, label, editAction, contentHtml){
+// 見出しの右に置く文字ボタン。既定は「編集」だが、区分によっては「追加」など別の語を使う
+function groupBlockWithEdit(key, label, editAction, contentHtml, editLabel){
   const closed=groupClosed(key);
   return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
       <span>${esc(label)}</span>
-      <span class="grp-right"><span class="grp-edit" onclick="event.stopPropagation();${editAction}">編集</span><span class="grp-caret">${caretSvg(closed)}</span></span>
+      <span class="grp-right"><span class="grp-edit" onclick="event.stopPropagation();${editAction}">${esc(editLabel||'編集')}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
     </div>`+(closed?'':contentHtml);
 }
 function detailGroupKey(s, label){ return 'detail:'+s.id+':'+label; }
@@ -1003,21 +1003,20 @@ function blkSections(s){
 }
 // 件数が増えるほど詳細画面が一方的に伸びていくので、既定は先頭3件だけ出して残りは畳む。
 // 1件ずつのボタン(編集/削除/リマインダー)は行から外し、行タップで開く編集シートに集約した
-const HYPO_PREVIEW=3;
+// 件数が多いときに一部だけ出して「残りN件を表示」で開く作りはやめた。
+// 見出し自体が開閉できるので、畳む手段が二重になって分かりにくかった。
+// 追加も画面内のボタンではなく、見出しの右の文字ボタン(業績推移の「編集」と同じ位置)に置く。
+// メモ/注目ポイントの種別は、以前は追加ボタンを2つ並べて選ばせていたが、
+// 作成画面側にセグメントを置けばボタンは1つで済む(編集時の種別変更にも同じセグメントを使い回せる)
 function blkHypos(s, hy){
   let h='';
   if(!hy.length){
     h+='<div class="hint" style="margin:-4px 0 8px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
   } else {
-    const all=STATE.hypoAll || hy.length<=HYPO_PREVIEW;
-    const shown=all?hy:hy.slice(0,HYPO_PREVIEW);
-    h+='<div class="list cards">'+shown.map(hypoMiniCard).join('')+'</div>';
-    if(!all) h+=`<button class="btn sm" style="width:100%;margin:-4px 0 10px" onclick="STATE.hypoAll=true;render()">残り ${hy.length-HYPO_PREVIEW}件を表示</button>`;
+    h+='<div class="list cards">'+hy.map(hypoMiniCard).join('')+'</div>';
   }
-  // メモ/注目ポイントの種別は、以前は追加ボタンを2つ並べて選ばせていたが、
-  // 作成画面側にセグメントを置けばボタンは1つで済む(編集時の種別変更にも同じセグメントを使い回せる)
-  h+=`<button class="btn sm" style="width:100%;margin-top:2px" onclick="sheetEditHypo(null,'${s.id}')">＋</button>`;
-  return groupBlock(detailGroupKey(s,'メモ・注目ポイント'), `メモ・注目ポイント (${hy.length})`, h+'<div style="height:10px"></div>');
+  return groupBlockWithEdit(detailGroupKey(s,'メモ・注目ポイント'), `メモ・注目ポイント (${hy.length})`,
+    `sheetEditHypo(null,'${s.id}')`, h+'<div style="height:10px"></div>', '追加');
 }
 function blkLinks(s){
   return `<button class="btn" style="margin-top:14px" onclick="openRem('${s.id}')">${isMkt(s)?'この'+scopeOf(s):'この銘柄'}のリマインダー (${remOf(s.id).length})</button>
@@ -2118,7 +2117,14 @@ function hypoMiniCard(hh){
   // 伝わらない(「未登録」なのは全部同じでは、と読める)。候補日そのものを出し、
   // 「日付の候補があるのに登録していない」ことだと分かるようにする
   let status='';
-  if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">${bellIcon()} 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
+  if(rms.length){
+    // 1つのリマインダーが複数の注目ポイントに紐づくことがある(取り込み直後の一括登録など)。
+    // そのままだとカードごとに同じ日時が並び、その数だけリマインダーがあるように見える。
+    // 何件で共有しているかを添えて、同じ1つだと分かるようにする
+    const shared=Math.max(0, ((rms[0].hypoIds)||[]).length-1);
+    status=`<span class="meta" style="color:var(--navy);font-weight:600">${bellIcon()} 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`
+      + (shared?`<span class="chip gray">他${shared}件と同じ</span>`:'');
+  }
   else if(hint) status=`<span class="chip amber">${bellIcon()} 候補 ${esc(hint.date)}(未登録)</span>`;
   return `<div class="swipe">
     <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
