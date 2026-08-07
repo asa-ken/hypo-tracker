@@ -2117,14 +2117,10 @@ function hypoMiniCard(hh){
   // 伝わらない(「未登録」なのは全部同じでは、と読める)。候補日そのものを出し、
   // 「日付の候補があるのに登録していない」ことだと分かるようにする
   let status='';
-  if(rms.length){
-    // 1つのリマインダーが複数の注目ポイントに紐づくことがある(取り込み直後の一括登録など)。
-    // そのままだとカードごとに同じ日時が並び、その数だけリマインダーがあるように見える。
-    // 何件で共有しているかを添えて、同じ1つだと分かるようにする
-    const shared=Math.max(0, ((rms[0].hypoIds)||[]).length-1);
-    status=`<span class="meta" style="color:var(--navy);font-weight:600">${bellIcon()} 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`
-      + (shared?`<span class="chip gray">他${shared}件と同じ</span>`:'');
-  }
+  // 1つのリマインダーが複数の注目ポイントに紐づくことがあり(取り込み直後の一括登録など)、
+  // その場合はカードごとに同じ日時が並ぶ。共有していることを短い言葉で言い切れないため、
+  // ここでは注記を付けずに日時だけを出す(まとまりはリマインダー画面側で確認できる)
+  if(rms.length) status=`<span class="meta" style="color:var(--navy);font-weight:600">${bellIcon()} 次回 ${esc(fmtFire(calcNextFire(rms[0])))}${rms.length>1?` 他${rms.length-1}件`:''}</span>`;
   else if(hint) status=`<span class="chip amber">${bellIcon()} 候補 ${esc(hint.date)}(未登録)</span>`;
   return `<div class="swipe">
     <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
