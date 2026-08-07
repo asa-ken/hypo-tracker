@@ -2168,14 +2168,14 @@ function remGroupCard(r, members){
     <div class="rgrp-b">${members.map(hypoSubRow).join('')}</div>
   </div>`;
 }
-// まとまりの中の1件。日時は見出し側に出ているので、ここでは種別と本文だけ
+// まとまりの中の1件。何のリマインダーで、いつ届くかは見出し側に出ている。
+// 「注目」バッジを1件ずつ繰り返すと同じことを何度も書くことになり、
+// カード状に区切ると1枚ずつばらけて見えるので、本文だけを続けて並べる
 function hypoSubRow(hh){
-  const isMemo=hh.kind==='memo';
   return `<div class="swipe">
     <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
       <div class="lt">
-        <span class="chip ${isMemo?'gray':'amber'}">${isMemo?'メモ':'注目'}</span>
-        <div class="clip2" style="margin-top:4px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
+        <div class="clip2" style="font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
       </div>
     </div>
     <button class="del-btn" onclick="delHypo('${hh.id}')">削除</button>
