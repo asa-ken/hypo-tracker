@@ -135,12 +135,15 @@
   .list.cards{background:none; border:none; border-radius:0; overflow:visible;
               display:flex; flex-direction:column; gap:var(--sp1);}
   /* 角丸は .swipe の切り抜き(overflow:hidden)で作り、中の行は四角いまま全面を白で塗る。
-     ただし切り抜きの縁はアンチエイリアスされるため、角の曲線上では下に敷いた
-     削除ボタンの赤が数%だけ残り、細い枠線のように見えてしまう。
-     削除ボタン側にも同じ角丸を持たせて、角の内側に赤を置かないようにする */
+     ただし切り抜きの縁はアンチエイリアスされ、しかも要素ごとに適用されるため、
+     角の曲線上では下に敷いた削除ボタンの赤が数%だけ残り、細い枠線のように見えてしまう。
+     切り抜きと同じ角丸(12px)を削除ボタンに与えても曲線が重なるだけで消えない。
+     切り抜きより大きい角丸にして曲線を内側へ逃がすと、縁の下が地色になり赤が出ない。
+     16pxが赤みゼロになる最小値(12px→赤み16 / 14px→2 / 16px→0)。
+     開いたときの見た目は外側の切り抜きが決めるので、大きくしても崩れない */
   .list.cards .swipe{border-top:none; border-radius:12px;}
   .list.cards .swipe .list-row{border-radius:0;}
-  .list.cards .swipe .del-btn{border-radius:0 12px 12px 0;}
+  .list.cards .swipe .del-btn{border-radius:0 16px 16px 0;}
   /* タップ領域は44px以上を下限にする(iOS/Androidの推奨値)。
      以前は33pxのボタンが並び、親指では隣を押しやすい状態だった。
      例外は文章に紛れるチップ・リンクで、そこは36px以上とする */
