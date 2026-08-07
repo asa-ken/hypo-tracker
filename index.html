@@ -173,6 +173,11 @@
   .seg{display:flex; border:1px solid var(--line2); border-radius:9px; overflow:hidden; margin-top:4px;}
   .seg button{flex:1; border:none; background:var(--card); padding:8px; min-height:44px; font-size:13px; color:var(--ink2); cursor:pointer; font-family:inherit; font-weight:600;}
   .seg button.on{background:var(--navy); color:#fff;}
+  /* .seg.light: 種別のような補助的な切り替え用。全幅の紺ベタは面積が大きく重いので、
+     文字幅ぶんのピルにして地色の上に置く。選択中だけ白く浮かせる */
+  .seg.light{display:inline-flex; border:none; background:var(--bg); border-radius:11px; padding:3px; gap:4px; margin:0 0 12px;}
+  .seg.light button{flex:none; background:none; border-radius:9px; padding:0 16px; font-size:13px; font-weight:600; color:var(--ink2);}
+  .seg.light button.on{background:var(--card); color:var(--navy); box-shadow:0 1px 2px rgba(20,30,40,.10);}
   table{width:100%; border-collapse:collapse; font-size:12px; margin-top:4px;}
   th{text-align:left; font-size:11px; color:var(--ink3); font-weight:600; padding:4px 6px; border-bottom:1px solid var(--line);}
   td{padding:6px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.5;}
@@ -270,6 +275,22 @@
   .edge-swipe-zone{position:fixed; top:0; bottom:0; left:0; width:30%; z-index:41; touch-action:pan-y; pointer-events:none;}
   .edge-swipe-zone.show{pointer-events:auto;}
   .sheet h3{font-size:15px; font-weight:700; margin:2px 0 12px; text-align:center;}
+  /* 操作をシートの上端に集める形。全幅ボタンを何段も積むより軽く、
+     空いた高さを本文の入力欄に回せる。スクロールしても操作が隠れない */
+  .sheet .headbar{position:sticky; top:-16px; z-index:2; background:var(--app);
+                  margin:-16px -16px 14px; padding:0 8px; border-bottom:1px solid var(--line);
+                  display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .sheet .headbar .t{font-size:15px; font-weight:700; white-space:nowrap;}
+  .sheet .headbar button{border:none; background:none; font-family:inherit; font-size:15px;
+                         min-height:48px; padding:0 8px; cursor:pointer; white-space:nowrap;}
+  .sheet .headbar .act{color:var(--navy); font-weight:700;}
+  .sheet .headbar .sub{color:var(--ink2); font-weight:400;}
+  .sheet .headbar button:active{opacity:.5;}
+  /* 破壊的な操作は全幅の赤ボタンにしない。押し間違いを誘ううえ、画面が重くなる */
+  .dellink{display:block; width:100%; border:none; background:none; font-family:inherit;
+           text-align:center; color:var(--red-tx); font-size:13px; margin-top:18px;
+           min-height:44px; cursor:pointer;}
+  .dellink:active{opacity:.5;}
   /* 背景タップで閉じられるが、それに気づかず「戻れない」と感じる人のための明示的な閉じるボタン */
   .sheet-close{position:absolute; top:4px; right:4px; width:44px; height:44px; border-radius:50%; border:none; background:none; color:var(--ink3); font-size:17px; line-height:1; cursor:pointer; z-index:1;}
   .sheet-close:active{background:var(--line);}
@@ -294,6 +315,24 @@
   .metwarn .r .s{font-size:11px; color:var(--amber-tx); margin-top:2px;}
   .metwarn .r .s.plain{color:var(--ink3);}
   .metwarn .d{font-size:11px; color:var(--amber-tx); margin-top:9px; line-height:1.5;}
+  /* 取り込みプレビューの中でリマインダーにするかを決める欄 */
+  .rembox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:11px;}
+  .rembox .rh{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .rembox .rh .rt{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;}
+  .rembox .lnk{border:none; background:none; font-family:inherit; font-size:12px; font-weight:600;
+               color:var(--navy); cursor:pointer; padding:8px 2px; min-height:44px;}
+  .rembox .lnk.foot{display:block; width:100%; text-align:center; border-top:1px solid var(--line); margin-top:6px;}
+  .rembox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; border-top:1px solid var(--line); cursor:pointer; min-height:44px;}
+  .rembox .rrow:active{opacity:.6;}
+  .rembox .tx{flex:1; min-width:0;}
+  .rembox .d{display:block; font-size:11px; color:var(--navy); font-weight:700;}
+  .rembox .b{display:block; font-size:12px; color:var(--ink);}
+  /* オン・オフのつまみ。チェックボックスより状態が一目で分かる */
+  .sw{width:44px; height:26px; border-radius:13px; background:var(--line2); position:relative; flex:none; margin-top:2px; transition:background .15s;}
+  .sw.on{background:var(--navy);}
+  .sw i{position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left .15s;}
+  .sw.on i{left:21px;}
+  @media (prefers-reduced-motion: reduce){ .sw, .sw i{transition:none;} }
   .pill-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;}
   .banner{background:var(--navy-bg); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--navy-tx); margin-bottom:11px; line-height:1.5;}
   /* 上限に当たったことを知らせる注意書き。トーストは数秒で消えるうえ画面の下に出るので、
@@ -730,7 +769,7 @@ function go(tab){
   if(tab==='import' && !STATE._askFromStock) STATE.askStockId=null;
   if(tab==='reminder' && !STATE._remFromStock) STATE.remStockId=null;
   // 画面を移ると貼り付け欄ごと作り直されるので、取り込み先の選択も持ち越さない
-  STATE._askFromStock=false; STATE._remFromStock=false; STATE._triageItems=null; STATE._importPick=null;
+  STATE._askFromStock=false; STATE._remFromStock=false; STATE._importPick=null;
   STATE.tab=tab; STATE.stockId=null;
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   render(); $('#view').scrollTop=0;
@@ -1575,6 +1614,54 @@ function newMetricsIn(rows, target){
   // 同じ名前が複数行にあっても知らせるのは1回
   return out.filter((x,i)=>out.findIndex(y=>y.name===x.name&&y.kind===x.kind)===i);
 }
+// ===== 取り込みプレビューでリマインダーを決める =====
+// 以前は読み込んだ後に登録シートを出していたが、そこで見送ると
+// 銘柄詳細 → カード → 編集 → 登録 と深く潜らないと登録できなかった。
+// プレビューの中で決めておけば、読み込みと同時に登録できる。
+function autoRemindOn(){ return !!((DB.settings||{}).autoRemind); }
+function setAutoRemind(v){ (DB.settings||(DB.settings={})).autoRemind=!!v; save(); parseAndPreview(); }
+// 貼り付け直すたびに行のオブジェクトは作り直されるので、日付と本文の頭で覚える
+function remSig(r){ return (r.eventDate||'')+'|'+String(r.value||'').slice(0,40); }
+function datedWatchRows(rows){ return (rows||[]).filter(r=>r.block==='注目ポイント' && r.eventDate); }
+// 既定はオン。ここで外すのは1タップで済み、後から登録するより手間が少ない
+function remPickOn(r){
+  const m=STATE._remPick||(STATE._remPick={}); const k=remSig(r);
+  if(m[k]===undefined) m[k]=true;
+  return m[k];
+}
+function toggleRemPick(sig){ const m=STATE._remPick||(STATE._remPick={}); m[sig]=!m[sig]; parseAndPreview(); }
+function bulkRemPick(on){
+  const p=window._parsed; if(!p) return;
+  const m=STATE._remPick||(STATE._remPick={});
+  datedWatchRows(p.rows).forEach(r=>{ m[remSig(r)]=!!on; });
+  parseAndPreview();
+}
+function remPickBox(rows){
+  const dated=datedWatchRows(rows);
+  if(!dated.length) return '';
+  // 自動に設定しているときは選ばせない。確認なしで全部登録するのが設定の意味なので、
+  // ここで一覧を出すと結局「見て確認する」ことになってしまう
+  if(autoRemindOn()){
+    return `<div class="rembox"><div class="rh"><span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span></div>
+      <div class="muted" style="font-size:11px;margin-top:4px">読み込みと同時に、すべてリマインダーに登録します。不要な分は後から消せます。</div>
+      <button class="lnk" onclick="setAutoRemind(false)">毎回選ぶように戻す</button></div>`;
+  }
+  const onCnt=dated.filter(remPickOn).length;
+  let h=`<div class="rembox"><div class="rh">
+      <span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span>
+      <button class="lnk" onclick="bulkRemPick(${onCnt===dated.length?'false':'true'})">${onCnt===dated.length?'すべてオフ':'すべてオン'}</button>
+    </div>
+    <div class="muted" style="font-size:11px;margin:4px 0 2px">オンにした分は読み込みと同時にリマインダーになります。同じ日は1つにまとまります。</div>`;
+  dated.forEach(r=>{
+    const on=remPickOn(r), sig=remSig(r);
+    h+=`<div class="rrow" onclick="toggleRemPick('${escArg(sig)}')">
+      <span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span>
+      <span class="tx"><span class="d">${esc(r.eventDate)}</span><span class="b">${esc(String(r.value).slice(0,60))}${String(r.value).length>60?'…':''}</span></span>
+    </div>`;
+  });
+  h+=`<button class="lnk foot" onclick="setAutoRemind(true)">次回から確認せず、すべてオンにする</button></div>`;
+  return h;
+}
 function newMetricsBox(newMets){
   if(!newMets.length) return '';
   window._newMets=newMets;
@@ -1604,7 +1691,9 @@ function copyMetFix(){
   copy(t, 'コピーしました。AIに貼り付けて、出し直してもらってください');
 }
 function parseAndPreview(){
-  const text=$('#mdIn').value; const out=$('#parseOut');
+  // 設定の切り替えなど、取り込み画面の外から呼ばれることがある。貼り付け欄が無ければ何もしない
+  const ta=$('#mdIn'); if(!ta) return;
+  const text=ta.value; const out=$('#parseOut');
   if(!text.trim()){ out.innerHTML=''; return; }
   const p=parseMd(text);
   let h='';
@@ -1653,6 +1742,8 @@ function parseAndPreview(){
   // 新しく増える指標の告知。取り込みは止めない(既定のまま読み込めば追加される)。
   // 似た名前が既にある場合だけ、その名前を名指しして外部AI側の修正へ誘導する
   h+=newMetricsBox(newMets);
+  // 日付つきの注目ポイントを、その場でリマインダーにするか決める
+  h+=remPickBox(okRows);
   // diff table
   if(p.rows.length){
     if(orphans.length){
@@ -1802,17 +1893,22 @@ function commitImport(){
       const ed = r.eventDate ? (/^\d{1,2}\/\d{1,2}$/.test(r.eventDate)?'2026/'+r.eventDate:r.eventDate) : null;
       const hid='h'+Date.now()+Math.random().toString(36).slice(2,8);
       DB.hypotheses.push({id:hid, stockId:s.id, kind:'watch', text:r.value, remindHint:ed?{date:ed, note:null}:null});
-      if(ed) newWatchWithEvent.push({id:hid, text:r.value, eventDate:ed});
+      // プレビューでオンにした分(自動設定なら全部)だけ、この場でリマインダーにする。
+      // オフのままの分は候補日を持ったまま残り、カードのバッジから後で登録できる
+      if(ed && (autoRemindOn()||remPickOn(r))) newWatchWithEvent.push({id:hid, text:r.value, eventDate:ed});
     }
   });
   // メモ候補: 画面上で編集・追加・削除された内容をそのまま取り込む(memoTextsは冒頭で採取済み)
   memoTexts.forEach(t=>{ DB.hypotheses.push({id:'h'+Date.now()+Math.random().toString(36).slice(2,8), stockId:s.id, kind:'memo', text:t}); });
   save();
+  // 選んだ分はここでリマインダーにしてしまう。読み込んだ後に登録シートを出すと、
+  // そこで見送ったぶんが銘柄詳細の奥に埋もれて登録し直しになる
+  const madeRem=newWatchWithEvent.length?registerRemindersFor(newWatchWithEvent, s.id):0;
   const n=p.rows.length+memoTexts.length;
-  toast(n+'件を読み込みました');
+  toast(n+'件を読み込みました'+(madeRem?` · リマインダー${madeRem}件を登録`:''));
   $('#mdIn').value=''; $('#parseOut').innerHTML='';
+  STATE._remPick=null;
   openStock(s.id);
-  if(newWatchWithEvent.length) sheetReminderTriage(newWatchWithEvent, s.id);
 }
 // 取り込みの項目名解決は全マスター横断で行う(粒度を跨いだ貼り付けでも取りこぼさない)
 function allSectionMasters(){ return [DB.sectionMaster, DB.marketSectionMaster, DB.industrySectionMaster, DB.themeSectionMaster].filter(Boolean); }
@@ -2188,47 +2284,9 @@ function hypoMiniCard(hh){
     <button class="del-btn" onclick="delHypo('${hh.id}')">削除</button>
   </div>`;
 }
-function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE._triageItems=null; STATE.remHypoIds=[hid]; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, [hid]); }
-// 取り込み直後に「イベント日つき注目ポイント」をまとめて確認する一覧シート。
-// 同じイベント日(同じ決算など)のものは1グループにまとめ、1つのリマインダーで確認できるようにする。
-function sheetReminderTriage(items, sid){
-  STATE._triageItems=items; STATE._triageSid=sid;
-  // 全件さばき終えた(またはすべて×で消した)らシートを閉じる。
-  // 閉じずにreturnすると、消したはずの項目が残って見える
-  if(!items || !items.length){ STATE._triageItems=null; closeSheet(); return; }
-  const groups={};
-  items.forEach(it=>{ (groups[it.eventDate]=groups[it.eventDate]||[]).push(it); });
-  const days=Object.keys(groups).sort((a,b)=>(parseD(a)||0)-(parseD(b)||0));
-  let h=`<h3>リマインダーを登録</h3>
-    <div class="muted" style="margin-bottom:10px">日付つきの注目ポイントが取り込まれました。日付はリマインダーで管理します。同じ日のものは1つのリマインダーにまとめられます。</div>`;
-  days.forEach(d=>{
-    const g=groups[d];
-    h+=`<div class="card" style="padding:10px 12px;margin-bottom:9px">
-      <div class="row"><span class="chip navy">${esc(d)}</span><span class="muted" style="font-size:11px">${g.length}件</span></div>`;
-    g.forEach(it=>{
-      h+=`<div class="row" style="align-items:flex-start;gap:8px;margin-top:7px">
-        <div class="clip3" style="flex:1;font-size:12px">${esc(it.text)}</div>
-        <span class="del" onclick="triageRemove('${it.id}')">×</span>
-      </div>`;
-    });
-    h+=`<button class="btn sm" style="margin-top:9px;width:auto" onclick="triageAddReminder('${escArg(d)}')">${g.length>1?`この日の${g.length}件をまとめてリマインダー登録`:'リマインダーを登録'}</button>
-    </div>`;
-  });
-  h+=`<button class="btn ghost" style="margin-top:4px" onclick="STATE._triageItems=null;closeSheet();">あとで登録する</button>`;
-  openSheet(h);
-}
-function triageRemove(id){
-  STATE._triageItems=(STATE._triageItems||[]).filter(x=>x.id!==id);
-  sheetReminderTriage(STATE._triageItems, STATE._triageSid);
-}
-// 同じイベント日の注目ポイントをまとめて1つのリマインダーに紐づける
-function triageAddReminder(day){
-  const g=(STATE._triageItems||[]).filter(x=>x.eventDate===day);
-  if(!g.length) return;
-  const ids=g.map(x=>x.id);
-  STATE.remHypoIds=ids; STATE.remStockId=STATE._triageSid; STATE._remFromStock=true;
-  closeSheet(); sheetAddReminder(STATE._triageSid, ids);
-}
+function addRemForHypo(hid){ const hh=DB.hypotheses.find(x=>x.id===hid); if(!hh)return; STATE.remHypoIds=[hid]; STATE.remStockId=hh.stockId; STATE._remFromStock=true; closeSheet(); sheetAddReminder(hh.stockId, [hid]); }
+// 日付つきの注目ポイントは取り込みプレビューでリマインダーにするか決めるので、
+// 読み込み後にまとめて確認させる一覧シートは持たない
 // kind/presetText を渡すと、種別セグメントで切り替えた直後の状態を再現する
 // (入力途中の文章を保ったまま、メモ⇄注目ポイントを行き来できるようにするため)
 function sheetEditHypo(hid, sid, kind, presetText){
@@ -2238,25 +2296,31 @@ function sheetEditHypo(hid, sid, kind, presetText){
   const curKind=kind||(hh?hh.kind:'watch');
   const isMemo=curKind==='memo';
   const text=presetText!==undefined?presetText:(hh?hh.text:'');
-  let h=`<h3>${hh?(isMemo?'メモを編集':'注目ポイントを編集'):(isMemo?'メモを作成':'注目ポイントを作成')}</h3>
-    <div class="muted" style="margin-bottom:10px">${esc(s.name)}</div>
-    <div class="seg" style="margin-bottom:12px">
+  const rms=hid?remindersOf(hid):[];
+  // 保存・キャンセルは上端のバーに置く。全幅ボタンを積み上げると、いちばん大事な
+  // 本文の入力欄が押し出されて狭くなる(以前は70pxで3行しか見えなかった)
+  let h=`<div class="headbar">
+      <button class="sub" onclick="requestCloseSheet()">キャンセル</button>
+      <span class="t">${hh?(isMemo?'メモ':'注目ポイント'):(isMemo?'メモを作成':'注目ポイントを作成')}</span>
+      <button class="act" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}')">保存</button>
+    </div>
+    <div class="seg light">
       <button class="${isMemo?'':'on'}" onclick="switchHypoKind('${hid||''}','${s.id}','watch')">注目ポイント</button>
       <button class="${isMemo?'on':''}" onclick="switchHypoKind('${hid||''}','${s.id}','memo')">メモ</button>
     </div>
-    <label class="fld"><span class="t">${isMemo?'メモ(気づき・違和感・自分の判断)':'注目ポイント(何がどうなったら良い/悪いか)'}</span><textarea id="hy_text" style="min-height:70px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(text)}</textarea></label>`;
-  // 日付欄はここには置かない。日付を持たせる＝リマインダー登録なので、保存後に登録シートへ誘導する
-  const rms=hid?remindersOf(hid):[];
+    <textarea id="hy_text" style="min-height:210px" placeholder="${isMemo?'例: DC向けの需給が本丸。古河電工とペアで見る。':'例: データセンター向け光ケーブル需要が続伸するか。DC事業者のCAPEXが鈍化したら要警戒。'}">${esc(text)}</textarea>
+    <div class="muted" style="font-size:11px;margin-top:6px">${isMemo?'気づき・違和感・自分の判断を書きます。':'何がどうなったら良い/悪いかを書きます。'} ${esc(s.name)}</div>`;
+  // 日付欄はここには置かない。日付を持たせる＝リマインダー登録なので、行から登録画面へ渡す。
+  // ボタンではなく行にすることで、今どうなっているか(未登録か、いつ届くか)がその場で読める
   if(!isMemo){
-    h+=`<div class="muted" style="font-size:11px;margin:-4px 0 10px">日付で思い出したい場合は、保存後に「リマインダーを登録」してください。</div>`;
-    // 登録済みのリマインダーはここから開けるようにする(一覧の行からボタンを外した分の受け皿)
-    if(rms.length) h+='<div class="list">'+rms.map(r=>`<div class="list-row" onclick="openReminder('${r.id}')"><div class="lt"><div class="ttl">${bellIcon()} ${esc(r.title||'リマインダー')}</div><div class="meta">次回 ${esc(fmtFire(calcNextFire(r)))}</div></div><span class="rt"><span class="arrow">›</span></span></div>`).join('')+'</div>';
+    h+='<div class="lbl" style="margin:16px 0 6px">リマインダー</div>';
+    h+='<div class="list">';
+    rms.forEach(r=>{ h+=`<div class="list-row" onclick="openReminder('${r.id}')"><div class="lt"><div class="ttl">${esc(r.title||'リマインダー')}</div><div class="meta">次回 ${esc(fmtFire(calcNextFire(r)))}</div></div><span class="rt">変更</span></div>`; });
+    h+=`<div class="list-row" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}',true)"><div class="lt"><div class="ttl" style="color:var(--navy)">${rms.length?'リマインダーを追加':'リマインダーを登録'}</div><div class="meta">${rms.length?'別の日にも思い出したいとき':'日付で思い出したいとき(保存してから進みます)'}</div></div><span class="rt">›</span></div>`;
+    h+='</div>';
   }
-  h+=`<button class="btn pri" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}')">保存</button>
-    ${isMemo?'':`<button class="btn" style="margin-top:8px" onclick="saveHypo('${hh?hh.id:''}','${s.id}','${curKind}',true)">保存して${rms.length?'リマインダーを追加':'リマインダーを登録'}</button>`}
-    ${hid?`<button class="btn danger" style="margin-top:8px" onclick="delHypo('${hid}')">削除</button>`:''}
-    <button class="btn ghost" style="margin-top:8px" onclick="closeSheet();openStock('${s.id}')">キャンセル</button>`;
-  openSheet(h);
+  if(hid) h+=`<button class="dellink" onclick="delHypo('${hid}')">この${isMemo?'メモ':'注目ポイント'}を削除</button>`;
+  openSheet(h, true);
 }
 // セグメントで種別を切り替える。入力中の文章を読み取ってから同じシートを開き直す
 function switchHypoKind(hid, sid, kind){
@@ -2334,8 +2398,10 @@ function askConfirm(opts){
 }
 function runConfirm(){ const f=window._confirmOk; window._confirmOk=null; closeSheet(); if(typeof f==='function') setTimeout(f,60); }
 // 全シート共通で右上に閉じるボタンを出す。背景タップに気づかない場合の逃げ道として、個々のシート側では実装しない
-function openSheet(html){
-  $('#sheet').innerHTML='<button class="sheet-close" onclick="requestCloseSheet()" aria-label="閉じる">✕</button>'+html;
+// noClose を渡すと右上の✕を出さない。上端に自前の操作バー(.headbar)を置くシート用で、
+// 「キャンセル」と「✕」が並ぶと同じ役目のものが2つ見えてしまうため
+function openSheet(html, noClose){
+  $('#sheet').innerHTML=(noClose?'':'<button class="sheet-close" onclick="requestCloseSheet()" aria-label="閉じる">✕</button>')+html;
   $('#sheet').style.transform='';
   $('#scrim').classList.add('show');
   $('#edgeSwipeZone').classList.add('show');
@@ -2768,25 +2834,37 @@ function sheetAddReminder(presetId, hypoIds){
     <button class="btn" onclick="copyRegPrompt()">登録用プロンプトをコピー</button>
     <label class="fld" style="margin-top:12px"><span class="t">外部AIの出力(md)を貼り付け</span><textarea id="rm_md" class="mono" placeholder="## リマインダー ..."></textarea></label>
     <button class="btn pri" onclick="parseReminder()">解析して登録</button>
-    ${STATE._triageItems?'<button class="btn ghost" style="margin-top:8px" onclick="sheetReminderTriage(STATE._triageItems, STATE._triageSid)">← 一覧に戻る</button>':''}`);
+`);
 }
 // リマインダーが登録できたら、注目ポイント側の「候補日」は役目を終えるので消す
 function clearHints(ids){ (ids||[]).forEach(id=>{ const h=DB.hypotheses.find(x=>x.id===id); if(h) delete h.remindHint; }); }
 function selectedHypoIds(){ const el=$('#rm_hypo'); return (el&&el.value)?el.value.split(',').filter(Boolean):[]; }
-// 登録後のシート遷移。取り込み直後の一覧(triage)から来た場合は残りを表示し続ける
+// 登録後のシート遷移
 function afterReminderSaved(ids, sid){
-  if(STATE._triageItems){
-    const rest=STATE._triageItems.filter(x=>!(ids||[]).includes(x.id));
-    STATE._triageItems=rest;
-    // 空で呼ぶとシートを閉じたうえで STATE._triageItems を null に戻すので、残数は先に控えておく
-    sheetReminderTriage(rest, STATE._triageSid);
-    if(!rest.length && sid) openStock(sid);
-    return;
-  }
   closeSheet();
   if(STATE._remFromStock && sid){ STATE._remFromStock=false; openStock(sid); } else go('reminder');
 }
 // 日付だけを指定する単発リマインダー。頻度は「毎日」だが開始日=終了日なのでその日1回だけ鳴る
+// 取り込み時に選ばれた「日付つきの注目ポイント」を、日付ごとに1つのリマインダーにする。
+// 内容は「かんたん登録」で作るものと同じ形にそろえる(時刻は既定の09:00)
+function registerRemindersFor(items, sid){
+  const byDay={};
+  items.forEach(it=>{ (byDay[it.eventDate]=byDay[it.eventDate]||[]).push(it); });
+  const days=Object.keys(byDay).sort((a,b)=>(parseD(a)||0)-(parseD(b)||0));
+  days.forEach((d,i)=>{
+    const g=byDay[d], ids=g.map(x=>x.id);
+    const nm=(stock(sid)||{}).name||'';
+    const title=g.length>1 ? `${nm} ${d}の確認(${g.length}点)` : (g[0].text.slice(0,24)||'注目ポイントの確認');
+    const r={id:'r'+Date.now()+i, stockId:sid, title, comment:null,
+      cat:'イベント確認', freq:'毎日', times:['09:00'], startDate:d, endDate:d, paused:false, changes:[],
+      prompt:`${nm}について、次の注目ポイントに動きがあったか確認してください。\n`+g.map(x=>`- ${x.text}`).join('\n'),
+      src:'取り込み', srcDate:fmtToday(), log:[], nextFire:null, hypoIds:ids};
+    { const nf=calcNextFire(r); r.nextFire=nf?fmtFire(nf):null; }
+    DB.reminders.push(r); clearHints(ids);
+  });
+  save();
+  return days.length;
+}
 function quickAddReminder(){
   const d=fromISO($('#rm_qdate').value);
   if(!d){ toast('日付を入力してください'); return; }
