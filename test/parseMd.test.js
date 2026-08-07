@@ -236,3 +236,69 @@ describe('parseMd', () => {
     expect(p.memoCandidates).toEqual(['確信度: 高']);
   });
 });
+
+describe('「## メモ」: 会話の中の本人の発言を拾う', () => {
+  const ctx = { metricsMaster, sectionMaster, marketSectionMaster };
+  test('メモ欄の本文がメモ候補になる', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n## メモ\n- 本文: 保守で稼ぐ形に変わりつつある気がする', ctx);
+    expect(r.memoCandidates).toContain('保守で稼ぐ形に変わりつつある気がする');
+  });
+  test('メモ欄は分析やカードの行にはしない', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n## メモ\n- 本文: あとで読み返したい', ctx);
+    expect(r.rows.filter(x => x.block === 'メモ')).toHaveLength(0);
+  });
+  test('複数の本文をそれぞれ拾う', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n## メモ\n- 本文: ひとつめ\n- 本文: ふたつめ', ctx);
+    expect(r.memoCandidates).toEqual(expect.arrayContaining(['ひとつめ', 'ふたつめ']));
+  });
+  test('ラベルが無い書き方も受ける', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n## メモ\n- 配当より成長を優先して見ている', ctx);
+    expect(r.memoCandidates.join()).toMatch(/配当より成長/);
+  });
+  test('見出しの無い自由文より前に並ぶ', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n地の文です\n\n## メモ\n- 本文: 本人の考え', ctx);
+    expect(r.memoCandidates[0]).toBe('本人の考え');
+  });
+  test('メモ欄が無くても落ちない', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n## 指標\n- PBR: 1.2 | 2026/8/7', ctx);
+    expect(r.memoCandidates).toEqual([]);
+  });
+});
+
+describe('見出しの「#」が落ちても読める', () => {
+  const ctx = { metricsMaster, sectionMaster, marketSectionMaster };
+  const stripped = [
+    '銘柄: A社 (1234)',
+    '指標',
+    '- PBR: 1.2 | 2026/8/7',
+    '業績推移',
+    '- 売上高: 25年3月期=100 | 単位:百万円 | 2026/8/7',
+    'メモ',
+    '- 本文: 本人の考え',
+  ].join('\n');
+  test('銘柄を特定できる', () => {
+    expect(parseMd(stripped, ctx).stock).toMatchObject({ name: 'A社', code: '1234' });
+  });
+  test('見出し語がメモ候補に混ざらない', () => {
+    const m = parseMd(stripped, ctx).memoCandidates;
+    expect(m).not.toContain('指標');
+    expect(m).not.toContain('業績推移');
+    expect(m).not.toContain('銘柄: A社 (1234)');
+  });
+  test('各行が正しい見出しに入る', () => {
+    const r = parseMd(stripped, ctx);
+    expect(r.rows.find(x => x.key === 'PBR').block).toBe('指標');
+    expect(r.rows.find(x => x.key === '売上高').block).toBe('業績推移');
+  });
+  test('メモ欄も拾える', () => {
+    expect(parseMd(stripped, ctx).memoCandidates).toContain('本人の考え');
+  });
+  test('見出し語で始まるだけの文章は見出しにしない', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n分析すると、来期は厳しそうだ', ctx);
+    expect(r.memoCandidates).toContain('分析すると、来期は厳しそうだ');
+  });
+  test('箇条書きの「銘柄:」は見出しにしない', () => {
+    const r = parseMd('# 銘柄: A社 (1234)\n## 分析\n- 銘柄: B社 (5678) との比較 | 2026/8/7', ctx);
+    expect(r.stock).toMatchObject({ code: '1234' });
+  });
+});
