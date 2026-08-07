@@ -153,17 +153,6 @@
   .list.cards .rgrp .rgrp-h:active{background:#fafbfc;}
   .list.cards .rgrp .rgrp-h .ttl{font-size:13px; font-weight:700; line-height:1.4; margin-top:4px;}
   .list.cards .rgrp .rgrp-h .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
-  /* 中身は「リマインダーに含まれるもの」なので、字下げして従属を示す。
-     同じ字下げ・同じ幅の線で並べると、見出しと中身が対等な4行に見えてしまう。
-     見出しの下は全幅の線で区切り、中身どうしの線は字下げの位置から始める
-     (分析の小項目と同じく、区切り線＋字下げで階層を表す) */
-  .list.cards .rgrp .rgrp-b{border-top:1px solid var(--line); padding-left:20px;}
-  .list.cards .rgrp .swipe{border-radius:0;}
-  .list.cards .rgrp .swipe .list-row{border-top:1px solid var(--line);}
-  .list.cards .rgrp .rgrp-b > .swipe:first-child .list-row{border-top:none;}
-  .list.cards .rgrp .swipe .del-btn{border-radius:0;}
-  /* 最後の行だけは、カードの角丸の内側に赤が入らないよう逃がす(上と同じ理由) */
-  .list.cards .rgrp .swipe:last-child .del-btn{border-radius:0 0 16px 0;}
   /* タップ領域は44px以上を下限にする(iOS/Androidの推奨値)。
      以前は33pxのボタンが並び、親指では隣を押しやすい状態だった。
      例外は文章に紛れるチップ・リンクで、そこは36px以上とする */
@@ -227,6 +216,10 @@
   @media (prefers-reduced-motion: reduce){ .sec .h{transition:none;} }
   .mine{border-left:3px solid var(--navy); background:var(--navy-bg); border-radius:0 8px 8px 0; padding:9px 11px; margin-top:4px;}
   .mine .row2{font-size:12px; color:var(--navy-tx);} .mine .ts{font-size:11px; color:var(--navy); opacity:.7;}
+  /* リマインダーの対象は、そこから元の注目ポイントを直せるようにする。
+     銘柄詳細のカードでは本文を並べないので、編集にたどり着ける道はここだけになる */
+  .mine .row2.tap{cursor:pointer; min-height:44px; display:flex; align-items:center;}
+  .mine .row2.tap:active{opacity:.6;}
   .empty{text-align:center; padding:40px 20px; color:var(--ink3);}
   .empty .big{font-size:15px; font-weight:600; color:var(--ink2); margin-bottom:6px;}
   /* 分析項目の行(タップで概要/詳細スワイプシートを開く)。
@@ -1927,7 +1920,7 @@ function openReminder(id){
   let h=`<h3>${esc(r.title)}</h3>`;
   const linkedHys=(r.hypoIds||[]).map(id=>DB.hypotheses.find(x=>x.id===id)).filter(Boolean);
   h+=`<div class="card"><div class="pill-row"><span class="chip navy">${esc(r.cat)}</span><span class="chip gray">${esc(stock(r.stockId)?.name||'')}</span></div>
-    ${linkedHys.length?`<div class="mine" style="margin-top:7px"><div class="ts">このリマインダーの対象${linkedHys.length>1?` (${linkedHys.length}件)`:''}</div>${linkedHys.map(x=>`<div class="row2" style="margin-top:2px">・${esc(x.text)}</div>`).join('')}</div>`:''}
+    ${linkedHys.length?`<div class="mine" style="margin-top:7px"><div class="ts">このリマインダーの対象${linkedHys.length>1?` (${linkedHys.length}件)`:''}(タップで編集)</div>${linkedHys.map(x=>`<div class="row2 tap" style="margin-top:2px" onclick="sheetEditHypo('${x.id}')">・${esc(x.text)}</div>`).join('')}</div>`:''}
     <div class="muted" style="margin-top:6px">${esc(r.freq)} ${esc((r.times||[]).join(', '))}</div>
     ${r.endDate?`<div class="muted" style="margin-top:3px">終了日: ${esc(r.endDate)}${parseD(r.endDate)<new Date()?' <span class="chip gray" style="font-size:11px">終了済</span>':''}</div>`:''}
     ${r.startDate?`<div class="muted" style="margin-top:3px">開始日: ${esc(r.startDate)}${parseD(r.startDate)>new Date()?' <span class="chip gray" style="font-size:11px">開始待ち</span>':''}</div>`:''}
@@ -2153,8 +2146,10 @@ function remTitleShort(r){
   const nm=(stock(r.stockId)||{}).name||'';
   return (nm && t.startsWith(nm)) ? (t.slice(nm.length).trim()||t) : t;
 }
-// リマインダー1件と、それに紐づく注目ポイントをまとめた1枚のカード。
-// 見出し部分の並びはリマインダー画面のカードに合わせる(区分バッジ→頻度→名前→次回)
+// リマインダー1件を表す1枚のカード。並びはリマインダー画面のカードに合わせる
+// (区分バッジ→頻度→名前→次回)。紐づく注目ポイントの本文はここには並べない。
+// 押せばリマインダーが開き、そこに対象の一覧が出るので、同じ内容を
+// ツリー状に二度見せることになるため
 function remGroupCard(r, members){
   return `<div class="rgrp">
     <div class="rgrp-h" onclick="openReminder('${r.id}')">
@@ -2165,20 +2160,6 @@ function remGroupCard(r, members){
       <div class="ttl">${esc(remTitleShort(r))}</div>
       <div class="meta">${r.paused?'休止中':'次回 '+esc(fmtFire(calcNextFire(r)))}</div>
     </div>
-    <div class="rgrp-b">${members.map(hypoSubRow).join('')}</div>
-  </div>`;
-}
-// まとまりの中の1件。何のリマインダーで、いつ届くかは見出し側に出ている。
-// 「注目」バッジを1件ずつ繰り返すと同じことを何度も書くことになり、
-// カード状に区切ると1枚ずつばらけて見えるので、本文だけを続けて並べる
-function hypoSubRow(hh){
-  return `<div class="swipe">
-    <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
-      <div class="lt">
-        <div class="clip2" style="font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
-      </div>
-    </div>
-    <button class="del-btn" onclick="delHypo('${hh.id}')">削除</button>
   </div>`;
 }
 function hypoMiniCard(hh){
