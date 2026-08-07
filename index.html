@@ -144,6 +144,21 @@
   .list.cards .swipe{border-top:none; border-radius:12px;}
   .list.cards .swipe .list-row{border-radius:0;}
   .list.cards .swipe .del-btn{border-radius:0 16px 16px 0;}
+  /* 1つのリマインダーに紐づく注目ポイントは、まとめて1枚のカードにする。
+     リマインダー画面のカードと同じ並び(区分バッジ→頻度→名前→次回)にして、
+     画面をまたいでも同じものだと分かるようにする。
+     銘柄詳細では社名は自明なので、そこだけは出さない */
+  .list.cards .rgrp{background:var(--card); border-radius:12px; overflow:hidden;}
+  .list.cards .rgrp .rgrp-h{padding:11px 13px 10px; cursor:pointer;}
+  .list.cards .rgrp .rgrp-h:active{background:#fafbfc;}
+  .list.cards .rgrp .rgrp-h .ttl{font-size:13px; font-weight:700; line-height:1.4; margin-top:4px;}
+  .list.cards .rgrp .rgrp-h .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
+  /* 中身は1枚のカードの中に続けて並べる。カード同士の隙間も角丸も付けない */
+  .list.cards .rgrp .swipe{border-radius:0;}
+  .list.cards .rgrp .swipe .list-row{border-top:1px solid var(--line);}
+  .list.cards .rgrp .swipe .del-btn{border-radius:0;}
+  /* 最後の行だけは、カードの角丸の内側に赤が入らないよう逃がす(上と同じ理由) */
+  .list.cards .rgrp .swipe:last-child .del-btn{border-radius:0 0 16px 0;}
   /* タップ領域は44px以上を下限にする(iOS/Androidの推奨値)。
      以前は33pxのボタンが並び、親指では隣を押しやすい状態だった。
      例外は文章に紛れるチップ・リンクで、そこは36px以上とする */
@@ -1013,7 +1028,24 @@ function blkHypos(s, hy){
   if(!hy.length){
     h+='<div class="hint" style="margin:-4px 0 8px">思ったことはメモに、気にかけたい・検証したいことは注目ポイントに書けます。</div>';
   } else {
-    h+='<div class="list cards">'+hy.map(hypoMiniCard).join('')+'</div>';
+    // 1つのリマインダーに複数の注目ポイントが紐づくと、カードごとに同じ日時が並び、
+    // その数だけリマインダーがあるように見えていた。リマインダー画面では1枚に
+    // まとまっているので、こちらも1枚にまとめて同じ見え方にする。
+    // 並び順は元のまま(最初に現れた位置にまとまりを置く)
+    const done=new Set(); const parts=[];
+    hy.forEach(hh=>{
+      if(done.has(hh.id)) return;
+      const r=remindersOf(hh.id)[0];
+      if(r){
+        const members=hy.filter(x=>(r.hypoIds||[]).includes(x.id));
+        members.forEach(x=>done.add(x.id));
+        parts.push(remGroupCard(r, members));
+      } else {
+        done.add(hh.id);
+        parts.push(hypoMiniCard(hh));
+      }
+    });
+    h+='<div class="list cards">'+parts.join('')+'</div>';
   }
   return groupBlockWithEdit(detailGroupKey(s,'メモ・注目ポイント'), `メモ・注目ポイント (${hy.length})`,
     `sheetEditHypo(null,'${s.id}')`, h+'<div style="height:10px"></div>', '追加');
@@ -2107,6 +2139,42 @@ function remindersOf(hid){ return (DB.reminders||[]).filter(r=>(r.hypoIds||[]).i
 function pendingHints(){
   return (DB.hypotheses||[]).filter(h=>h.kind==='watch' && h.remindHint && h.remindHint.date && !remindersOf(h.id).length)
     .sort((a,b)=>(parseD(a.remindHint.date)||0)-(parseD(b.remindHint.date)||0));
+}
+// リマインダー画面と同じ区分の色。同じものを同じ色で示す
+function remCatCls(cat){ return {'テクニカル':'navy','報道確認':'gray','決算プレビュー':'amber','需給確認':'red'}[cat]||'gray'; }
+// 銘柄詳細では社名は自明なので、タイトルの先頭に付いている分だけ落とす
+function remTitleShort(r){
+  const t=String(r.title||'リマインダー');
+  const nm=(stock(r.stockId)||{}).name||'';
+  return (nm && t.startsWith(nm)) ? (t.slice(nm.length).trim()||t) : t;
+}
+// リマインダー1件と、それに紐づく注目ポイントをまとめた1枚のカード。
+// 見出し部分の並びはリマインダー画面のカードに合わせる(区分バッジ→頻度→名前→次回)
+function remGroupCard(r, members){
+  return `<div class="rgrp">
+    <div class="rgrp-h" onclick="openReminder('${r.id}')">
+      <div class="row" style="justify-content:flex-start;gap:8px">
+        <span class="chip ${remCatCls(r.cat)}">${esc(r.cat)}</span>
+        <span class="meta" style="margin-top:0">${esc(r.freq)} ${esc((r.times||[]).join(','))}</span>
+      </div>
+      <div class="ttl">${esc(remTitleShort(r))}</div>
+      <div class="meta">${r.paused?'休止中':'次回 '+esc(fmtFire(calcNextFire(r)))}</div>
+    </div>
+    <div>${members.map(hypoSubRow).join('')}</div>
+  </div>`;
+}
+// まとまりの中の1件。日時は見出し側に出ているので、ここでは種別と本文だけ
+function hypoSubRow(hh){
+  const isMemo=hh.kind==='memo';
+  return `<div class="swipe">
+    <div class="list-row" style="align-items:flex-start" onclick="sheetEditHypo('${hh.id}')">
+      <div class="lt">
+        <span class="chip ${isMemo?'gray':'amber'}">${isMemo?'メモ':'注目'}</span>
+        <div class="clip2" style="margin-top:4px;font-size:13px;white-space:pre-wrap">${esc(hh.text)}</div>
+      </div>
+    </div>
+    <button class="del-btn" onclick="delHypo('${hh.id}')">削除</button>
+  </div>`;
 }
 function hypoMiniCard(hh){
   const isMemo=hh.kind==='memo';
