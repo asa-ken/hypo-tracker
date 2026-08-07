@@ -153,9 +153,14 @@
   .list.cards .rgrp .rgrp-h:active{background:#fafbfc;}
   .list.cards .rgrp .rgrp-h .ttl{font-size:13px; font-weight:700; line-height:1.4; margin-top:4px;}
   .list.cards .rgrp .rgrp-h .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
-  /* 中身は1枚のカードの中に続けて並べる。カード同士の隙間も角丸も付けない */
+  /* 中身は「リマインダーに含まれるもの」なので、字下げして従属を示す。
+     同じ字下げ・同じ幅の線で並べると、見出しと中身が対等な4行に見えてしまう。
+     見出しの下は全幅の線で区切り、中身どうしの線は字下げの位置から始める
+     (分析の小項目と同じく、区切り線＋字下げで階層を表す) */
+  .list.cards .rgrp .rgrp-b{border-top:1px solid var(--line); padding-left:20px;}
   .list.cards .rgrp .swipe{border-radius:0;}
   .list.cards .rgrp .swipe .list-row{border-top:1px solid var(--line);}
+  .list.cards .rgrp .rgrp-b > .swipe:first-child .list-row{border-top:none;}
   .list.cards .rgrp .swipe .del-btn{border-radius:0;}
   /* 最後の行だけは、カードの角丸の内側に赤が入らないよう逃がす(上と同じ理由) */
   .list.cards .rgrp .swipe:last-child .del-btn{border-radius:0 0 16px 0;}
@@ -2160,7 +2165,7 @@ function remGroupCard(r, members){
       <div class="ttl">${esc(remTitleShort(r))}</div>
       <div class="meta">${r.paused?'休止中':'次回 '+esc(fmtFire(calcNextFire(r)))}</div>
     </div>
-    <div>${members.map(hypoSubRow).join('')}</div>
+    <div class="rgrp-b">${members.map(hypoSubRow).join('')}</div>
   </div>`;
 }
 // まとまりの中の1件。日時は見出し側に出ているので、ここでは種別と本文だけ
