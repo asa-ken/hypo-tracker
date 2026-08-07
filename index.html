@@ -129,6 +129,13 @@
   .list .swipe{border-top:1px solid var(--line);}
   .list .swipe:first-child{border-top:none;}
   .list .swipe .list-row{border-top:none; position:relative; z-index:1; background:var(--card);}
+  /* .list.cards: 1枚ずつ独立した白いカードとして並べる。
+     外枠で全体を囲って区切り線で割るより、線を一切引かず地色の隙間で
+     切れ目を作るほうが軽く見える。隙間は地色をそのまま透かす */
+  .list.cards{background:none; border:none; border-radius:0; overflow:visible;
+              display:flex; flex-direction:column; gap:var(--sp1);}
+  .list.cards .swipe{border-top:none; border-radius:12px;}
+  .list.cards .swipe .list-row{border-radius:12px;}
   /* タップ領域は44px以上を下限にする(iOS/Androidの推奨値)。
      以前は33pxのボタンが並び、親指では隣を押しやすい状態だった。
      例外は文章に紛れるチップ・リンクで、そこは36px以上とする */
@@ -996,7 +1003,7 @@ function blkHypos(s, hy){
   } else {
     const all=STATE.hypoAll || hy.length<=HYPO_PREVIEW;
     const shown=all?hy:hy.slice(0,HYPO_PREVIEW);
-    h+='<div class="list">'+shown.map(hypoMiniCard).join('')+'</div>';
+    h+='<div class="list cards">'+shown.map(hypoMiniCard).join('')+'</div>';
     if(!all) h+=`<button class="btn sm" style="width:100%;margin:-4px 0 10px" onclick="STATE.hypoAll=true;render()">残り ${hy.length-HYPO_PREVIEW}件を表示</button>`;
   }
   // メモ/注目ポイントの種別は、以前は追加ボタンを2つ並べて選ばせていたが、
