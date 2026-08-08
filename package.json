@@ -3,9 +3,11 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "bash test/e2e/run_all.sh"
   },
   "devDependencies": {
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "playwright": "^1.49.0"
   }
 }
