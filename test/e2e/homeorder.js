@@ -1,11 +1,11 @@
 // ホームは、中身のある区分を先に見せること(認知負荷)
 //
-// 4区分は 期限切れ → 今日のリマインダー → リマインド未登録 → 今週の予定 の順に並ぶ。
+// 3区分は 期限切れ → 今日のリマインダー → 今週の予定 の順に並ぶ。
 // ところが期限切れも今日も0件の日(通常はこれ)には、空の2区分が画面の最上部を占め、
 // 中身にたどり着くまでに読み飛ばす必要があった。画面で最も価値のある位置を
 // 「ここには何もない」が占めている状態。
 //
-// 情報は減らさない。4区分とも見出しは残し、件数も出す。位置だけを変える。
+// 情報は減らさない。3区分とも見出しは残し、件数も出す。位置だけを変える。
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -27,11 +27,11 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     return { name: m ? m[1] : e.textContent.trim(), n: m ? +m[2] : null, top: Math.round(e.getBoundingClientRect().top) };
   }));
 
-  // ---- 1. 通常の日: 期限切れ0・今日0、未登録1・今週3 ----
+  // ---- 1. 通常の日: 期限切れ0・今日0、今週3 ----
   await p.evaluate(() => go('home')); await p.waitForTimeout(350);
   const h0 = await heads();
-  ok('4区分とも残っている(情報を減らしていない)', h0.length === 4, h0.map(x => x.name));
-  ok('件数は4区分とも表示される', h0.every(x => x.n !== null), h0);
+  ok('3区分とも残っている(情報を減らしていない)', h0.length === 3, h0.map(x => x.name));
+  ok('件数は3区分とも表示される', h0.every(x => x.n !== null), h0);
   ok('通常データで空の区分と中身のある区分が混在する(テスト前提)',
     h0.some(x => x.n === 0) && h0.some(x => x.n > 0), h0.map(x => x.name + ':' + x.n));
 
@@ -47,7 +47,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
 
   // ---- 2. 区分どうしの相対順序は、定義順のまま保つ ----
   // 空だからといって並び替えの中で順序が入れ替わると、毎回どこに何があるか学習し直しになる
-  const ORDER = ['期限切れ', '今日のリマインダー', 'リマインド未登録', '今週の予定'];
+  const ORDER = ['期限切れ', '今日のリマインダー', '今週の予定'];
   const idx = a => a.map(x => ORDER.indexOf(x.name));
   const ascending = a => idx(a).every((v, i, arr) => i === 0 || arr[i - 1] < v);
   ok('中身のある区分どうしは定義順のまま', ascending(filled0), filled0.map(x => x.name));
@@ -72,7 +72,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     save(); go('home');
   }); await p.waitForTimeout(350);
   const h2 = await heads();
-  ok('4区分すべてに中身があるとき、並びは定義順', JSON.stringify(h2.map(x => x.name)) === JSON.stringify(ORDER), h2.map(x => x.name));
+  ok('3区分すべてに中身があるとき、並びは定義順', JSON.stringify(h2.map(x => x.name)) === JSON.stringify(ORDER), h2.map(x => x.name));
   ok('このとき0件の区分は無い', h2.every(x => x.n > 0), h2.map(x => x.name + ':' + x.n));
 
   // ---- 5. 畳んだ状態は区分ごとに保たれる(並べ替えても取り違えない) ----

@@ -20,10 +20,16 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.reload(); await p.waitForTimeout(400);
 
   // ---- 1. 区分ごとの「空」は1通りの書き方に揃える ----
-  // リマインダーだけを空にする。注目ポイント(リマインド未登録)は残るので、
-  // 「空の区分3つ」と「中身のある区分1つ」が同居し、画面全体は空ではない。
-  // この状態でしか文言の混在は見えない(全部空にすると案内に置き換わるため)
-  await p.evaluate(() => { DB.reminders = []; save(); go('home'); }); await p.waitForTimeout(350);
+  // 期限切れを1件だけ持たせ、今日と今週の予定を空にする。
+  // 「空の区分2つ」と「中身のある区分1つ」が同居し、画面全体は空ではない。
+  // この状態でしか文言の混在は見えない(全部空にすると案内に置き換わるため)。
+  // 今週の予定の空表現もここで検査対象に入る
+  await p.evaluate(() => {
+    DB.reminders = [{ id: 'r_he', stockId: '9001', hypoIds: [], title: '期限切れ検証', comment: null,
+      cat: '決算プレビュー', freq: '単発 2020/1/1', times: ['08:30'], startDate: null, endDate: null, paused: false,
+      changes: [], prompt: 'p', src: 'テスト', srcDate: fmtToday(), log: [], nextFire: null }];
+    save(); go('home');
+  }); await p.waitForTimeout(350);
   const mixed = await p.evaluate(() => {
     const out = [];
     document.querySelectorAll('#view .lbl.grp').forEach(l => {
@@ -80,7 +86,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     heads: document.querySelectorAll('#view .lbl.grp').length,
   }));
   ok('中身があるときはゼロ状態の案内を出さない', !withData.empty);
-  ok('中身があるときは4区分の見出しが出る', withData.heads === 4, withData);
+  ok('中身があるときは3区分の見出しが出る', withData.heads === 3, withData);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();

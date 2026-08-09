@@ -1,5 +1,6 @@
-// ホームの「期限切れ / 今日のリマインダー / リマインド未登録 / 今週の予定」が
-// 4つの独立した開閉見出しになっていること。
+// ホームの「期限切れ / 今日のリマインダー / 今週の予定」が
+// それぞれ独立した開閉見出しになっていること。
+// リマインド未登録はリマインダー画面へ移した(pendhint.js が担当)。
 // 「対応が必要」という親見出しは行動を迫る言い回しのため廃止した(2026-08-09 DECISIONS.md参照)。
 // 実行日によってフィクスチャに「今日」「期限切れ」に該当するリマインダーが無いことがあるため、
 // このスイートは日付を動的に計算してテスト用データを注入し、実行日に依存しない形で検証する。
@@ -48,9 +49,9 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await go(); await p.waitForTimeout(300);
 
   const s0 = await state();
-  ok('ホームに4区分の開閉見出しがある', s0.heads.length === 4);
-  ok('見出しの並びは期限切れ→今日→未登録→今週の予定', JSON.stringify(s0.heads.map(h => h.split(' (')[0])) ===
-    JSON.stringify(['期限切れ', '今日のリマインダー', 'リマインド未登録', '今週の予定']));
+  // リマインド未登録はリマインダー画面へ移した(pendhint.js が担当)
+  ok('ホームに3区分の開閉見出しがある', s0.heads.length === 3, s0.heads);
+  ok('見出しはリマインダーの状態3つだけ', s0.heads.every(h => /期限切れ|今日のリマインダー|今週の予定/.test(h)), s0.heads);
   ok('「対応が必要」という親見出しは無い(義務感を与える言い回しのため廃止)', !s0.heads.some(h => /対応が必要/.test(h)));
   ok('期限切れの件数が反映される', /^期限切れ \(2\)/.test(s0.heads[0]));
   ok('今日のリマインダーの件数が反映される', /^今日のリマインダー \(1\)/.test(s0.heads[1]));
@@ -82,21 +83,12 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.evaluate(() => copyExpiredFor('9002')); await p.waitForTimeout(200);
   const perStock = await p.evaluate(() => document.querySelector('#toast').textContent);
   ok('期限切れの銘柄別コピーが成功する', /サンプル半導体の確認プロンプトをコピーしました/.test(perStock));
-  // 今週の予定・リマインド未登録には、コピー機能がそもそも無いことを確認。
+  // 今週の予定には、コピー機能がそもそも無いことを確認。
   // 期限切れ(2件・2銘柄)は銘柄別コピー2 + 一括コピー1、今日(1件・1銘柄)は単一ボタン1で計4。
   // コピーボタンは行の到達操作を巻き込まないよう event.stopPropagation() を前置するので、
   // onclick の先頭が copy〜 とは限らない。属性の途中に現れる分も数える
   const briefFns = await p.evaluate(() => document.querySelector('#view').innerHTML.match(/onclick="[^"]*copy(Brief|Expired)[^"]*"/g) || []);
   ok('コピー操作は期限切れ・今日のセクションだけにある', briefFns.length === 4, briefFns);
-
-  // ---- リマインド未登録は行ごとに個別タップできる(以前は先頭1件にしか遷移できなかった) ----
-  const pendRows = await p.evaluate(() => {
-    const lbl = [...document.querySelectorAll('#view .lbl.grp')].find(x => /リマインド未登録/.test(x.textContent));
-    const rows = [...lbl.nextElementSibling.querySelectorAll('.list-row')];
-    return rows.map(r => r.getAttribute('onclick'));
-  });
-  ok('リマインド未登録が1件以上ある(テスト前提)', pendRows.length > 0);
-  ok('リマインド未登録の各行が個別にopenStockできる', pendRows.every(o => /^openStock\(/.test(o)));
 
   // ---- 今週の予定には「今日」の分を含めない ----
   const schedTitles = await p.evaluate(() => {
@@ -106,7 +98,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('今週の予定に「本日検証リマインダー」は出ない', !schedTitles.includes('本日検証リマインダー'));
   ok('今週の予定に期限切れの2件も出ない(次回発火が無いため)', !schedTitles.some(t => /期限切れ検証/.test(t)));
 
-  // ---- 4区分はそれぞれ独立して畳める。片方を畳んでも他は影響を受けない ----
+  // ---- 各区分はそれぞれ独立して畳める。片方を畳んでも他は影響を受けない ----
   const top = (label) => p.evaluate(l => {
     const lbl = [...document.querySelectorAll('#view .lbl.grp')].find(x => new RegExp(l).test(x.textContent));
     return Math.round(lbl.getBoundingClientRect().top);
@@ -120,20 +112,20 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const todayTopAfter = await top('今日のリマインダー');
   ok('期限切れを畳むと今日のリマインダーが繰り上がる', todayTopAfter < todayTopBefore);
 
-  await p.evaluate(() => { toggleGroup('home:今日のリマインダー'); toggleGroup('home:リマインド未登録'); toggleGroup('home:今週の予定'); });
+  await p.evaluate(() => { toggleGroup('home:今日のリマインダー'); toggleGroup('home:今週の予定'); });
   await p.waitForTimeout(300);
   const s2 = await state();
-  ok('4区分とも畳める', s2.attnCards === 0 &&
+  ok('3区分とも畳める', s2.attnCards === 0 &&
     !/コピー/.test(await p.evaluate(() => document.querySelector('#view').innerText)));
 
   // ---- リロードしても畳んだ状態が残る ----
   await p.reload(); await p.waitForTimeout(400);
   await go(); await p.waitForTimeout(300);
   const s3 = await state();
-  ok('リロードしても4区分とも畳んだ状態が残る', s3.closed.length === 4);
+  ok('リロードしても3区分とも畳んだ状態が残る', s3.closed.length === 3, s3.closed);
 
   // ---- 開き直せる ----
-  await p.evaluate(() => { ['home:期限切れ', 'home:今日のリマインダー', 'home:リマインド未登録', 'home:今週の予定'].forEach(toggleGroup); });
+  await p.evaluate(() => { ['home:期限切れ', 'home:今日のリマインダー', 'home:今週の予定'].forEach(toggleGroup); });
   await p.waitForTimeout(300);
   const s4 = await state();
   ok('開き直すと元に戻る', s4.attnCards === s0.attnCards && s4.closed.length === 0);
@@ -159,8 +151,8 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('今週の予定に行がある(テスト前提)', sched.rows > 0);
   ok('今週の予定の行に右向きの矢尻を出さない', sched.arrows === 0);
   ok('日付は残る', sched.dated === sched.rows);
-  ok('区分見出しの開閉の矢尻は4つとも残る', await p.evaluate(() =>
-    document.querySelectorAll('#view .lbl.grp svg.caret').length === 4));
+  ok('区分見出しの開閉の矢尻は3つとも残る', await p.evaluate(() =>
+    document.querySelectorAll('#view .lbl.grp svg.caret').length === 3));
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
