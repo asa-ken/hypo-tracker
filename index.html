@@ -834,11 +834,13 @@ function renderHome(v){
   // 「今日のリマインダー」は実際に今日発火するものだけを指す。以前は休止していない全件を指しており、
   // 実際の期限と無関係に常に同じ数が「今日」として表示されていた(2026-08-09 DECISIONS.md参照)。
   // 「期限切れ」は次回発火が計算できないもの(単発の期日・終了日を過ぎた)。放置すると二度と出てこなくなる
+  // 今日発火する予定があるものを先に取る。時刻を過ぎていても今日の分は今日に置く。
+  // 残りのうち、次の発火が計算できないものが期限切れ(日付そのものが過ぎている)
   const expiredRem=[], todayRem=[], upcoming=[];
   DB.reminders.filter(r=>!r.paused).forEach(r=>{
+    if(firesToday(r)){ todayRem.push(r); return; }
     const d=calcNextFire(r);
     if(!d) expiredRem.push(r);
-    else if(isToday(d)) todayRem.push(r);
     else upcoming.push({d,label:r.title,act:`openReminder('${r.id}')`});
   });
   // 3区分とも空、つまり画面に出すものが何も無いときは、区分見出しを並べず案内だけを出す。
@@ -2234,8 +2236,23 @@ function matchFreq(freq, d){
   }
   return false;
 }
-// 発火日時が今日かどうか。ホームの区分け(今日/今週)とコピー範囲の判定で共用する
-function isToday(d){ const n=today(); return !!d && d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth() && d.getDate()===n.getDate(); }
+// 今日、発火する予定があるか。時刻を過ぎているかは見ない。
+//
+// calcNextFire() は「今より後」の発火しか返さないので、それだけで区分けすると
+// 今日の分が時刻を過ぎた瞬間に「期限切れ」や「今週の予定(明日)」へ移ってしまう。
+// 今日登録したリマインダーがその場で期限切れに出る、という状態になっていた。
+// 期限切れは「日付そのものが過ぎた」ことであって「今日の時刻を過ぎた」ことではない。
+//
+// 発火の計算(calcNextFire / matchFreq)自体はここでは変えない。日付の判定だけを行う
+function firesToday(r){
+  const n=today();
+  const d=new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  const st=r.startDate?parseD(r.startDate):null;
+  const en=r.endDate?parseD(r.endDate):null;
+  if(st && d<new Date(st.getFullYear(),st.getMonth(),st.getDate())) return false;
+  if(en && d>new Date(en.getFullYear(),en.getMonth(),en.getDate())) return false;
+  return matchFreq(activeSchedule(r, d).freq, d);
+}
 // 現在時刻以降の最初の発火日時を返す(最大400日先まで探索)。開始日(startDate)前は発火しない。
 function calcNextFire(r, from){
   const now=from||new Date();
@@ -3057,19 +3074,19 @@ function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=
 // 複数リマインダーの確認プロンプトを1つのテキストにまとめる。期限切れ・今日どちらのコピーからも使う
 function briefText(rs){ return '確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${activePrompt(r).text}`).join('\n\n'); }
 // コピーの対象は「今日発火するもの」だけに絞る。期限切れ・今週の予定はここには含めない(それぞれ別のコピー関数を持つ)
-function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&isToday(calcNextFire(r))&&activePrompt(r).text); if(!rs.length){toast('今日のリマインダーはありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
+function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&firesToday(r)&&activePrompt(r).text); if(!rs.length){toast('今日のリマインダーはありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
 // 銘柄・市場ごとにチャットを分けている場合の分割コピー。対象を1つに絞る以外はcopyBriefと同じ
 function copyBriefFor(sid){
   const s=stock(sid);
-  const rs=DB.reminders.filter(r=>!r.paused&&r.stockId===sid&&isToday(calcNextFire(r))&&activePrompt(r).text);
+  const rs=DB.reminders.filter(r=>!r.paused&&r.stockId===sid&&firesToday(r)&&activePrompt(r).text);
   if(!rs.length){toast('コピーできる確認事項がありません');return;}
   copy(briefText(rs),(s?s.name+'の':'')+'確認プロンプトをコピーしました。AIに貼り付けてください');
 }
 // 期限切れ(次回発火が計算できない)リマインダーのコピー。copyBrief/copyBriefForと対になる
-function copyExpired(){ const rs=DB.reminders.filter(r=>!r.paused&&!calcNextFire(r)&&activePrompt(r).text); if(!rs.length){toast('期限切れのリマインダーはありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
+function copyExpired(){ const rs=DB.reminders.filter(r=>!r.paused&&!firesToday(r)&&!calcNextFire(r)&&activePrompt(r).text); if(!rs.length){toast('期限切れのリマインダーはありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
 function copyExpiredFor(sid){
   const s=stock(sid);
-  const rs=DB.reminders.filter(r=>!r.paused&&r.stockId===sid&&!calcNextFire(r)&&activePrompt(r).text);
+  const rs=DB.reminders.filter(r=>!r.paused&&r.stockId===sid&&!firesToday(r)&&!calcNextFire(r)&&activePrompt(r).text);
   if(!rs.length){toast('コピーできる確認事項がありません');return;}
   copy(briefText(rs),(s?s.name+'の':'')+'確認プロンプトをコピーしました。AIに貼り付けてください');
 }
