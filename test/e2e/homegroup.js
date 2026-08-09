@@ -53,8 +53,9 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('ホームに3区分の開閉見出しがある', s0.heads.length === 3, s0.heads);
   ok('見出しはリマインダーの状態3つだけ', s0.heads.every(h => /期限切れ|今日のリマインダー|今週の予定/.test(h)), s0.heads);
   ok('「対応が必要」という親見出しは無い(義務感を与える言い回しのため廃止)', !s0.heads.some(h => /対応が必要/.test(h)));
-  ok('期限切れの件数が反映される', /^期限切れ \(2\)/.test(s0.heads[0]));
-  ok('今日のリマインダーの件数が反映される', /^今日のリマインダー \(1\)/.test(s0.heads[1]));
+  // 並びは 今日 → 期限切れ → 今週の予定 で固定(homeorder.js が担当)
+  ok('今日のリマインダーの件数が反映される', /^今日のリマインダー \(1\)/.test(s0.heads[0]), s0.heads[0]);
+  ok('期限切れの件数が反映される', /^期限切れ \(2\)/.test(s0.heads[1]), s0.heads[1]);
   ok('既定はすべて開いている', s0.closed.length === 0);
   ok('期限切れ・今日どちらも地色付きカードで出る', s0.attnCards === 2);
   ok('期限切れカードだけ追加の強調(.expired)が付く', s0.expiredCards === 1);
@@ -103,14 +104,16 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     const lbl = [...document.querySelectorAll('#view .lbl.grp')].find(x => new RegExp(l).test(x.textContent));
     return Math.round(lbl.getBoundingClientRect().top);
   }, label);
-  const todayTopBefore = await top('今日のリマインダー');
+  // 今日は期限切れより上にあるので、期限切れを畳んでも今日の位置は動かない。
+  // 代わりに、下にある「今週の予定」が繰り上がることで畳めていることを確かめる
+  const schedTopBefore = await top('今週の予定');
   await p.evaluate(() => toggleGroup('home:期限切れ')); await p.waitForTimeout(300);
   const s1 = await state();
-  ok('期限切れを畳むと中身が消える(見出しは残る)', s1.heads[0] === s0.heads[0] &&
+  ok('期限切れを畳むと中身が消える(見出しは残る)', s1.heads[1] === s0.heads[1] &&
     !(s1.attnCards === s0.attnCards));
   ok('今日のリマインダーは畳まれない', s1.attnCards === s0.attnCards - 1);
-  const todayTopAfter = await top('今日のリマインダー');
-  ok('期限切れを畳むと今日のリマインダーが繰り上がる', todayTopAfter < todayTopBefore);
+  const schedTopAfter = await top('今週の予定');
+  ok('期限切れを畳むと下の区分が繰り上がる', schedTopAfter < schedTopBefore, { before: schedTopBefore, after: schedTopAfter });
 
   await p.evaluate(() => { toggleGroup('home:今日のリマインダー'); toggleGroup('home:今週の予定'); });
   await p.waitForTimeout(300);
