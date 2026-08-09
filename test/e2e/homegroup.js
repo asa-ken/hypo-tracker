@@ -83,8 +83,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const perStock = await p.evaluate(() => document.querySelector('#toast').textContent);
   ok('期限切れの銘柄別コピーが成功する', /サンプル半導体の確認プロンプトをコピーしました/.test(perStock));
   // 今週の予定・リマインド未登録には、コピー機能がそもそも無いことを確認。
-  // 期限切れ(2件・2銘柄)は銘柄別コピー2 + 一括コピー1、今日(1件・1銘柄)は単一ボタン1で計4
-  const briefFns = await p.evaluate(() => document.querySelector('#view').innerHTML.match(/onclick="copy(Brief|Expired)[^"]*"/g) || []);
+  // 期限切れ(2件・2銘柄)は銘柄別コピー2 + 一括コピー1、今日(1件・1銘柄)は単一ボタン1で計4。
+  // コピーボタンは行の到達操作を巻き込まないよう event.stopPropagation() を前置するので、
+  // onclick の先頭が copy〜 とは限らない。属性の途中に現れる分も数える
+  const briefFns = await p.evaluate(() => document.querySelector('#view').innerHTML.match(/onclick="[^"]*copy(Brief|Expired)[^"]*"/g) || []);
   ok('コピー操作は期限切れ・今日のセクションだけにある', briefFns.length === 4, briefFns);
 
   // ---- リマインド未登録は行ごとに個別タップできる(以前は先頭1件にしか遷移できなかった) ----
