@@ -15,7 +15,7 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
   await page.reload(); await page.waitForTimeout(400);
 
   // ---- A. 文字サイズは6段階だけ ----
-  const src = fs.readFileSync(__dirname + '/../../../../../../home/user/hypo-tracker/index.html', 'utf8');
+  const src = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
   const sizes = [...new Set((src.match(/font-size:[\d.]+px/g) || []).map(x => parseFloat(x.split(':')[1])))].sort((a, b) => a - b);
   ok('文字サイズは6種類以内', sizes.length <= 6);
   ok('11px未満を使っていない', sizes[0] >= 11);
