@@ -847,11 +847,6 @@ function renderHome(v){
     return;
   }
 
-  // 4区分とも独立した開閉見出しにする。「対応が必要」のような親見出しは、状態そのものではなく
-  // 行動を迫る言い回しで義務感を強めるため置かない(期限切れ・今日のリマインダー等の状態語だけで足りる)
-  let h=groupBlock('home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpired','copyExpiredFor','expired'));
-  h+=groupBlock('home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBrief','copyBriefFor'));
-
   // 取り込みで日付が入ったのにリマインダー未登録の注目ポイント。
   // 日付はリマインダーでしか管理しないので、ここで登録を促さないと予定として現れない。
   // 対象ごとに個別にタップできるよう行として並べる(以前は複数件を1枚のカードにまとめ、
@@ -860,7 +855,6 @@ function renderHome(v){
     ? '<div class="list">'+pend.map(p=>{ const sn=stock(p.stockId);
         return `<div class="list-row" onclick="openStock('${p.stockId}')"><div class="lt"><div class="ttl">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${esc(p.remindHint.date)}</div></div><span class="arrow" style="color:var(--ink3);font-size:15px">›</span></div>`; }).join('')+'</div>'
     : '<div class="muted" style="padding:2px 2px 8px">なし</div>';
-  h+=groupBlock('home:リマインド未登録', `リマインド未登録 (${pend.length})`, pendHtml);
 
   // 予定はリマインダーだけを載せる。今日発火するものは上のセクションに出るのでここには含めない。
   // 以前は「注目イベント」も並べていたが、リマインダーの日付が「次に通知する日」なのに対し
@@ -872,7 +866,23 @@ function renderHome(v){
   if(!upcoming.length) sched='<div class="muted" style="padding:2px 2px 8px">なし</div>';
   else sched='<div class="list">'+upcoming.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
     return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div>`; }).join('')+'</div>';
-  h+=groupBlock('home:今週の予定', `今週の予定 (${upcoming.length})`, sched);
+
+  // 4区分とも独立した開閉見出しにする。「対応が必要」のような親見出しは、状態そのものではなく
+  // 行動を迫る言い回しで義務感を強めるため置かない(期限切れ・今日のリマインダー等の状態語だけで足りる)。
+  //
+  // 並べるときは、中身のある区分を先に出す。期限切れも今日も0件の日(通常はこれ)に
+  // 定義順のまま並べると、空の2区分が画面の最上部を占め、中身にたどり着くまで読み飛ばすことになる。
+  // 画面で最も価値のある位置を「ここには何もない」が占めている状態だった。
+  // 情報は減らさない。4区分とも見出しと件数は必ず出し、位置だけを変える。
+  // 区分どうしの相対順序は定義順のまま保つ(毎回どこに何があるか学習し直しにならないように)
+  const groups=[
+    ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpired','copyExpiredFor','expired'), expiredRem.length],
+    ['home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBrief','copyBriefFor'), todayRem.length],
+    ['home:リマインド未登録', `リマインド未登録 (${pend.length})`, pendHtml, pend.length],
+    ['home:今週の予定', `今週の予定 (${upcoming.length})`, sched, upcoming.length],
+  ];
+  const h=groups.filter(g=>g[3]>0).concat(groups.filter(g=>!g[3]))
+    .map(g=>groupBlock(g[0], g[1], g[2])).join('');
   v.innerHTML=h;
 }
 // 期限切れ・今日のリマインダーのカードを同じ見た目で組み立てる。
