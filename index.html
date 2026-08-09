@@ -162,7 +162,9 @@
   .btn:active{background:#f0f2f4;}
   .btn.pri{background:var(--navy); border-color:var(--navy); color:#fff;}
   .btn.sm{padding:7px 11px; font-size:12px; width:auto;}
-  .btn.ghost{border-color:transparent; color:var(--ink3);}
+  /* 枠を持たないボタンでも、ラベルは読めなければ押せない。
+     --ink3 はどの地色でも 2.5〜3.0:1 しかなく WCAG AA(4.5:1)に届かないので --ink2 を使う */
+  .btn.ghost{border-color:transparent; color:var(--ink2);}
   .btn.danger{color:var(--red-tx); border-color:var(--red-bg);}
   input,textarea,select{width:100%; max-width:100%; min-width:0; box-sizing:border-box; border:1px solid var(--line2); border-radius:9px; padding:10px 12px; font-size:16px; font-family:inherit; color:var(--ink); background:var(--card); margin-top:4px;}
   /* selectはブラウザ標準UIの行の高さが効くため、paddingだけでは44pxに届かない */
@@ -306,7 +308,9 @@
   .exit-confirm-row{display:flex; flex-direction:column; gap:8px;}
   .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:12px; padding:9px 16px; border-radius:20px; z-index:60; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90%; text-align:center;}
   .toast.show{opacity:1;}
-  .hint{font-size:11px; color:var(--ink3); margin-top:4px; line-height:1.5;}
+  /* 読ませるために置いている文なので、読めなければ置く意味がない。
+     --ink3 だと地色付きカードの上で 2.54:1 まで落ちるため --ink2 にする(赤地4.90 / 紺地5.06) */
+  .hint{font-size:11px; color:var(--ink2); margin-top:4px; line-height:1.5;}
   .failbox{background:var(--amber-bg); border-radius:9px; padding:9px 11px; margin-top:8px;}
   .failbox .t{font-size:12px; color:var(--amber-tx); font-weight:700;}
   .failbox .l{font-family:var(--mono); font-size:11px; color:var(--amber-tx); margin-top:3px; word-break:break-all;}
