@@ -38,16 +38,21 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
   await page.waitForTimeout(250);
   const home = await page.evaluate(() => {
     const txt = document.querySelector('#view').innerText;
+    const rem = (() => { go('reminder'); const t = document.querySelector('#view').innerText; go('home'); return t; })();
     return {
       hasEventLabel: /注目イベント/.test(txt),
       allNext: [...document.querySelectorAll('#view .list-row')].length,
-      pendCard: /リマインド未登録/.test(txt),
+      pendOnHome: /リマインド未登録/.test(txt),
+      pendOnReminder: /リマインド未登録/.test(rem),
       pendCount: pendingHints().length,
     };
   });
   ok('予定に「注目イベント」が並ばない', home.hasEventLabel === false);
   ok('予定はリマインダーのみ(次回の通知)', home.allNext > 0);
-  ok('「リマインド未登録」カードが出る', home.pendCard === true);
+  // 「リマインド未登録」はホームからリマインダー画面へ移した(pendhint.js が担当)。
+  // 登録しないと決めている人には、無意味なものがホーム上位に居座ることになるため
+  ok('「リマインド未登録」はホームに出さない', home.pendOnHome === false);
+  ok('「リマインド未登録」はリマインダー画面に出る', home.pendOnReminder === true);
   ok('未登録件数が pendingHints と一致', home.pendCount > 0);
 
   // ---- 3. 注目ポイント編集シートに日付欄がない ----
