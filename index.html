@@ -875,16 +875,21 @@ function actionCard(list, singleCopyFn, perStockCopyFn, extraCls){
   const cls='card attn'+(extraCls?' '+extraCls:'');
   const groups={}; list.forEach(r=>{ (groups[r.stockId]=groups[r.stockId]||[]).push(r); });
   const stockIds=Object.keys(groups);
+  // ホームに出ている項目は、必ずその本体へ行けるようにする。
+  // 期限切れも今日の分も「今週の予定」からは外してあるので、ここに到達手段が無いと
+  // 再スケジュール・休止・削除にたどり着けない(コピーしかできない項目になる)。
+  // 1件だけならリマインダー本体へ直接、複数件なら銘柄で絞ったリマインダー一覧へ送る
+  const reach=(rs, sid)=> rs.length===1 ? `openReminder('${rs[0].id}')` : `openRem('${sid}')`;
   if(stockIds.length<=1){
-    return `<div class="${cls}"><div class="row"><span style="font-size:13px;font-weight:600">${esc(list[0].title)}${list.length>1?' ほか':''}</span><button class="btn sm pri" onclick="${singleCopyFn}()">確認プロンプトをコピー</button></div></div>`;
+    return `<div class="${cls} tap" onclick="${reach(list, stockIds[0])}"><div class="row"><span style="font-size:13px;font-weight:600">${esc(list[0].title)}${list.length>1?' ほか':''}</span><button class="btn sm pri" onclick="event.stopPropagation();${singleCopyFn}()">確認プロンプトをコピー</button></div></div>`;
   }
   return `<div class="${cls}">
     <div class="hint" style="margin-bottom:8px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
     <div class="list" style="background:var(--card)">
       ${stockIds.map(sid=>{ const g=groups[sid]; const sn=stock(sid);
-        return `<div class="list-row" style="min-height:auto;padding:9px 10px">
+        return `<div class="list-row" style="min-height:auto;padding:9px 10px" onclick="${reach(g, sid)}">
           <div class="lt"><div class="ttl" style="font-size:13px">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${g.length}件・${esc(g[0].title)}${g.length>1?' ほか':''}</div></div>
-          <button class="btn sm" style="width:auto" onclick="${perStockCopyFn}('${sid}')">コピー</button>
+          <button class="btn sm" style="width:auto" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">コピー</button>
         </div>`; }).join('')}
     </div>
     <button class="btn sm ghost" style="margin-top:8px;width:100%" onclick="${singleCopyFn}()">全部まとめて一括コピー</button>
