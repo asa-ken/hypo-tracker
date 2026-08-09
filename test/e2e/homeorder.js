@@ -1,17 +1,21 @@
-// ホームは、中身のある区分を先に見せること(認知負荷)
+// ホームの区分は、意味的な優先順位で固定して並べること
 //
-// 3区分は 期限切れ → 今日のリマインダー → 今週の予定 の順に並ぶ。
-// ところが期限切れも今日も0件の日(通常はこれ)には、空の2区分が画面の最上部を占め、
-// 中身にたどり着くまでに読み飛ばす必要があった。画面で最も価値のある位置を
-// 「ここには何もない」が占めている状態。
+// 順序は 今日のリマインダー → 期限切れ → 今週の予定 で常に固定する。件数では動かさない。
 //
-// 情報は減らさない。3区分とも見出しは残し、件数も出す。位置だけを変える。
+// 2026-08-09 に一度「中身のある区分を先に、空の区分を後ろに」という並べ替えを入れたが撤回した。
+// 「今日のリマインダーは無い」ことは、この画面で最初に確認したい答えそのものであり、
+// 空であることが価値の無さを意味しない。件数で位置が動くと、
+// 毎日ホームを開くたびに「今日の分はどこにあるか」を探し直すことになる。
+// 詳細は DECISIONS.md の同日エントリを参照。
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const fs = require('fs');
 const td = fs.readFileSync(__dirname + '/fixtures/testdata.json', 'utf8');
 const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.stringify(v) + (d === undefined ? '' : ' ' + JSON.stringify(d)));
+
+// 意味的な優先順位。今日やることが最初、次に取りこぼし、最後に先の予定
+const ORDER = ['今日のリマインダー', '期限切れ', '今週の予定'];
 
 (async () => {
   const b = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
@@ -26,65 +30,70 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     const m = e.textContent.trim().replace(/\s+/g, ' ').match(/^(.+?) \((\d+)\)/);
     return { name: m ? m[1] : e.textContent.trim(), n: m ? +m[2] : null, top: Math.round(e.getBoundingClientRect().top) };
   }));
+  // freq の TODAY は、実行日に依存しないようブラウザ側で当日の日付に置き換える
+  const mk = (id, sid, title, freq) => ({ id, stockId: sid, hypoIds: [], title, comment: null,
+    cat: '決算プレビュー', freq, times: ['23:59'], startDate: null, endDate: null, paused: false,
+    changes: [], prompt: 'p', src: 'テスト', srcDate: null, log: [], nextFire: null });
+  const setAndRead = (reminders) => p.evaluate(rs => {
+    DB.reminders = rs.map(r => ({ ...r, srcDate: fmtToday(), freq: r.freq.replace('TODAY', fmtToday()) }));
+    save(); go('home');
+  }, reminders).then(() => p.waitForTimeout(320)).then(heads);
 
-  // ---- 1. 通常の日: 期限切れ0・今日0、今週3 ----
+  // ---- 1. 通常の日(今日0・期限切れ0・今週3) ----
   await p.evaluate(() => go('home')); await p.waitForTimeout(350);
   const h0 = await heads();
-  ok('3区分とも残っている(情報を減らしていない)', h0.length === 3, h0.map(x => x.name));
+  ok('3区分とも出ている(情報を減らしていない)', h0.length === 3, h0.map(x => x.name));
   ok('件数は3区分とも表示される', h0.every(x => x.n !== null), h0);
-  ok('通常データで空の区分と中身のある区分が混在する(テスト前提)',
-    h0.some(x => x.n === 0) && h0.some(x => x.n > 0), h0.map(x => x.name + ':' + x.n));
+  ok('並びは 今日 → 期限切れ → 今週の予定', JSON.stringify(h0.map(x => x.name)) === JSON.stringify(ORDER), h0.map(x => x.name));
+  ok('今日が0件でも最上位にある', h0[0].name === '今日のリマインダー' && h0[0].n === 0, h0[0]);
+  ok('期限切れが0件でも2番目にある', h0[1].name === '期限切れ' && h0[1].n === 0, h0[1]);
+  // 「今日は無い」が最初に読めることが目的なので、最上位は1画面目に入っていること
+  ok('今日の区分は最初の1画面に入る', h0[0].top < 844, h0[0]);
 
-  const filled0 = h0.filter(x => x.n > 0), empty0 = h0.filter(x => x.n === 0);
-  ok('中身のある区分が、空の区分より上にある',
-    Math.max(...filled0.map(x => x.top)) < Math.min(...empty0.map(x => x.top)),
-    h0.map(x => `${x.name}(${x.n})@${x.top}`));
-  ok('画面の一番上は中身のある区分', h0[0].n > 0, h0[0]);
+  // ---- 2. 件数が変わっても並びは動かない ----
+  const onlyExpired = await setAndRead([mk('x1', '9001', '期限切れA', '単発 2020/1/1')]);
+  ok('期限切れだけがあるときも並びは固定', JSON.stringify(onlyExpired.map(x => x.name)) === JSON.stringify(ORDER),
+    onlyExpired.map(x => `${x.name}(${x.n})`));
+  ok('このとき今日(0件)は依然として最上位', onlyExpired[0].name === '今日のリマインダー' && onlyExpired[0].n === 0, onlyExpired[0]);
 
-  // 中身のある区分は、1画面(844px)の中に収まっていてほしい
-  ok('中身のある区分が最初の1画面に収まる', Math.max(...filled0.map(x => x.top)) < 844,
-    filled0.map(x => `${x.name}@${x.top}`));
+  const onlyToday = await setAndRead([mk('y1', '9001', '本日A', '単発 TODAY')]);
+  ok('今日だけがあるときも並びは固定', JSON.stringify(onlyToday.map(x => x.name)) === JSON.stringify(ORDER),
+    onlyToday.map(x => `${x.name}(${x.n})`));
+  ok('このとき期限切れ(0件)は2番目のまま', onlyToday[1].name === '期限切れ' && onlyToday[1].n === 0, onlyToday[1]);
 
-  // ---- 2. 区分どうしの相対順序は、定義順のまま保つ ----
-  // 空だからといって並び替えの中で順序が入れ替わると、毎回どこに何があるか学習し直しになる
-  const ORDER = ['期限切れ', '今日のリマインダー', '今週の予定'];
-  const idx = a => a.map(x => ORDER.indexOf(x.name));
-  const ascending = a => idx(a).every((v, i, arr) => i === 0 || arr[i - 1] < v);
-  ok('中身のある区分どうしは定義順のまま', ascending(filled0), filled0.map(x => x.name));
-  ok('空の区分どうしも定義順のまま', ascending(empty0), empty0.map(x => x.name));
+  const allFilled = await setAndRead([
+    mk('x2', '9001', '期限切れB', '単発 2020/1/2'),
+    mk('y2', '9002', '本日B', '単発 TODAY'),
+    mk('z2', 'TSTC', '来週', '単発 2026/12/25'),
+  ]);
+  ok('全区分に中身があるときも並びは固定', JSON.stringify(allFilled.map(x => x.name)) === JSON.stringify(ORDER),
+    allFilled.map(x => `${x.name}(${x.n})`));
+  ok('このとき3区分とも中身がある', allFilled.every(x => x.n > 0), allFilled.map(x => `${x.name}:${x.n}`));
 
-  // ---- 3. 期限切れが出たら最上部に来る ----
-  await p.evaluate(() => {
-    DB.reminders.push({ id: 'r_ord_x', stockId: '9001', hypoIds: [], title: '期限切れ検証', comment: null,
-      cat: '決算プレビュー', freq: '単発 2020/1/1', times: ['08:30'], startDate: null, endDate: null, paused: false,
-      changes: [], prompt: 'p', src: 'テスト', srcDate: fmtToday(), log: [], nextFire: null });
-    save(); go('home');
-  }); await p.waitForTimeout(350);
-  const h1 = await heads();
-  ok('期限切れが出ると最上部に来る', h1[0].name === '期限切れ' && h1[0].n === 1, h1.map(x => x.name + ':' + x.n));
-  ok('このとき空になった区分は下に残る', h1[h1.length - 1].n === 0, h1.map(x => x.name + ':' + x.n));
+  // 4通りすべてで、名前の並びが完全に同じであること
+  const orders = [h0, onlyExpired, onlyToday, allFilled].map(a => JSON.stringify(a.map(x => x.name)));
+  ok('件数の組み合わせが変わっても並びは1通り', new Set(orders).size === 1, orders);
 
-  // ---- 4. 全区分に中身があるときは、定義順そのまま ----
-  await p.evaluate(() => {
-    DB.reminders.push({ id: 'r_ord_t', stockId: '9002', hypoIds: [], title: '本日検証', comment: null,
-      cat: '報道確認', freq: '単発 ' + fmtToday(), times: ['23:59'], startDate: null, endDate: null, paused: false,
-      changes: [], prompt: 'p', src: 'テスト', srcDate: fmtToday(), log: [], nextFire: null });
-    save(); go('home');
-  }); await p.waitForTimeout(350);
-  const h2 = await heads();
-  ok('3区分すべてに中身があるとき、並びは定義順', JSON.stringify(h2.map(x => x.name)) === JSON.stringify(ORDER), h2.map(x => x.name));
-  ok('このとき0件の区分は無い', h2.every(x => x.n > 0), h2.map(x => x.name + ':' + x.n));
-
-  // ---- 5. 畳んだ状態は区分ごとに保たれる(並べ替えても取り違えない) ----
-  await p.evaluate(() => { toggleGroup('home:今週の予定'); }); await p.waitForTimeout(300);
-  const closed = await p.evaluate(() => {
-    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今週の予定/.test(x.textContent));
-    const body = l.nextElementSibling;
-    return { closedKeys: DB.uiPrefs.anaClosed.slice(),
-             今週の予定の中身が消えた: !body || body.classList.contains('lbl') };
+  // ---- 3. 「今日は無い」が状態として読めること ----
+  const todayHead = await p.evaluate(() => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
+    return l.textContent.trim().replace(/\s+/g, ' ');
   });
-  ok('畳んだ区分の記憶は区分名で保たれる', closed.closedKeys.includes('home:今週の予定'), closed.closedKeys);
-  ok('畳むとその区分の中身だけが消える', closed.今週の予定の中身が消えた, closed);
+  ok('今日の区分は件数つきの見出しを持つ', /^今日のリマインダー \(\d+\)/.test(todayHead), todayHead);
+
+  // ---- 4. 畳んだ状態は区分ごとに保たれる ----
+  await p.evaluate(() => { toggleGroup('home:今日のリマインダー'); }); await p.waitForTimeout(300);
+  const closed = await p.evaluate(() => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
+    const body = l.nextElementSibling;
+    return { keys: DB.uiPrefs.anaClosed.slice(),
+             中身が消えた: !body || body.classList.contains('lbl'),
+             見出しは残る: !!l,
+             並び: [...document.querySelectorAll('#view .lbl.grp')].map(e => e.textContent.trim().split(' (')[0]) };
+  });
+  ok('畳んだ区分の記憶は区分名で保たれる', closed.keys.includes('home:今日のリマインダー'), closed.keys);
+  ok('畳むと中身だけが消え、見出しは残る', closed.中身が消えた && closed.見出しは残る, closed);
+  ok('畳んでも並びは変わらない', JSON.stringify(closed.並び) === JSON.stringify(ORDER), closed.並び);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
