@@ -44,8 +44,11 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   }, name);
 
   // ---- 1. 今日・期限切れの見出しに文字ボタンがある ----
+  // 名称は「一括コピー」、個別リマインダー画面と同じ「⧉」アイコンを付け、
+  // 「編集」「追加」等の太字とは違う細字(.thin)にする
   const today = await head('今日のリマインダー');
   ok('今日の見出しにコピーの文字ボタンがある', !!today.label, today);
+  ok('名称は「一括コピー」、⧉アイコンが付く', today.label === '⧉ 一括コピー', today.label);
   ok('押すと今日の分をまとめてコピーする', /copyBrief\(\)/.test(today.on || ''), today.on);
   ok('見出しの開閉と同時に走らない(伝播を止めている)', /stopPropagation/.test(today.on || ''), today.on);
   ok('文字ボタンのタップ領域は44px以上', today.w >= 44 && today.h >= 44, today);
@@ -57,14 +60,17 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('押すと期限切れの分をまとめてコピーする', /copyExpired\(\)/.test(exp.on || ''), exp.on);
   ok('今日と期限切れで文字ボタンの語が同じ', today.label === exp.label, { today: today.label, expired: exp.label });
 
-  // ---- 2. 中身の側からは全幅の一括コピーボタンが無くなる ----
+  // ---- 2. 中身の側からは全幅の一括コピーボタンが無くなる。銘柄ごとのコピーは
+  //    ボタンではなく個別リマインダー画面と同じ「⧉ コピー」の細字リンク ----
   const body = await p.evaluate(() => {
     const v = document.querySelector('#view');
     return { 全幅ボタン: /全部まとめて一括コピー/.test(v.innerText),
-      カード内ボタン: [...v.querySelectorAll('.card.attn button')].map(e => e.textContent.trim()) };
+      ボタンは無い: [...v.querySelectorAll('.list.flat button')].length === 0,
+      コピーリンク: [...v.querySelectorAll('.list.flat .copylink')].map(e => e.textContent.trim()) };
   });
   ok('「全部まとめて一括コピー」の全幅ボタンは無くなった', !body.全幅ボタン, body);
-  ok('カードに残るのは銘柄ごとのコピーだけ', body.カード内ボタン.every(t => t === 'コピー'), body.カード内ボタン);
+  ok('行にボタン(枠線つき)は使わない', body.ボタンは無い, body);
+  ok('銘柄ごとのコピーはすべて「⧉ コピー」', body.コピーリンク.length > 0 && body.コピーリンク.every(t => t === '⧉ コピー'), body.コピーリンク);
 
   // ---- 3. 今週の予定にはコピーを置かない(コピー対象ではない区分) ----
   const sched = await head('今週の予定');

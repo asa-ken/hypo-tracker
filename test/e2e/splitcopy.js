@@ -51,9 +51,10 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     return !!btn && /copyBrief\(\)/.test(btn.getAttribute('onclick') || '');
   }));
 
-  // 分割コピー: テスト精機分だけコピーされる
+  // 分割コピー: テスト精機分だけコピーされる。コピー操作はボタンではなく、
+  // 個別リマインダー画面と同じ枠なしの細字リンク(.copylink)
   await p.evaluate(() => { window._copied = null; navigator.clipboard.writeText = t => { window._copied = t; return Promise.resolve(); }; });
-  const btn9001 = await p.evaluate(() => { const row = [...document.querySelectorAll('#view .list-row')].find(r => /テスト精機/.test(r.textContent)); const b = row.querySelector('button'); b.click(); return true; });
+  const btn9001 = await p.evaluate(() => { const row = [...document.querySelectorAll('#view .list-row')].find(r => /テスト精機/.test(r.textContent)); const b = row.querySelector('.copylink'); b.click(); return true; });
   await p.waitForTimeout(200);
   const copied1 = await p.evaluate(() => window._copied);
   ok('テスト精機分だけがコピーされる(TESTCOを含まない)', /1Q決算|受注残|関連ニュース/.test(copied1) && !/TESTCO/.test(copied1));
@@ -72,10 +73,10 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(() => { DB.reminders.forEach(r => { if (r.stockId !== '9001') r.paused = true; }); save(); go('home'); });
   await p.waitForTimeout(250);
   const single = await p.evaluate(() => document.querySelector('#view').innerText);
-  // 対象が1つだけなら銘柄ごとに分ける意味が無いので、コピーボタン付きの行は出さない
-  // (タイトル+到達の矢尻だけの行が1つ出る)。コピーは区分見出しの文字ボタンに1つあれば足りる
-  ok('対象が1つだけなら銘柄ごとのコピーボタンは出さない', await p.evaluate(() =>
-    [...document.querySelectorAll('#view .list-row')].every(r => !r.querySelector('button'))));
+  // 対象が1つだけなら銘柄ごとに分ける意味が無いので、コピーのリンクは出さない
+  // (タイトル+件数バッジ+到達の矢尻だけの行が1つ出る)。コピーは区分見出しの文字ボタンに1つあれば足りる
+  ok('対象が1つだけなら銘柄ごとのコピーリンクは出さない', await p.evaluate(() =>
+    [...document.querySelectorAll('#view .list-row')].every(r => !r.querySelector('.copylink') && !r.querySelector('button'))));
   ok('そのときもコピーは区分見出しから使える', await p.evaluate(() => {
     const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
     return !!(l && l.querySelector('.grp-edit'));

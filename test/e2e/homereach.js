@@ -68,14 +68,15 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     /openReminder\('r_td_a'\)/.test(td2.html), td2.html.slice(0, 200));
 
   // ---- 3. コピーは到達操作を巻き込まない ----
-  // 行を押すと遷移、コピーボタンを押すとコピーだけ。イベントの伝播で両方走らないこと
+  // 行を押すと遷移、コピーリンクを押すとコピーだけ。イベントの伝播で両方走らないこと。
+  // コピー操作はボタンではなく、個別リマインダー画面と同じ枠なしの細字リンク(.copylink)
   await p.evaluate(() => { window._nav = []; window.openRem = s => { window._nav.push('openRem:' + s); }; });
   // 到達操作が付く前は対象の行そのものが無いので、クリックできたかどうかも結果として返す
   const clicked = await p.evaluate(() => {
     // openRem( と openReminder( は接頭辞が同じなので、括弧まで含めて区別する
     const row = [...document.querySelectorAll('#view .list-row')].find(r => /テスト精機/.test(r.textContent) && /openRem\(/.test(r.getAttribute('onclick') || ''));
     if (!row) return false;
-    row.querySelector('button').click();
+    row.querySelector('.copylink').click();
     return true;
   });
   await p.waitForTimeout(250);
