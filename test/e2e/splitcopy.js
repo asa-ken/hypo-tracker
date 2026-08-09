@@ -14,6 +14,20 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);
 
+  // テストデータの r_t1・r_t2(9001)・r_t4(TSTC)を「今日発火」にする。
+  // 元は休止していない全リマインダーを「今日」扱いにしていたため何もしなくても
+  // このフィクスチャが「今日」の対象になっていたが、今日のリマインダーは実際に
+  // 今日発火するものだけを指すよう修正した(2026-08-09 DECISIONS.md)ため、
+  // 実行日に依存せず「今日」を再現できるよう単発の期日を実行時の今日の日付に書き換える
+  await p.evaluate(() => {
+    const t = fmtToday();
+    ['r_t1', 'r_t2', 'r_t4'].forEach(id => {
+      const r = DB.reminders.find(x => x.id === id);
+      r.freq = '単発 ' + t; r.times = ['23:59'];
+    });
+    save();
+  });
+
   // テストデータは 9001(2件)・TSTC(1件) の2対象にまたがる想定
   await p.evaluate(() => go('home')); await p.waitForTimeout(250);
   const rows = await p.evaluate(() => [...document.querySelectorAll('#view .card.attn .list-row')].map(r => r.textContent.replace(/\s+/g, ' ').trim()));
