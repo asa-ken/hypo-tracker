@@ -839,6 +839,14 @@ function renderHome(v){
   });
   const pend=pendingHints();
 
+  // 4区分とも空、つまり画面に出すものが何も無いときは、区分見出しを並べず案内だけを出す。
+  // 「(0) なし」が4つ並ぶだけの画面では、初めて開いた人が次に何をすればいいか分からない。
+  // 市場・銘柄分析 / 取り込み / リマインダー一覧と同じ .empty の作りに揃える
+  if(!expiredRem.length && !todayRem.length && !upcoming.length && !pend.length){
+    v.innerHTML='<div class="empty"><div class="big">今日見るものはありません</div><div>銘柄を分析するか、リマインダーを作ると、ここに並びます。</div></div>';
+    return;
+  }
+
   // 4区分とも独立した開閉見出しにする。「対応が必要」のような親見出しは、状態そのものではなく
   // 行動を迫る言い回しで義務感を強めるため置かない(期限切れ・今日のリマインダー等の状態語だけで足りる)
   let h=groupBlock('home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpired','copyExpiredFor','expired'));
@@ -859,7 +867,9 @@ function renderHome(v){
   // 注目イベントの日付は「その日に事が起きる」で意味が違い、同じ見た目で並ぶと混乱するため廃止した
   upcoming.sort((a,b)=>a.d-b.d);
   let sched='';
-  if(!upcoming.length) sched='<div class="muted">予定はありません</div>';
+  // 空の区分の書き方は、市場・銘柄分析の空の区分と同じ「なし」に揃える。
+  // 同じ「空」を区分ごとに違う言葉で書くと、意味の違いがあるように読めてしまう
+  if(!upcoming.length) sched='<div class="muted" style="padding:2px 2px 8px">なし</div>';
   else sched='<div class="list">'+upcoming.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
     return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div>`; }).join('')+'</div>';
   h+=groupBlock('home:今週の予定', `今週の予定 (${upcoming.length})`, sched);
