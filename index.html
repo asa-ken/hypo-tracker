@@ -103,11 +103,6 @@
   .sec.open .h .plusmark{transform:rotate(45deg); color:var(--navy);}
   @media (prefers-reduced-motion: reduce){ .plusmark{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
-  /* 「対応が必要」など、いま見てほしいものだけ地色を変える。
-     全部が同じ白カードだと重要度の差が出ず、目がどこにも止まらない */
-  .card.attn{background:var(--navy-bg); border-color:#cfdde8;}
-  /* 期限切れは「今日」より一段重い状態なので、既存の赤トークンで区別する(枠線は共通のまま) */
-  .card.attn.expired{background:var(--red-bg);}
   /* 一覧は「カードを積む」のではなく「1枚の枠に行を並べる」。
      カード1件ごとに影と余白が付くと、件数が増えたときに全部が同じ強さで主張してしまう */
   .list{background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:var(--sp3);}
@@ -858,8 +853,9 @@ function renderHome(v){
   let sched='';
   // 空の区分の書き方は、市場・銘柄分析の空の区分と同じ「なし」に揃える。
   // 同じ「空」を区分ごとに違う言葉で書くと、意味の違いがあるように読めてしまう
+  // 中身は市場・銘柄分析トップと同じ .list.flat(外枠なし・地色はページと同じ)にする
   if(!upcoming.length) sched='<div class="muted" style="padding:2px 2px 8px">なし</div>';
-  else sched='<div class="list">'+upcoming.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
+  else sched='<div class="list flat">'+upcoming.slice(0,6).map(it=>{ const wd=['日','月','火','水','木','金','土'][it.d.getDay()];
     return `<div class="list-row" onclick="${it.act}"><div class="lt"><div class="ttl">${esc(it.label)}</div></div><span class="rt">${it.d.getMonth()+1}/${it.d.getDate()}(${wd})</span></div>`; }).join('')+'</div>';
 
   // 3区分とも独立した開閉見出しにする。「対応が必要」のような親見出しは、状態そのものではなく
@@ -877,20 +873,21 @@ function renderHome(v){
   // 銘柄詳細の分析カテゴリで使っている groupBlockWithEdit と同じ作りに揃える
   const h=[
     ['home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBriefFor'), todayRem.length?'copyBrief()':null],
-    ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpiredFor','expired'), expiredRem.length?'copyExpired()':null],
+    ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpiredFor'), expiredRem.length?'copyExpired()':null],
     ['home:今週の予定', `今週の予定 (${upcoming.length})`, sched, null],
   ].map(g=>g[3]?groupBlockWithEdit(g[0], g[1], g[3], g[2], 'コピー'):groupBlock(g[0], g[1], g[2])).join('');
   v.innerHTML=h;
 }
-// 期限切れ・今日のリマインダーのカードを同じ見た目で組み立てる。
+// 期限切れ・今日のリマインダーの中身を、市場・銘柄分析トップや銘柄詳細の分析セクションと
+// 同じ見せ方(外枠なし・地色はページと同じ .list.flat)で組み立てる。
+// 状態の重さ(期限切れ/今日)は色のカードで示さず、区分見出しの言葉で伝える。
 // 銘柄・市場を跨いだリマインダーが同時にある場合、まとめて1つのプロンプトにすると
 // 「別々のAI・別々のチャットで会話を分けている」使い方と噛み合わないため、対象ごとにも分けられるようにする。
 // 対象が1つだけのときは分ける意味が無いので、行を並べずタイトルだけを出す。
 // 区分ぜんぶを対象にするコピーは区分見出しの側にあるので、ここには置かない。
-// 区分見出しに件数が出ているので、カード側では件数を繰り返さない
-function actionCard(list, perStockCopyFn, extraCls){
+// 区分見出しに件数が出ているので、ここでは件数を繰り返さない
+function actionCard(list, perStockCopyFn){
   if(!list.length) return '<div class="muted" style="padding:2px 2px 8px">なし</div>';
-  const cls='card attn'+(extraCls?' '+extraCls:'');
   const groups={}; list.forEach(r=>{ (groups[r.stockId]=groups[r.stockId]||[]).push(r); });
   const stockIds=Object.keys(groups);
   // ホームに出ている項目は、必ずその本体へ行けるようにする。
@@ -899,18 +896,16 @@ function actionCard(list, perStockCopyFn, extraCls){
   // 1件だけならリマインダー本体へ直接、複数件なら銘柄で絞ったリマインダー一覧へ送る
   const reach=(rs, sid)=> rs.length===1 ? `openReminder('${rs[0].id}')` : `openRem('${sid}')`;
   if(stockIds.length<=1){
-    return `<div class="${cls} tap" onclick="${reach(list, stockIds[0])}"><div class="row"><span style="font-size:13px;font-weight:600">${esc(list[0].title)}${list.length>1?' ほか':''}</span><span class="arrow">›</span></div></div>`;
+    return `<div class="list flat"><div class="list-row" onclick="${reach(list, stockIds[0])}"><div class="lt"><div class="ttl">${esc(list[0].title)}${list.length>1?' ほか':''}</div></div><span class="arrow">›</span></div></div>`;
   }
-  return `<div class="${cls}">
-    <div class="hint" style="margin-bottom:8px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
-    <div class="list" style="background:var(--card)">
+  return `<div class="hint" style="margin:0 0 8px 20px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
+    <div class="list flat">
       ${stockIds.map(sid=>{ const g=groups[sid]; const sn=stock(sid);
-        return `<div class="list-row" style="min-height:auto;padding:9px 10px" onclick="${reach(g, sid)}">
-          <div class="lt"><div class="ttl" style="font-size:13px">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${g.length}件・${esc(g[0].title)}${g.length>1?' ほか':''}</div></div>
+        return `<div class="list-row" onclick="${reach(g, sid)}">
+          <div class="lt"><div class="ttl">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${g.length}件・${esc(g[0].title)}${g.length>1?' ほか':''}</div></div>
           <button class="btn sm" style="width:auto" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">コピー</button>
         </div>`; }).join('')}
-    </div>
-  </div>`;
+    </div>`;
 }
 
 //////////////////// 開閉できる区分見出し(ホーム・市場銘柄分析で共用) ////////////////////

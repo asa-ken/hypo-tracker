@@ -21,13 +21,17 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.reload(); await p.waitForTimeout(400);
 
   // 画面に出ている区分ごとのタイトルを読む。実装の内部関数ではなく描画結果で判定する
+  // groupBlock は見出し+中身を1つの div にまとめず兄弟要素として並べるので、
+  // 中身は「次の見出しが出るまで」の兄弟要素すべてを連結して読む
+  // (2026-08-09 外枠なし・地色なしに揃えたため。homeflat.js参照)
   const sections = () => p.evaluate(() => {
     const out = {};
     document.querySelectorAll('#view .lbl.grp').forEach(l => {
       const name = l.textContent.trim().split(' (')[0];
-      const body = l.nextElementSibling;
-      out[name] = body && !body.classList.contains('lbl')
-        ? body.innerText.split('\n').map(x => x.trim()).filter(Boolean) : [];
+      const lines = [];
+      for (let e = l.nextElementSibling; e && !e.classList.contains('lbl'); e = e.nextElementSibling)
+        lines.push(...e.innerText.split('\n').map(x => x.trim()).filter(Boolean));
+      out[name] = lines;
     });
     return out;
   });
