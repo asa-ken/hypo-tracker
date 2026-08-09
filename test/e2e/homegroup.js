@@ -118,8 +118,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.evaluate(() => { toggleGroup('home:今日のリマインダー'); toggleGroup('home:今週の予定'); });
   await p.waitForTimeout(300);
   const s2 = await state();
+  // 中身が消えたことで確かめる。区分見出しの「コピー」は畳んでも残るので本文だけを見る
   ok('3区分とも畳める', s2.attnCards === 0 &&
-    !/コピー/.test(await p.evaluate(() => document.querySelector('#view').innerText)));
+    await p.evaluate(() => ![...document.querySelectorAll('#view .lbl.grp')]
+      .some(l => l.nextElementSibling && !l.nextElementSibling.classList.contains('lbl'))));
 
   // ---- リロードしても畳んだ状態が残る ----
   await p.reload(); await p.waitForTimeout(400);

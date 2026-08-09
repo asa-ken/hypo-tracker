@@ -35,7 +35,12 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('テスト精機の行がある(2件)', rows.some(t => /テスト精機/.test(t) && /2件/.test(t)));
   ok('TESTCOの行がある(1件)', rows.some(t => /TESTCO/.test(t) && /1件/.test(t)));
   ok('案内文がある', /チャットを対象ごとに分けている場合/.test(await p.evaluate(() => document.querySelector('#view').innerText)));
-  ok('一括コピーのボタンもある', /全部まとめて一括コピー/.test(await p.evaluate(() => document.querySelector('#view').innerText)));
+  // 一括コピーはカード下部の全幅ボタンから、区分見出しの文字ボタンへ移した(copyhead.js が担当)
+  ok('一括コピーは区分見出しの文字ボタンにある', await p.evaluate(() => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
+    const btn = l && l.querySelector('.grp-edit');
+    return !!btn && /copyBrief\(\)/.test(btn.getAttribute('onclick') || '');
+  }));
 
   // 分割コピー: テスト精機分だけコピーされる
   await p.evaluate(() => { window._copied = null; navigator.clipboard.writeText = t => { window._copied = t; return Promise.resolve(); }; });
@@ -46,7 +51,9 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('2件とも含まれる', copied1.split('\n\n').filter(x => /^\d\) /.test(x)).length === 2);
 
   // 一括コピー: 両方含まれる
-  const bulkClicked = await p.evaluate(() => { document.querySelectorAll('#view button').forEach(b => { if (/全部まとめて一括コピー/.test(b.textContent)) b.click(); }); return true; });
+  const bulkClicked = await p.evaluate(() => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
+    l.querySelector('.grp-edit').click(); return true; });
   await p.waitForTimeout(200);
   const copied2 = await p.evaluate(() => window._copied);
   ok('一括コピーは両方の対象を含む', /テスト精機|受注残/.test(copied2) === false ? false : true);
@@ -56,7 +63,14 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(() => { DB.reminders.forEach(r => { if (r.stockId !== '9001') r.paused = true; }); save(); go('home'); });
   await p.waitForTimeout(250);
   const single = await p.evaluate(() => document.querySelector('#view').innerText);
-  ok('対象が1つだけなら「確認プロンプトをコピー」の単一ボタンに戻る', /確認プロンプトをコピー/.test(single) && !/全部まとめて一括コピー/.test(single));
+  // 対象が1つだけなら銘柄ごとに分ける意味が無いので、行を並べずタイトルだけを出す。
+  // コピーは区分見出しの文字ボタンに1つあれば足りる
+  ok('対象が1つだけなら銘柄ごとの行は出さない', await p.evaluate(() =>
+    document.querySelectorAll('#view .card.attn .list-row').length === 0));
+  ok('そのときもコピーは区分見出しから使える', await p.evaluate(() => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
+    return !!(l && l.querySelector('.grp-edit'));
+  }));
   ok('対象が1つのときは案内文が出ない', !/チャットを対象ごとに分けている場合/.test(single));
 
   console.log('JSエラー:', JSON.stringify(errs));
