@@ -39,7 +39,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     const s = document.querySelector('#sheet .stat').getBoundingClientRect();
     return { h: Math.round(s.height), w: Math.round(s.width) };
   });
-  ok('バッジは押せる大きさ(36px以上)', badgeBox.h >= 36);
+  ok('バッジは押せる大きさ(44px以上)', badgeBox.h >= 44);
 
   // ---- 2. 非表示にしても一覧から動かない ----
   const before = (await rows()).map(r => r.name);
