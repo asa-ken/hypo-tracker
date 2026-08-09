@@ -20,17 +20,22 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.reload(); await p.waitForTimeout(400);
   const go = () => p.evaluate(() => window.go('home'));
 
+  // 中身はカードで包まず地色も付けない(2026-08-09 homeflat.js参照)ので、
+  // 「開いている区分の数」は見出し直後に(畳んでいなければ)中身の要素が並んでいるかで数える
   const state = () => p.evaluate(() => {
     const v = document.querySelector('#view'), c = v.lastElementChild;
     const heads = [...v.querySelectorAll('.lbl.grp')].map(e => e.textContent.trim().replace(/\s+/g, ' '));
+    const openCount = [...v.querySelectorAll('.lbl.grp')].filter(l => l.nextElementSibling && !l.nextElementSibling.classList.contains('lbl')).length;
     return {
-      heads,
-      attnCards: v.querySelectorAll('.card.attn').length,
-      expiredCards: v.querySelectorAll('.card.attn.expired').length,
+      heads, openCount,
       closed: DB.uiPrefs.anaClosed.slice(),
       h: c ? Math.round(c.offsetTop + c.offsetHeight - v.offsetTop) : 0,
     };
   });
+  const isOpen = (name) => p.evaluate(n => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => new RegExp(n).test(x.textContent));
+    return !!(l && l.nextElementSibling && !l.nextElementSibling.classList.contains('lbl'));
+  }, name);
 
   // ---- 実行日に依存しないテスト用データを注入する(期限切れ2件・今日1件・銘柄をまたぐ) ----
   await p.evaluate(() => {
@@ -56,9 +61,8 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   // 並びは 今日 → 期限切れ → 今週の予定 で固定(homeorder.js が担当)
   ok('今日のリマインダーの件数が反映される', /^今日のリマインダー \(1\)/.test(s0.heads[0]), s0.heads[0]);
   ok('期限切れの件数が反映される', /^期限切れ \(2\)/.test(s0.heads[1]), s0.heads[1]);
-  ok('既定はすべて開いている', s0.closed.length === 0);
-  ok('期限切れ・今日どちらも地色付きカードで出る', s0.attnCards === 2);
-  ok('期限切れカードだけ追加の強調(.expired)が付く', s0.expiredCards === 1);
+  ok('既定はすべて開いている', s0.closed.length === 0 && s0.openCount === 3, s0);
+  // 中身の見せ方(外枠なし・地色なし)は homeflat.js が担当
 
   // ---- 見出しの形は他画面と同じ(44px・矢尻・アクセントバー無し) ----
   const headStyle = await p.evaluate(() => {
@@ -109,19 +113,16 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const schedTopBefore = await top('今週の予定');
   await p.evaluate(() => toggleGroup('home:期限切れ')); await p.waitForTimeout(300);
   const s1 = await state();
-  ok('期限切れを畳むと中身が消える(見出しは残る)', s1.heads[1] === s0.heads[1] &&
-    !(s1.attnCards === s0.attnCards));
-  ok('今日のリマインダーは畳まれない', s1.attnCards === s0.attnCards - 1);
+  ok('期限切れを畳むと中身が消える(見出しは残る)', s1.heads[1] === s0.heads[1] && !(await isOpen('期限切れ')));
+  ok('今日のリマインダーは畳まれない', await isOpen('今日のリマインダー'));
   const schedTopAfter = await top('今週の予定');
   ok('期限切れを畳むと下の区分が繰り上がる', schedTopAfter < schedTopBefore, { before: schedTopBefore, after: schedTopAfter });
 
   await p.evaluate(() => { toggleGroup('home:今日のリマインダー'); toggleGroup('home:今週の予定'); });
   await p.waitForTimeout(300);
   const s2 = await state();
-  // 中身が消えたことで確かめる。区分見出しの「コピー」は畳んでも残るので本文だけを見る
-  ok('3区分とも畳める', s2.attnCards === 0 &&
-    await p.evaluate(() => ![...document.querySelectorAll('#view .lbl.grp')]
-      .some(l => l.nextElementSibling && !l.nextElementSibling.classList.contains('lbl'))));
+  // 区分見出しの「コピー」は畳んでも残るので、中身の要素が無いことだけを見る
+  ok('3区分とも畳める', s2.openCount === 0, s2);
 
   // ---- リロードしても畳んだ状態が残る ----
   await p.reload(); await p.waitForTimeout(400);
@@ -133,7 +134,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.evaluate(() => { ['home:期限切れ', 'home:今日のリマインダー', 'home:今週の予定'].forEach(toggleGroup); });
   await p.waitForTimeout(300);
   const s4 = await state();
-  ok('開き直すと元に戻る', s4.attnCards === s0.attnCards && s4.closed.length === 0);
+  ok('開き直すと元に戻る', s4.openCount === s0.openCount && s4.closed.length === 0);
 
   // ---- 市場銘柄分析側の開閉と混ざらない(キーが画面ごとに分かれている) ----
   await p.evaluate(() => { toggleGroup('home:期限切れ'); go('analysis'); }); await p.waitForTimeout(300);

@@ -28,9 +28,18 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     save();
   });
 
-  // テストデータは 9001(2件)・TSTC(1件) の2対象にまたがる想定
+  // テストデータは 9001(2件)・TSTC(1件) の2対象にまたがる想定。
+  // groupBlock は見出し+中身を1つの div にまとめず兄弟要素として並べるので、
+  // 「今日のリマインダー」の直後から次の見出しが出るまでの行だけを見る
+  // (2026-08-09 外枠なし・地色なしに揃えたため。homeflat.js参照)
   await p.evaluate(() => go('home')); await p.waitForTimeout(250);
-  const rows = await p.evaluate(() => [...document.querySelectorAll('#view .card.attn .list-row')].map(r => r.textContent.replace(/\s+/g, ' ').trim()));
+  const rows = await p.evaluate(() => {
+    const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
+    const out = [];
+    for (let e = l.nextElementSibling; e && !e.classList.contains('lbl'); e = e.nextElementSibling)
+      e.querySelectorAll('.list-row').forEach(r => out.push(r.textContent.replace(/\s+/g, ' ').trim()));
+    return out;
+  });
   ok('対象ごとの行が複数出る(2対象)', rows.length === 2);
   ok('テスト精機の行がある(2件)', rows.some(t => /テスト精機/.test(t) && /2件/.test(t)));
   ok('TESTCOの行がある(1件)', rows.some(t => /TESTCO/.test(t) && /1件/.test(t)));
@@ -63,10 +72,10 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(() => { DB.reminders.forEach(r => { if (r.stockId !== '9001') r.paused = true; }); save(); go('home'); });
   await p.waitForTimeout(250);
   const single = await p.evaluate(() => document.querySelector('#view').innerText);
-  // 対象が1つだけなら銘柄ごとに分ける意味が無いので、行を並べずタイトルだけを出す。
-  // コピーは区分見出しの文字ボタンに1つあれば足りる
-  ok('対象が1つだけなら銘柄ごとの行は出さない', await p.evaluate(() =>
-    document.querySelectorAll('#view .card.attn .list-row').length === 0));
+  // 対象が1つだけなら銘柄ごとに分ける意味が無いので、コピーボタン付きの行は出さない
+  // (タイトル+到達の矢尻だけの行が1つ出る)。コピーは区分見出しの文字ボタンに1つあれば足りる
+  ok('対象が1つだけなら銘柄ごとのコピーボタンは出さない', await p.evaluate(() =>
+    [...document.querySelectorAll('#view .list-row')].every(r => !r.querySelector('button'))));
   ok('そのときもコピーは区分見出しから使える', await p.evaluate(() => {
     const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
     return !!(l && l.querySelector('.grp-edit'));

@@ -33,7 +33,6 @@ const KNOWN_SOLID = [
   '#fff',      // 白。var(--card) と同値
   '#fafbfc',   // カード/まとまりの押し込み時の地色
   '#f0f2f4',   // ボタンの押し込み時の地色
-  '#cfdde8',   // 「対応が必要」カードの枠線
   '#1257a8',   // 「追加」テキストボタンの文字色
 ];
 const KNOWN_ALPHA = [
@@ -58,8 +57,9 @@ ok('既知の例外リストに死んだ項目がない', goneSolid.length === 0
 // ---- 色は必ず var() 経由か既知の例外であること ----
 // 値の種類だけでなく箇所数も見る。同じ #fff でも使う場所が増えれば、
 // トークンで済むところを直書きで広げている可能性がある。
-// 現状13件(color:#fff 7 / background:#fafbfc 2 / #1257a8 / #cfdde8 / background:#fff / #f0f2f4)。
+// 現状12件(color:#fff 7 / background:#fafbfc 2 / background:#fff / #f0f2f4 / #1257a8)。
+// 2026-08-09、ホームの外枠なし・地色なし化で「対応が必要」カードの枠線 #cfdde8 が消え13→12件になった
 const direct = (outside.match(/(?:background|color|border-color|border-top-color|border-bottom-color)\s*:\s*#[0-9a-fA-F]{3,8}/g) || []);
-ok('色の直書き箇所が13件から増えていない', direct.length <= 13, direct.length);
+ok('色の直書き箇所が12件から増えていない', direct.length <= 12, direct.length);
 
 console.log('JSエラー: []');

@@ -36,16 +36,19 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   });
   await p.waitForTimeout(400);
 
+  // groupBlock は見出し+中身を1つの div にまとめず、兄弟要素として並べて返す
+  // (2026-08-09 外枠なし・地色なしに揃えたため。homeflat.js参照)。
+  // 中身は「次の見出しが出るまで」の兄弟要素すべてなので、そこを走査する
   const section = (name) => p.evaluate(n => {
     const lbl = [...document.querySelectorAll('#view .lbl.grp')].find(x => new RegExp(n).test(x.textContent));
     if (!lbl) return null;
-    const rows = [...lbl.nextElementSibling.querySelectorAll('.list-row')];
+    const parts = [];
+    for (let e = lbl.nextElementSibling; e && !e.classList.contains('lbl'); e = e.nextElementSibling) parts.push(e);
+    const rows = parts.flatMap(e => [...e.querySelectorAll('.list-row'), ...(e.classList.contains('list-row') ? [e] : [])]);
     return {
       head: lbl.textContent.trim().replace(/\s+/g, ' '),
       rows: rows.map(r => ({ text: r.textContent.replace(/\s+/g, ' ').trim().slice(0, 30), on: r.getAttribute('onclick') })),
-      // カード自体が押せる形(対象が1つだけのとき)も到達手段として数える
-      cardOn: (lbl.nextElementSibling.classList.contains('card') ? lbl.nextElementSibling.getAttribute('onclick') : null),
-      html: lbl.nextElementSibling.outerHTML,
+      html: parts.map(e => e.outerHTML).join(''),
     };
   }, name);
 
@@ -93,8 +96,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     ['期限切れ', '今日のリマインダー', '今週の予定'].forEach(n => {
       const lbl = [...document.querySelectorAll('#view .lbl.grp')].find(x => new RegExp(n).test(x.textContent));
       if (!lbl || /\(0\)/.test(lbl.textContent)) return;
-      const body = lbl.nextElementSibling;
-      const reach = body.matches('[onclick]') || body.querySelectorAll('[onclick*="openReminder"],[onclick*="openRem("]').length > 0;
+      let reach = false;
+      for (let e = lbl.nextElementSibling; e && !e.classList.contains('lbl'); e = e.nextElementSibling) {
+        if (e.matches('[onclick]') || e.querySelectorAll('[onclick*="openReminder"],[onclick*="openRem("]').length > 0) { reach = true; break; }
+      }
       if (!reach) out.push(n);
     });
     return out;
