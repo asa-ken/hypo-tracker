@@ -67,7 +67,12 @@
   .chip.green{background:var(--green-bg); color:var(--green-tx);}
   .chip.red{background:var(--red-bg); color:var(--red-tx);}
   .chip.gray{background:var(--bg); color:var(--ink2); border:1px solid var(--line);}
-  .chip.tap{display:inline-flex; align-items:center; min-height:36px; padding:2px 12px; cursor:pointer;}
+  .chip.tap{display:inline-flex; align-items:center; min-height:44px; padding:2px 12px; cursor:pointer;}
+  /* バッジ(chip)は情報表示専用に統一する。操作は別の見た目にしないと、
+     他画面のバッジにも同じ機能があるかのように誤解させる。
+     コピーのような軽い操作は、個別リマインダー画面の「⧉ コピー」と同じ、
+     枠なし・細字(通常太さ)のテキストリンクにする */
+  .copylink{display:inline-flex; align-items:center; gap:var(--sp1); min-height:44px; padding:0 4px; color:var(--navy); font-size:12px; font-weight:400; cursor:pointer;}
   .muted{color:var(--ink3); font-size:12px;}
   /* 画面の区切り。以前は11pxのグレーで本文より弱く、どこからどこまでが一塊か読み取れなかった */
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
@@ -90,6 +95,8 @@
       ・間の余白は見出し側の判定に入る。押し間違えても、開くだけで済むほうへ倒す */
   .lbl.grp .grp-right{display:inline-flex; align-items:center; gap:16px; flex:none;}
   .lbl.grp .grp-edit{color:var(--navy); font-weight:600; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0 8px;}
+  /* 「編集」「追加」等の太字はそのままに、ホームの一括コピーだけ細字(通常の太さ)にする */
+  .lbl.grp .grp-edit.thin{font-weight:400; font-size:12px;}
   .lbl.grp .grp-caret{display:inline-flex; align-items:center; justify-content:flex-end; width:44px; min-height:44px;}
   .lbl.grp:active .grp-edit{color:var(--navy);}
   /* タップで下に展開する場所は、どこでも同じ矢尻で示す。
@@ -875,7 +882,7 @@ function renderHome(v){
     ['home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBriefFor'), todayRem.length?'copyBrief()':null],
     ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpiredFor'), expiredRem.length?'copyExpired()':null],
     ['home:今週の予定', `今週の予定 (${upcoming.length})`, sched, null],
-  ].map(g=>g[3]?groupBlockWithEdit(g[0], g[1], g[3], g[2], 'コピー'):groupBlock(g[0], g[1], g[2])).join('');
+  ].map(g=>g[3]?groupBlockWithEdit(g[0], g[1], g[3], g[2], '⧉ 一括コピー', 'thin'):groupBlock(g[0], g[1], g[2])).join('');
   v.innerHTML=h;
 }
 // 期限切れ・今日のリマインダーの中身を、市場・銘柄分析トップや銘柄詳細の分析セクションと
@@ -895,6 +902,8 @@ function actionCard(list, perStockCopyFn){
   // 再スケジュール・休止・削除にたどり着けない(コピーしかできない項目になる)。
   // 1件だけならリマインダー本体へ直接、複数件なら銘柄で絞ったリマインダー一覧へ送る
   const reach=(rs, sid)=> rs.length===1 ? `openReminder('${rs[0].id}')` : `openRem('${sid}')`;
+  // 件数はバッジにせず、行の文字情報(タイトル)の中で表す(元の表現)。
+  // コピーは、個別リマインダー画面の「⧉ コピー」と同じ、枠なし・細字のテキストリンクとして置く
   if(stockIds.length<=1){
     return `<div class="list flat"><div class="list-row" onclick="${reach(list, stockIds[0])}"><div class="lt"><div class="ttl">${esc(list[0].title)}${list.length>1?' ほか':''}</div></div><span class="arrow">›</span></div></div>`;
   }
@@ -903,7 +912,7 @@ function actionCard(list, perStockCopyFn){
       ${stockIds.map(sid=>{ const g=groups[sid]; const sn=stock(sid);
         return `<div class="list-row" onclick="${reach(g, sid)}">
           <div class="lt"><div class="ttl">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${g.length}件・${esc(g[0].title)}${g.length>1?' ほか':''}</div></div>
-          <button class="btn sm" style="width:auto" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">コピー</button>
+          <span class="copylink" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">⧉ コピー</span>
         </div>`; }).join('')}
     </div>`;
 }
@@ -939,12 +948,13 @@ function groupBlock(key, label, contentHtml){
 }
 // 設定への「編集」リンクを添えた開閉見出し。指標をあまり見ない銘柄では丸ごと畳めるように、
 // 開閉は銘柄ごとに覚える(同じ指標でも銘柄によって見たいかどうかが変わるため)
-// 見出しの右に置く文字ボタン。既定は「編集」だが、区分によっては「追加」など別の語を使う
-function groupBlockWithEdit(key, label, editAction, contentHtml, editLabel){
+// 見出しの右に置く文字ボタン。既定は「編集」だが、区分によっては「追加」など別の語を使う。
+// editCls は既定の太字(編集・追加など)を崩さずに、個別の呼び出しだけ見た目を変えるための追加クラス
+function groupBlockWithEdit(key, label, editAction, contentHtml, editLabel, editCls){
   const closed=groupClosed(key);
   return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
       <span>${esc(label)}</span>
-      <span class="grp-right"><span class="grp-edit" onclick="event.stopPropagation();${editAction}">${esc(editLabel||'編集')}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
+      <span class="grp-right"><span class="grp-edit${editCls?' '+editCls:''}" onclick="event.stopPropagation();${editAction}">${esc(editLabel||'編集')}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
     </div>`+(closed?'':contentHtml);
 }
 function detailGroupKey(s, label){ return 'detail:'+s.id+':'+label; }

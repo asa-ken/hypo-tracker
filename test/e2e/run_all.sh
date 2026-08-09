@@ -14,7 +14,7 @@ cd "$(dirname "$0")"
 ROOT=$(cd ../.. && pwd)
 PORT=${E2E_PORT:-8731}
 
-SUITES="backaudit closebtn swipeback swipeback_pager swipeback_detail unify unify2 nobadge marketpage noconf scope mktmetrics presets benchmark design seceditor anagroup tabbar_fixed summary splitcopy swipedel swipedel_e2e detailfix hypokind watchdefault contrast homegroup caretbar subrow editprompt rowbar flatlist nodata metstat foldmet metorder glimit trendtap metwarn metmerge importpick hyporow memoblock hypocards hypohead remgroup rempick edithypo colortoken escuse sheettap homereach homeempty homeorder a11ytext pendhint remclass copyhead homeflat"
+SUITES="backaudit closebtn swipeback swipeback_pager swipeback_detail unify unify2 nobadge marketpage noconf scope mktmetrics presets benchmark design seceditor anagroup tabbar_fixed summary splitcopy swipedel swipedel_e2e detailfix hypokind watchdefault contrast homegroup caretbar subrow editprompt rowbar flatlist nodata metstat foldmet metorder glimit trendtap metwarn metmerge importpick hyporow memoblock hypocards hypohead remgroup rempick edithypo colortoken escuse sheettap homereach homeempty homeorder a11ytext pendhint remclass copyhead homeflat copylink"
 [ $# -gt 0 ] && SUITES="$*"
 
 # サーバーが無ければこのスクリプトで起動し、終わったら片付ける。
