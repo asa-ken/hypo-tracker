@@ -60,3 +60,17 @@
 - **Reason:** カードごとに詰まり方が変わるのを防ぐ。
 - **Evidence:** 人間のレビューではなくテストが捕まえた。トークン契約を機械検査する価値の実例。
 - **Status:** 採用
+
+### 2026-08-09 — 無検査だったデザイン契約を機械検査下に置く
+- **Problem:** `design.js` は font-size / gap / 主要4画面の44px しか見ておらず、色トークン・`esc()`/`escArg()` の使い分け・シート内のタップ領域が無検査だった。文書側には「design.js が検査する」と書かれており、実装と食い違っていた。
+- **Decision:** `colortoken.js` / `escuse.js` / `sheettap.js` の3スイートを追加。`DESIGN_SYSTEM.md` の各項目に「検査あり/なし/範囲」を明記した。
+- **Reason:** テストが通ることを遵守の証拠にできない項目があると、自律ループが誤った安心を得る。
+- **Evidence:** 負のテストで、色の追加・トークン削除・onclick内の `esc()` 誤用・HTML本文への `escArg()` 混入が、いずれも検出されることを確認した。
+- **Status:** 採用
+
+### 2026-08-09 — シート内のタップ領域44px
+- **Problem:** シートを実測したところ、指標の管理の「表示中/非表示中」バッジが36px(12個)、指標編集とリマインダー追加の `select` が43pxで、44pxの下限を割っていた。主要4画面しか見ていない `design.js` では検出できなかった。
+- **Decision:** `.stat` の `min-height` を36px→44px、`select` に `min-height:44px` を追加。`metstat.js` の閾値も36→44へ引き上げた。
+- **Reason:** アクセシビリティは Decision Hierarchy の最上位。selectは43pxで、あと1pxという「気づかれない不足」だった。
+- **Evidence:** 修正前に `sheettap.js` が6項目落ちることを確認してから修正した。
+- **Status:** 採用

@@ -23,8 +23,8 @@ UI改善を「平均点」ではなく、重要な弱点を見つけるために
 | 情報密度 | 必要情報を保ったまま画面を圧迫していないか | `#view` の `scrollHeight` をPlaywrightで取得し、変更前後を比較 |
 | Typography | 文字サイズの階層と過小文字 | `index.html` のCSSを正規表現で集計し、`11/12/13/15/17px` と入力欄16px以外を検出。11px は許容、11px未満が違反 |
 | Spacing | 余白の一貫性 | `index.html` の **`gap` のみ**を集計し、4/8/12/16px以外の新規値を検出。padding / margin はトークン化されていないため対象外(`DESIGN_SYSTEM.md` 参照) |
-| Hit Area | タップ可能領域 | Playwrightで対象要素の `getBoundingClientRect()` を取得し、44px未満を検出。`design.js` の自動検査は主要4画面・4セレクタのみなので、シート等は個別に測る |
-| Color | トークン逸脱・局所的な残色 | `:root` の色定義を人手で確認(自動検査なし)。角丸等の残色は `test/e2e/png.js` の画素スキャンで測定 |
+| Hit Area | タップ可能領域 | `design.js`(主要4画面)と `sheettap.js`(各シート)が `getBoundingClientRect()` で44px未満を検出。新しいシートを足したら `sheettap.js` に追加する |
+| Color | トークン逸脱・局所的な残色 | `colortoken.js` がトークン17個と直書きの増加を検出。角丸等の残色は `test/e2e/png.js` の画素スキャンで測定 |
 | Accessibility | タップ、コントラスト、入力操作等 | DOMの実寸、実機想定390x844、既存E2Eを使用。重大な操作不能は0点 |
 | 一貫性 | 同じ意味のUIが同じ方法で表現されるか | 同一機能を画面横断で比較し、開閉・状態・操作領域を列挙 |
 | 実運用摩擦 | コピペ、画面切替、冗長入力 | 実データで中心ワークフローを一連で操作し、同じ情報を手作業で移す回数を記録 |
@@ -34,7 +34,7 @@ UI改善を「平均点」ではなく、重要な弱点を見つけるために
 - 文字サイズ: 11px未満を許容しない。定義済み6種類以内。
 - gap: `4/8/12/16px` の4段階以外を新規導入しない。
 - 指標グリッド: 2列。
-- デザイン契約: `test/e2e/design.js` の検査に合格する。
+- デザイン契約: `design.js` / `colortoken.js` / `escuse.js` / `sheettap.js` の検査に合格する。
 - 回帰: `npm test` と `npm run e2e` の両方に合格する。
 
 ## Negative Signals
