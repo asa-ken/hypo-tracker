@@ -24,15 +24,17 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
     return getComputedStyle(document.querySelector('.metric')).gridTemplateColumns.split(' ').length; });
   ok('指標グリッドは2列', cols === 2);
 
-  // ---- B. 一覧はリスト構造・「対応が必要」だけ地色が変わる ----
+  // ---- B. 一覧はリスト構造・地色が付くのは対応が必要なカードだけ ----
+  // 期限切れ・今日のリマインダーの色差は、実データに依存せず確かめられるよう homegroup.js 側で見る
+  // (このフィクスチャは実行日によって「今日」に該当する項目が無いことがあるため)
   const home = await page.evaluate(() => { go('home');
     return { rows: document.querySelectorAll('#view .list .list-row').length,
-             attn: document.querySelectorAll('#view .card.attn').length,
-             looseCards: [...document.querySelectorAll('#view > .card')].filter(c => !c.classList.contains('attn')).length }; });
+             looseCards: [...document.querySelectorAll('#view > .card')].filter(c => !c.classList.contains('attn')).length,
+             text: document.querySelector('#view').innerText }; });
   await page.waitForTimeout(200);
   ok('今週の予定が1枚の枠の行になる', home.rows > 0);
-  ok('「対応が必要」だけ地色が変わる', home.attn > 0);
   ok('ホーム直下に素の白カードが残っていない', home.looseCards === 0);
+  ok('期限切れ・今日のリマインダーが無いときも「なし」で示す(空白にしない)', (home.text.match(/なし/g) || []).length >= 2);
   const list = await page.evaluate(() => { go('analysis'); return document.querySelectorAll('#view .list .list-row').length; });
   ok('市場・銘柄分析も行構造', list >= 5);
   const rem = await page.evaluate(() => { go('reminder'); return document.querySelectorAll('#view .list .list-row').length; });
