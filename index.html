@@ -835,10 +835,10 @@ function renderHome(v){
     const groups={}; todayRem.forEach(r=>{ (groups[r.stockId]=groups[r.stockId]||[]).push(r); });
     const stockIds=Object.keys(groups);
     if(stockIds.length<=1){
-      attn+=`<div class="card attn"><div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">確認プロンプトをコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
+      attn+=`<div class="card attn"><div class="row"><span class="chip navy">リマインダー ${todayRem.length}</span><button class="btn sm pri" onclick="copyBrief()">確認プロンプトをコピー</button></div><div style="margin-top:6px;font-size:13px;font-weight:600">${esc(todayRem[0].title)} ほか</div></div>`;
     } else {
       attn+=`<div class="card attn">
-        <div class="row"><span class="chip navy">今日のリマインダー ${todayRem.length}</span></div>
+        <div class="row"><span class="chip navy">リマインダー ${todayRem.length}</span></div>
         <div class="hint" style="margin:4px 0 8px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
         <div class="list" style="background:var(--card)">
           ${stockIds.map(sid=>{ const g=groups[sid]; const sn=stock(sid);
@@ -3007,7 +3007,7 @@ function parseReminder(){
 //////////////////// util ////////////////////
 function copy(text,msg){ navigator.clipboard?.writeText(text).then(()=>toast(msg||'コピーしました'),()=>{fallbackCopy(text);toast(msg||'コピーしました');}); }
 function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); }
-function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&activePrompt(r).text); if(!rs.length){toast('今日のリマインダーはありません');return;} let p='今日の確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${activePrompt(r).text}`).join('\n\n'); copy(p,'今日の確認プロンプトをコピーしました。AIに貼り付けてください'); }
+function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&activePrompt(r).text); if(!rs.length){toast('リマインダーはありません');return;} let p='今日の確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${activePrompt(r).text}`).join('\n\n'); copy(p,'確認プロンプトをコピーしました。AIに貼り付けてください'); }
 // 銘柄・市場ごとにチャットを分けている場合の分割コピー。対象を1つに絞る以外はcopyBriefと同じ
 function copyBriefFor(sid){
   const s=stock(sid);
