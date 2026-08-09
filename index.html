@@ -870,19 +870,25 @@ function renderHome(v){
   // 「今日のリマインダーは無い」ことは、この画面で最初に確認したい答えそのもので、
   // 空であることが価値の無さを意味しない。件数で位置が動くと、
   // 毎日ホームを開くたびに「今日の分はどこにあるか」を探し直すことになる
+  //
+  // 「その区分ぜんぶ」に効くコピーは、区分の見出しと同じ行に文字ボタンとして置く。
+  // カードの一番下に全幅のボタンを置くと、区分の中身より操作のほうが強く見えるうえ、
+  // 何を対象にした操作なのかがボタンの位置から読み取れない。
+  // 銘柄詳細の分析カテゴリで使っている groupBlockWithEdit と同じ作りに揃える
   const h=[
-    ['home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBrief','copyBriefFor')],
-    ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpired','copyExpiredFor','expired')],
-    ['home:今週の予定', `今週の予定 (${upcoming.length})`, sched],
-  ].map(g=>groupBlock(g[0], g[1], g[2])).join('');
+    ['home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBriefFor'), todayRem.length?'copyBrief()':null],
+    ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpiredFor','expired'), expiredRem.length?'copyExpired()':null],
+    ['home:今週の予定', `今週の予定 (${upcoming.length})`, sched, null],
+  ].map(g=>g[3]?groupBlockWithEdit(g[0], g[1], g[3], g[2], 'コピー'):groupBlock(g[0], g[1], g[2])).join('');
   v.innerHTML=h;
 }
 // 期限切れ・今日のリマインダーのカードを同じ見た目で組み立てる。
 // 銘柄・市場を跨いだリマインダーが同時にある場合、まとめて1つのプロンプトにすると
 // 「別々のAI・別々のチャットで会話を分けている」使い方と噛み合わないため、対象ごとにも分けられるようにする。
-// 対象が1つだけのときは分ける意味が無いので、単一ボタンのカードにする。
+// 対象が1つだけのときは分ける意味が無いので、行を並べずタイトルだけを出す。
+// 区分ぜんぶを対象にするコピーは区分見出しの側にあるので、ここには置かない。
 // 区分見出しに件数が出ているので、カード側では件数を繰り返さない
-function actionCard(list, singleCopyFn, perStockCopyFn, extraCls){
+function actionCard(list, perStockCopyFn, extraCls){
   if(!list.length) return '<div class="muted" style="padding:2px 2px 8px">なし</div>';
   const cls='card attn'+(extraCls?' '+extraCls:'');
   const groups={}; list.forEach(r=>{ (groups[r.stockId]=groups[r.stockId]||[]).push(r); });
@@ -893,7 +899,7 @@ function actionCard(list, singleCopyFn, perStockCopyFn, extraCls){
   // 1件だけならリマインダー本体へ直接、複数件なら銘柄で絞ったリマインダー一覧へ送る
   const reach=(rs, sid)=> rs.length===1 ? `openReminder('${rs[0].id}')` : `openRem('${sid}')`;
   if(stockIds.length<=1){
-    return `<div class="${cls} tap" onclick="${reach(list, stockIds[0])}"><div class="row"><span style="font-size:13px;font-weight:600">${esc(list[0].title)}${list.length>1?' ほか':''}</span><button class="btn sm pri" onclick="event.stopPropagation();${singleCopyFn}()">確認プロンプトをコピー</button></div></div>`;
+    return `<div class="${cls} tap" onclick="${reach(list, stockIds[0])}"><div class="row"><span style="font-size:13px;font-weight:600">${esc(list[0].title)}${list.length>1?' ほか':''}</span><span class="arrow">›</span></div></div>`;
   }
   return `<div class="${cls}">
     <div class="hint" style="margin-bottom:8px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
@@ -904,7 +910,6 @@ function actionCard(list, singleCopyFn, perStockCopyFn, extraCls){
           <button class="btn sm" style="width:auto" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">コピー</button>
         </div>`; }).join('')}
     </div>
-    <button class="btn sm ghost" style="margin-top:8px;width:100%" onclick="${singleCopyFn}()">全部まとめて一括コピー</button>
   </div>`;
 }
 
