@@ -1370,11 +1370,23 @@ function renderImport(v){
   if(s){
     h+=`<div class="banner" style="margin-bottom:11px">対象: ${esc(s.name)}(銘柄詳細から開いたため自動で設定されています)</div>`;
   }
-  // ① 説明書を渡す(最初の1回だけ)
-  h+='<div class="lbl">① このアプリの説明書をAIに渡す(最初の1回だけ)</div>';
+  // ① 説明書を渡す(最初の1回だけ)。
+  // 一度きりの作業なのに、完了状態を覚えず毎回②と同じ重さで最上部を占有し続けていた。
+  // 「困ったときは」と同じ、低頻度な情報を畳む扱いに揃える。
+  // 見出しの見た目は②と同じ plain .lbl のまま保つ(.lbl.grp を使うとホームの区分見出しと同じ
+  // 太字・ink色・枠線付きの重い見た目になり、①の方が②より強く見えてしまい本末転倒になる)。
+  // クリックと開閉矢印だけを追加する
+  // ただしtoggleGroup()はrender()で画面全体を作り直すため、②に入力途中のテキストがあると消えてしまう。
+  // この画面は元々それを避けてparseAndPreview()でしか再描画しないので、①の開閉もrender()を経由せず
+  // DOM操作(toggleImportBrief)で行う。畳むかどうかの記憶自体はHomeと同じdata(uiPrefs.anaClosed)を使う
+  const briefKey='import:説明書';
+  const briefClosed=groupClosed(briefKey);
+  h+=`<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;min-height:44px;cursor:pointer" onclick="toggleImportBrief(this)"><span>① このアプリの説明書をAIに渡す(最初の1回だけ)</span>${caretSvg(briefClosed)}</div>`;
+  h+=`<div class="briefbody"${briefClosed?' style="display:none"':''}>`;
   h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
   h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
   h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg(true)}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:10px 12px;background:var(--card);border-radius:9px;margin-bottom:10px">${esc(briefingText())}</div></div>`;
+  h+='</div>';
   // ② 会話を貼り付ける
   h+='<div class="lbl" style="margin-top:18px">② 会話を貼り付ける</div>';
   h+=`<div class="row" style="gap:8px;margin-bottom:6px">
@@ -1493,7 +1505,26 @@ ${thmCats}
 
 これらは私がアプリの画面にそのまま貼り付けて取り込みます。リマインダーの頻度や確認内容の設計はアプリ側で別途行うので、ここでは扱わなくて大丈夫です。`;
 }
-function copyBriefing(){ copy(briefingText(), '説明書をコピーしました。ChatGPTのカスタム指示や会話の最初に貼ってください'); }
+function copyBriefing(){
+  copy(briefingText(), '説明書をコピーしました。ChatGPTのカスタム指示や会話の最初に貼ってください');
+  // 一度コピーしたら、次にこの画面を開いたときから①を畳んだ状態で始める。
+  // ここでrender()はしない(今まさに②に入力中のテキストがあれば消えてしまうため)
+  const key='import:説明書';
+  if(!groupClosed(key)){ closedGroups().push(key); save(); }
+}
+// ①の開閉。toggleGroup()と違いrender()は呼ばず、この見出し直下だけをDOM操作で開閉する
+// (②の貼り付け欄に入力中のテキストがあっても消さないため)。畳むかどうかの記憶はtoggleGroup()と共有する
+function toggleImportBrief(el){
+  const key='import:説明書';
+  const a=closedGroups(); const i=a.indexOf(key);
+  const willClose=i<0;
+  if(willClose) a.push(key); else a.splice(i,1);
+  save();
+  const body=el.nextElementSibling;
+  if(body) body.style.display=willClose?'none':'';
+  const caret=el.querySelector('svg.caret');
+  if(caret) caret.classList.toggle('open', !willClose);
+}
 // 説明書が使う見出し語。「#」が落ちた行をこれと突き合わせて見出しに戻す
 const BARE_HEADINGS=/^(指標|業績推移|ざっくりまとめ|分析|注目ポイント|メモ|リマインダー|回答フォーマット)$/;
 function parseMd(text){
