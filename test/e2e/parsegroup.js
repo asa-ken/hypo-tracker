@@ -3,11 +3,15 @@
 // 並び順から読み取れなかった(ユーザー指摘: 「画面が縦長すぎる且つセクションの並びに意図見えない」)。
 //
 // ユーザー指定の3区分・作業順に整理する。
-//   1. 取り込み前に確認してください … 似た指標 / 該当セクション不明 / 読めなかった行
+//   1. 取り込み前に確認してください … 似た指標 / 読めなかった行
 //   2. 取り込むリマインダー/メモを選択してください … リマインダー / メモ候補
-//   3. 読み込み内容を確認してください … 読み込みプレビュー
+//   3. 読み込み内容を確認してください … 読み込みプレビュー(該当セクション不明の行も含む)
 // 各区分は開閉でき(困ったときは等と同じ .sec)、中身が無い区分は出さない。
 // 区分2(メモ候補は「＋追加」が常にあるため)だけは常に表示する
+//
+// 追記(2026-08-10、ユーザー指摘): 該当セクション不明はチェックボックスで選んで取り込む
+// 保留項目だったが、「その他」として常に取り込んだ上で読み込みプレビュー(区分3)に赤地行として
+// 出す形に変更した。区分1からは該当セクション不明の表示が無くなった
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -46,7 +50,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     '取り込み前に確認してください', '取り込むリマインダー/メモを選択してください', '読み込み内容を確認してください',
   ]), h1);
 
-  // ---- 2. 区分1の中身: 似た指標・該当セクション不明が入っている ----
+  // ---- 2. 区分1の中身: 似た指標が入っている。該当セクション不明はもう区分1に出ない ----
   const grp1 = await p.evaluate(() => {
     const head = [...document.querySelectorAll('#parseOut .sec > .h')].find(x => /取り込み前に確認してください/.test(x.textContent));
     const body = head.closest('.sec').querySelector(':scope > .b');
@@ -55,7 +59,22 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
       text: body.textContent,
     };
   });
-  ok('区分1に該当セクション不明の行が入っている', /該当セクションが見つからない/.test(grp1.text), grp1);
+  ok('区分1に該当セクション不明の行はもう入らない', !/該当セクションが見つからない/.test(grp1.text), grp1);
+  ok('区分1には似た指標の警告が入る', /似た名前の指標があります/.test(grp1.text), grp1);
+
+  // ---- 2b. 該当セクション不明は区分3のプレビュー表に赤地行として入る ----
+  const orphanRow = await p.evaluate(() => {
+    const head = [...document.querySelectorAll('#parseOut .sec > .h')].find(x => /読み込み内容を確認してください/.test(x.textContent));
+    const body = head.closest('.sec').querySelector(':scope > .b');
+    const tr = body.querySelector('tr.orphanrow');
+    return {
+      hasOrphanRow: !!tr,
+      text: tr ? tr.textContent.replace(/\s+/g, ' ').trim() : '',
+      hasLegend: /既存指標に該当せず/.test(body.textContent),
+    };
+  });
+  ok('区分3に該当セクション不明の行が赤地行として入る', orphanRow.hasOrphanRow, orphanRow);
+  ok('凡例に「既存指標に該当せず」が出る', orphanRow.hasLegend, orphanRow);
 
   // ---- 3. 区分2の中身: リマインダー候補・メモ候補が入っている ----
   const grp2 = await p.evaluate(() => {

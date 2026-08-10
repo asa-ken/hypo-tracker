@@ -210,6 +210,8 @@
   .val-dn{color:var(--red-tx); font-weight:700;}
   .val-old{color:var(--ink3); text-decoration:line-through;}
   tr.newrow td{background:var(--green-bg);}
+  /* 該当セクションが見つからない行(「その他」として取り込む)を赤地で示す。既存トークンの再利用 */
+  tr.orphanrow td{background:var(--red-bg);}
   /* 3列だと1セル約95pxしかなく、指標名がほぼ必ず2〜3行に折り返して読めなかったので2列にする */
   .metric{display:grid; grid-template-columns:1fr 1fr; gap:var(--sp2);}
   .metric .m{background:var(--app); border:1px solid var(--line); border-radius:9px; padding:8px 10px;}
@@ -327,7 +329,6 @@
   .metwarn .r{background:var(--card); border-radius:8px; padding:7px 9px; margin-top:7px;}
   .metwarn .r .n{font-size:13px; font-weight:700;}
   .metwarn .r .s{font-size:11px; color:var(--amber-tx); margin-top:2px;}
-  .metwarn .r .s.plain{color:var(--ink3);}
   .metwarn .d{font-size:11px; color:var(--amber-tx); margin-top:9px; line-height:1.5;}
   /* 取り込みプレビューの中でリマインダーにするかを決める欄 */
   .rembox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:11px;}
@@ -379,6 +380,7 @@
   .dbody.open2{display:block !important;}
   .d-del{text-decoration:line-through; color:var(--ink3);}
   .d-add{color:#1257a8; font-weight:600;}
+  .d-orphan{color:var(--red-tx); font-weight:600;}
   .difflegend{font-size:11px; color:var(--ink3); margin:2px 0 6px;}
   .difflegend span{margin-right:9px;}
   .swipe{position:relative; overflow:hidden;}
@@ -1758,20 +1760,25 @@ function newMetricsBox(newMets){
   if(!newMets.length) return '';
   window._newMets=newMets;
   const near=newMets.filter(x=>x.near);
-  // 似た既存名が無いなら、単に指標が増えるだけ。警告の見た目にはしない
-  if(!near.length){
-    return `<div class="muted" style="margin:-2px 0 10px;font-size:11px">新しい指標が ${newMets.length}件 増えます: ${esc(newMets.map(x=>x.name).join(' / '))}</div>`;
+  const plain=newMets.filter(x=>!x.near);
+  // 以前は1件でも似た指標があれば、似ていない新規指標も同じ警告箱に混ぜて出していた。
+  // 見出しの件数(near.length)と箱の中身(newMets全体)が食い違い、「似た指標はありません」の行が
+  // 「似た名前の指標が増えます」という見出しの下に出て紛らわしかった(ユーザー指摘、2026-08-10)。
+  // 似た指標がある行だけをこの箱に入れ、無い行は下の控えめな告知に分ける
+  let h='';
+  if(near.length){
+    h+=`<div class="metwarn"><div class="t">${warnIcon()} 似た名前の指標があります (${near.length})</div>`;
+    h+=`<div class="d" style="margin-top:2px">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div>`;
+    near.forEach(x=>{
+      h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>
+        <div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div></div>`;
+    });
+    h+=`<button class="btn sm" style="margin-top:8px" onclick="copyMetFix()">表記をそろえる指示をコピー</button></div>`;
   }
-  let h=`<div class="metwarn"><div class="t">${warnIcon()} 似た名前の指標が増えます (${near.length})</div>`;
-  newMets.forEach(x=>{
-    h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>`;
-    h+= x.near
-      ? `<div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div>`
-      : `<div class="s plain">似た指標はありません</div>`;
-    h+='</div>';
-  });
-  h+=`<div class="d">同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください(このまま読み込むこともできます)。</div>
-    <button class="btn sm" style="margin-top:8px" onclick="copyMetFix()">表記をそろえる指示をコピー</button></div>`;
+  // 似た既存名が無いなら、単に指標が増えるだけ。警告の見た目にはしない
+  if(plain.length){
+    h+=`<div class="muted" style="margin:${near.length?'8px':'-2px'} 0 10px;font-size:11px">新しい指標が ${plain.length}件 増えます: ${esc(plain.map(x=>x.name).join(' / '))}</div>`;
+  }
   return h;
 }
 function copyMetFix(){
@@ -1853,12 +1860,10 @@ function parseAndPreview(){
   // 新しく増える指標の告知。取り込みは止めない(既定のまま読み込めば追加される)。
   // 似た名前が既にある場合だけ、その名前を名指しして外部AI側の修正へ誘導する
   grp1+=newMetricsBox(newMets);
-  if(p.rows.length && orphans.length){
-    grp1+=`<div class="failbox" style="background:var(--red-bg)"><div class="t" style="color:var(--red-tx)">⚠ 該当セクションが見つからない行 (${orphans.length})</div>
-      <div class="muted" style="font-size:11px;color:var(--red-tx);margin:3px 0 6px">下記はどのセクションにも紐づきません。取り込むにはチェックしてください(取り込む場合は「その他」として保存されます)。</div>`;
-    orphans.forEach((r,i)=>{ grp1+=`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0"><input type="checkbox" style="width:auto;margin:3px 0 0 0" id="orp${i}"><label for="orp${i}" class="l" style="flex:1;cursor:pointer">${esc(r.key)}: ${esc(r.value.slice(0,60))}…</label></div>`; });
-    grp1+='</div>';
-  }
+  // 該当セクション不明の行は、以前はここでチェックを入れないと取り込まれない「保留」項目だった。
+  // 「その他」として常に取り込んだ上で、赤地の行として読み込みプレビュー(区分3)に出す形に変更した
+  // (ユーザー指示、2026-08-10)。判断の場所を「取り込むかどうかのチェックボックス」から
+  // 「取り込んだ結果をプレビューで確認する」に移した
   if(p.failed.length){
     grp1+=`<div class="failbox"><div class="t">読めなかった行 (${p.failed.length})</div>`;
     p.failed.forEach(l=>grp1+=`<div class="l">${esc(l)}</div>`);
@@ -1871,18 +1876,22 @@ function parseAndPreview(){
   let grp2='';
   // 日付つきの注目ポイントを、その場でリマインダーにするか決める
   grp2+=remPickBox(okRows);
-  // メモ候補(見出し・箇条書きに当てはまらなかった自由文。動的に追加・削除・編集できる)
+  // メモ候補(見出し・箇条書きに当てはまらなかった自由文)。個別銘柄のメモ・注目ポイントと
+  // 同じ見せ方(表示のみ・3行で畳む・タップで全文・スワイプで削除)にする。
+  // 新しく書き足す分だけは別枠(#memoCandNew)の入力欄で扱う
   grp2+='<div class="lbl">メモ候補</div>';
-  if(p.memoCandidates.length) grp2+='<div class="hint" style="margin:-4px 0 6px">フォーマットに当てはまらなかった文章です。不要なものは×で消し、書き足したい内容は追加できます。</div>';
+  if(p.memoCandidates.length) grp2+='<div class="hint" style="margin:-4px 0 6px">フォーマットに当てはまらなかった文章です。不要なものはスワイプで消し、書き足したい内容は追加できます。</div>';
   else grp2+='<div class="muted" style="padding:0 2px 6px">今回はありません。</div>';
-  grp2+='<div id="memoCandList">'+p.memoCandidates.map(t=>memoCandField(t)).join('')+'</div>';
+  if(p.memoCandidates.length) grp2+='<div id="memoCandList" class="list cards">'+p.memoCandidates.map(t=>memoCandView(t)).join('')+'</div>';
+  grp2+='<div id="memoCandNew"></div>';
   grp2+='<button class="btn sm" onclick="addMemoCandidateField()">＋ メモ候補を追加</button>';
   // メモ候補は「＋追加」で解析結果が空でも書き足せるので、区分2は常に出す
   h+=parseGroup('取り込むリマインダー/メモを選択してください', grp2);
 
   // ---- 区分3: 読み込み内容を確認してください(読み込みプレビュー) ----
   if(p.rows.length){
-    let grp3='<div class="difflegend"><span>セルをタップで全文表示</span><span class="d-del">削除される部分</span><span class="d-add">新しく追加される部分</span></div>';
+    let grp3='<div class="difflegend"><span>セルをタップで全文表示</span><span class="d-del">削除される部分</span><span class="d-add">新しく追加される部分</span>'
+      +(orphans.length?'<span class="d-orphan">既存指標に該当せず</span>':'')+'</div>';
     grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
@@ -1926,6 +1935,14 @@ function parseAndPreview(){
         <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${beforeHtml}</div></td>
         <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${afterHtml}</div></td></tr>`;
     });
+    // 該当セクション不明の行も「その他」として取り込んだ状態で、赤地の行として並べる
+    // (commitImport側もチェックボックス無しで常に取り込む。上のdifflegendに凡例を出している)
+    orphans.forEach(r=>{
+      const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ';
+      grp3+=`<tr class="orphanrow"><td>${esc(nm)}<div class="muted" style="font-size:11px">その他 · 新規</div></td>
+        <td><span class="muted">—</span></td>
+        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${esc(r.value)}</div></td></tr>`;
+    });
     grp3+='</table></div>';
     window._orphans=orphans;
     const sameCnt=okRows.filter(r=>r._skip).length;
@@ -1939,15 +1956,30 @@ function parseAndPreview(){
   window._parsed=p;
   out.innerHTML=h;
 }
-function memoCandField(text){
+// 解析で見つかったメモ候補は「読む・要不要を決める」対象であって、その場で書き換える対象ではない。
+// 個別銘柄のメモ・注目ポイントと同じ見せ方(スワイプで削除)・同じ畳み方(読み込みプレビューと同じ
+// clip3、タップで全文表示)に揃える(ユーザー指摘、2026-08-10)。編集はできなくなるが、
+// 元々ここは「AIの応答から拾った文をそのまま持ち込むかどうか」を決める場であり、
+// 書き換えたい内容は貼り付け文(#mdIn)側を直すのが筋なので実用上の後退ではないと判断した
+function memoCandView(text){
+  return `<div class="swipe">
+    <div class="list-row" style="align-items:flex-start;cursor:pointer" onclick="showCell(this)">
+      <div class="lt"><div class="clip3" style="font-size:13px;white-space:pre-wrap">${esc(text)}</div></div>
+    </div>
+    <button class="del-btn" onclick="this.closest('.swipe').remove()">削除</button>
+  </div>`;
+}
+// 「＋ メモ候補を追加」は解析結果に無い内容をゼロから書く行為なので、
+// こちらは引き続き入力欄(テキストエリア)のまま、表示専用の一覧(#memoCandList)とは別に置く
+function memoCandEditField(text){
   return `<div class="mc-item" style="position:relative;margin-bottom:8px">
     <textarea class="mc-text" style="min-height:52px;padding-right:34px">${esc(text)}</textarea>
     <span class="del" style="position:absolute;top:8px;right:10px;cursor:pointer" onclick="this.closest('.mc-item').remove()">×</span>
   </div>`;
 }
 function addMemoCandidateField(){
-  const list=$('#memoCandList'); if(!list) return;
-  list.insertAdjacentHTML('beforeend', memoCandField(''));
+  const list=$('#memoCandNew'); if(!list) return;
+  list.insertAdjacentHTML('beforeend', memoCandEditField(''));
 }
 function commitImport(){
   const p=window._parsed; if(!p){toast('読み込む内容がありません');return;}
@@ -1955,11 +1987,17 @@ function commitImport(){
   if(!p.stock){ const pickEl=$('#importStockPick'); const picked=stock((pickEl&&pickEl.value)||STATE._importPick); if(picked) p.stock={name:picked.name, code:picked.id}; }
   if(!p.stock){toast('対象の銘柄を選んでください');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
-  const memoTexts=[...document.querySelectorAll('#memoCandList .mc-text')].map(ta=>ta.value.trim()).filter(Boolean);
+  // メモ候補は「解析で見つかった分(表示専用、スワイプで削除済みのものは除かれる)」+
+  // 「＋追加で書き足した分(入力欄)」の両方を合わせて取り込む
+  const memoTexts=[
+    ...[...document.querySelectorAll('#memoCandList .clip3')].map(d=>d.textContent.trim()),
+    ...[...document.querySelectorAll('#memoCandNew .mc-text')].map(ta=>ta.value.trim()),
+  ].filter(Boolean);
   if(!p.rows.length && !memoTexts.length){ toast('取り込む内容がありません'); return; }
   const newWatchWithEvent=[];
-  // 該当なし行: チェックされたものだけ「その他」カテゴリへ
-  (window._orphans||[]).forEach((r,i)=>{ const cb=document.getElementById('orp'+i); if(cb&&cb.checked){ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),details:[]}; } });
+  // 該当なし行は「その他」カテゴリへ常に取り込む(以前はチェックボックスで選んだ分だけだったが、
+  // 読み込みプレビューに赤地行として出し、常に取り込んだ状態で見せる形に変更した。2026-08-10)
+  (window._orphans||[]).forEach(r=>{ let oc=DB.sectionMaster.find(c=>c.cat==='その他'); if(!oc){ oc={cat:'その他',on:true,subs:[]}; DB.sectionMaster.push(oc);} const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ'; if(!oc.subs.includes(nm)) oc.subs.push(nm); s.sections[nm]={t:(r._res?r._res.value:r.value),d:normD(r.d),details:[]}; });
   p.rows.forEach(r=>{
     if(r._res&&!r._res.sub) return;
     if(r._skip){ // 内容が同じ → 鮮度(取得日)のみ更新
@@ -2015,7 +2053,7 @@ function commitImport(){
       if(ed && (autoRemindOn()||remPickOn(r))) newWatchWithEvent.push({id:hid, text:r.value, eventDate:ed});
     }
   });
-  // メモ候補: 画面上で編集・追加・削除された内容をそのまま取り込む(memoTextsは冒頭で採取済み)
+  // メモ候補: 解析結果からスワイプで消さなかった分と、追加で書き足した分を取り込む(memoTextsは冒頭で採取済み)
   memoTexts.forEach(t=>{ DB.hypotheses.push({id:'h'+Date.now()+Math.random().toString(36).slice(2,8), stockId:s.id, kind:'memo', text:t}); });
   save();
   // 選んだ分はここでリマインダーにしてしまう。読み込んだ後に登録シートを出すと、
