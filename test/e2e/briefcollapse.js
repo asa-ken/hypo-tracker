@@ -159,6 +159,40 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     nested.outer && nested.inner && nested.inner.fontSize < nested.outer.fontSize, nested);
   ok('「説明書の中身を見る」は①と違う(薄い)文字色', nested.outer && nested.inner && nested.inner.color !== nested.outer.color, nested);
 
+  // ---- 10. バグ修正: ①が開いていても「説明書の中身を見る」自体の開閉ボタンが機能する ----
+  // .sec .b / .sec.open .b が子孫セレクタだと、外側①の.sec.openが内側(入れ子)の.h/.bにも
+  // 一致してしまい、内側を畳んでも外側が開いている限り中身が強制的に見えたままになる
+  // (ユーザー報告: 「説明書を見る展開ボタンが機能してない」)。.sec > .h / .sec > .b(直下)に
+  // 絞ることで、内側の開閉が外側の状態に引きずられないことを検証する
+  await p.evaluate(() => {
+    // ①を確実に開いた状態にする
+    const outer = [...document.querySelectorAll('#view .sec')].find(s => /① /.test(s.querySelector(':scope > .h').textContent));
+    if (!outer.classList.contains('open')) outer.querySelector(':scope > .h').click();
+  });
+  await p.waitForTimeout(150);
+  const nestedState = () => p.evaluate(() => {
+    const innerH = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /説明書の中身を見る/.test(x.textContent));
+    const innerSec = innerH.closest('.sec');
+    const innerB = innerSec.querySelector(':scope > .b');
+    return { open: innerSec.classList.contains('open'), bodyVisible: getComputedStyle(innerB).display !== 'none' };
+  });
+  const beforeToggle = await nestedState();
+  ok('①が開いていても、中身を見るは最初は閉じている(外側に引きずられない)', !beforeToggle.open && !beforeToggle.bodyVisible, beforeToggle);
+  await p.evaluate(() => {
+    const innerH = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /説明書の中身を見る/.test(x.textContent));
+    innerH.click();
+  });
+  await p.waitForTimeout(150);
+  const afterOpen = await nestedState();
+  ok('中身を見るをタップすると開く(展開ボタンが機能する)', afterOpen.open && afterOpen.bodyVisible, afterOpen);
+  await p.evaluate(() => {
+    const innerH = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /説明書の中身を見る/.test(x.textContent));
+    innerH.click();
+  });
+  await p.waitForTimeout(150);
+  const afterClose = await nestedState();
+  ok('もう一度タップすると畳める', !afterClose.open && !afterClose.bodyVisible, afterClose);
+
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
 })();

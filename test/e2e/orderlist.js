@@ -1,6 +1,10 @@
 // 「調べる項目を選ぶ」シート(sheetOrderNew)の項目一覧は、以前は独自の .row(枠線・余白が
 // トークン外)を使っていた。リマインダー一覧・市場銘柄分析など他画面と同じ「.lbl見出し + .list」の
-// 階層デザインに揃える(ユーザー指摘、2026-08-10)。機能(選択サイクル)自体は変えていない
+// 階層デザインに揃える(ユーザー指摘、2026-08-10)。機能(選択サイクル)自体は変えていない。
+//
+// 追記(同日、ユーザー指摘): カテゴリ数が多いと項目も多くなるため、見出しに矢尻の展開ボタンを付けて
+// 畳めるようにした。銘柄詳細の分析カテゴリの「+/×」とは別の意味(タップで編集シートを開くわけではない
+// 単なる選択一覧)なので、①・困ったときはと同じ矢尻(caretSvg)を使う。既定は展開状態
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -47,6 +51,36 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.waitForTimeout(150);
   const after = await p.evaluate(() => document.querySelector('#sheet .list.flat .list-row button').textContent.trim());
   ok('ボタンを押すと選択状態がサイクルする(回帰)', before === '選択' && after === '要点のみ', { before, after });
+
+  // ---- 4. カテゴリ見出しに矢尻の展開ボタンが付いている ----
+  const caretInfo = await p.evaluate(() => {
+    const secs = [...document.querySelectorAll('#sheet .sec')];
+    return {
+      secCount: secs.length,
+      allHaveCaret: secs.every(s => !!s.querySelector(':scope > .h svg.caret')),
+      allInitiallyOpen: secs.every(s => s.classList.contains('open')
+        && getComputedStyle(s.querySelector(':scope > .b')).display !== 'none'),
+    };
+  });
+  ok('カテゴリごとに.secがある(テスト前提)', caretInfo.secCount > 0, caretInfo);
+  ok('カテゴリ見出しに矢尻(caret)が付いている', caretInfo.allHaveCaret, caretInfo);
+  ok('既定ではすべて展開されている', caretInfo.allInitiallyOpen, caretInfo);
+
+  // ---- 5. 矢尻をタップすると畳める・再タップで開く ----
+  await p.evaluate(() => document.querySelectorAll('#sheet .sec > .h')[0].click());
+  await p.waitForTimeout(150);
+  const closed = await p.evaluate(() => {
+    const sec = document.querySelectorAll('#sheet .sec')[0];
+    return { open: sec.classList.contains('open'), bodyVisible: getComputedStyle(sec.querySelector(':scope > .b')).display !== 'none' };
+  });
+  ok('タップで畳める', !closed.open && !closed.bodyVisible, closed);
+  await p.evaluate(() => document.querySelectorAll('#sheet .sec > .h')[0].click());
+  await p.waitForTimeout(150);
+  const reopened = await p.evaluate(() => {
+    const sec = document.querySelectorAll('#sheet .sec')[0];
+    return { open: sec.classList.contains('open'), bodyVisible: getComputedStyle(sec.querySelector(':scope > .b')).display !== 'none' };
+  });
+  ok('再タップで開く', reopened.open && reopened.bodyVisible, reopened);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
