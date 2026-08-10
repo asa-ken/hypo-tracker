@@ -3091,7 +3091,11 @@ function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=
 // 複数リマインダーの確認プロンプトを1つのテキストにまとめる。期限切れ・今日どちらのコピーからも使う
 function briefText(rs){ return '確認事項を番号ごとに回答してください。\n\n'+rs.map((r,i)=>`${i+1}) ${r.title}\n${activePrompt(r).text}`).join('\n\n'); }
 // コピーの対象は「今日発火するもの」だけに絞る。期限切れ・今週の予定はここには含めない(それぞれ別のコピー関数を持つ)
-function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&firesToday(r)&&activePrompt(r).text); if(!rs.length){toast('今日のリマインダーはありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
+// 一括コピーの文字ボタンは今日発火するものが1件以上あるときしか出ないため、
+// ここで rs.length===0 になるのは「今日の区分自体が空」ではなく
+// 「今日の項目はあるがプロンプト未設定でコピーできる文面が無い」ときだけ。
+// 銘柄で絞った copyBriefFor と同じ「コピーできる確認事項がありません」に揃える
+function copyBrief(){ const rs=DB.reminders.filter(r=>!r.paused&&firesToday(r)&&activePrompt(r).text); if(!rs.length){toast('コピーできる確認事項がありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
 // 銘柄・市場ごとにチャットを分けている場合の分割コピー。対象を1つに絞る以外はcopyBriefと同じ
 function copyBriefFor(sid){
   const s=stock(sid);
@@ -3100,7 +3104,9 @@ function copyBriefFor(sid){
   copy(briefText(rs),(s?s.name+'の':'')+'確認プロンプトをコピーしました。AIに貼り付けてください');
 }
 // 期限切れ(次回発火が計算できない)リマインダーのコピー。copyBrief/copyBriefForと対になる
-function copyExpired(){ const rs=DB.reminders.filter(r=>!r.paused&&!firesToday(r)&&!calcNextFire(r)&&activePrompt(r).text); if(!rs.length){toast('期限切れのリマインダーはありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
+// 同様に、期限切れの一括コピーが押せるのは期限切れが1件以上あるときだけなので、
+// ここでの0件は「プロンプト未設定でコピーできる文面が無い」ときだけ。同じ文言に揃える
+function copyExpired(){ const rs=DB.reminders.filter(r=>!r.paused&&!firesToday(r)&&!calcNextFire(r)&&activePrompt(r).text); if(!rs.length){toast('コピーできる確認事項がありません');return;} copy(briefText(rs),'確認プロンプトをコピーしました。AIに貼り付けてください'); }
 function copyExpiredFor(sid){
   const s=stock(sid);
   const rs=DB.reminders.filter(r=>!r.paused&&r.stockId===sid&&!firesToday(r)&&!calcNextFire(r)&&activePrompt(r).text);
