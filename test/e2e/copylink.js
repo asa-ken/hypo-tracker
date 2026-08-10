@@ -1,12 +1,16 @@
 // ホームの銘柄別コピーは、バッジ(chip)ではなく個別リマインダー画面と同じ
-// 「⧉ コピー」の細字テキストリンクにすること
+// アイコン付き細字テキストリンクにすること
 //
 // 最初は件数を chip(バッジ)自体に持たせてタップ対象にしたが、それだと
 // 市場・銘柄分析トップ等の情報表示専用バッジと同じ見た目のものに、画面によって
 // 操作があったり無かったりすることになるため撤回した(2026-08-09 DECISIONS.md)。
 // 件数はバッジにせず、行の文字情報(.meta)の中で「元の表現」どおり伝える。
-// コピーは、枠なし・細字(通常の太さ)・個別リマインダー画面と同じ「⧉」アイコンつきの
+// コピーは、枠なし・細字(通常の太さ)・個別リマインダー画面と同じアイコンつきの
 // テキストリンクとして置く。区分見出しの一括コピーも同じアイコン・同じ細さに揃える。
+//
+// アイコンは元は「⧉」の文字グリフだったが、奥・手前どちらの四角も輪郭のみで
+// 塗りが無く軽すぎるとの指摘を受け、SVGアイコン(copyIconSvg())に差し替えた。
+// 奥の四角は輪郭のみ、手前の四角は塗りつぶし(currentColor)。
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -54,11 +58,13 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     return rows.map(r => {
       const link = r.querySelector('.copylink');
       const st = link ? getComputedStyle(link) : null;
+      const icon = link ? link.querySelector('svg.copy-ic') : null;
+      const rects = icon ? [...icon.querySelectorAll('rect')].map(rc => getComputedStyle(rc).fill) : [];
       return { meta: r.querySelector('.meta') ? r.querySelector('.meta').textContent.trim() : null,
         hasChip: !!r.querySelector('.chip'), hasBtn: !!r.querySelector('button'),
         linkText: link ? link.textContent.trim() : null, linkOn: link ? link.getAttribute('onclick') : null,
         fontWeight: st ? st.fontWeight : null, border: st ? st.borderWidth : null, bg: st ? st.backgroundColor : null,
-        h: link ? Math.round(link.getBoundingClientRect().height) : 0 };
+        h: link ? Math.round(link.getBoundingClientRect().height) : 0, hasIcon: !!icon, rectFills: rects };
     });
   });
   ok('今日は2銘柄の行がある(テスト前提)', multiRows.length === 2, multiRows);
@@ -69,7 +75,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('コピーは枠なし(border 0)のテキストリンク', multiRows.every(r => parseFloat(r.border) === 0), multiRows);
   ok('コピーの地色も付かない', multiRows.every(r => r.bg === 'rgba(0, 0, 0, 0)' || r.bg === 'transparent'), multiRows);
   ok('コピーは太字にしない(通常の太さ)', multiRows.every(r => +r.fontWeight <= 400), multiRows);
-  ok('コピーは「⧉ コピー」(個別リマインダー画面と同じアイコン)', multiRows.every(r => r.linkText === '⧉ コピー'), multiRows);
+  ok('コピーは「コピー」の文字とアイコンで構成される', multiRows.every(r => r.linkText === 'コピー' && r.hasIcon), multiRows);
+  ok('アイコンは奥・手前の四角2つで構成される(テスト前提)', multiRows.every(r => r.rectFills.length === 2), multiRows);
+  ok('奥の四角は輪郭のみ(塗りは透過のまま)', multiRows.every(r => r.rectFills[0] === 'none'), multiRows);
+  ok('手前の四角は塗りつぶし(透過にしない)', multiRows.every(r => r.rectFills[1] !== 'none' && r.rectFills[1] !== 'rgba(0, 0, 0, 0)'), multiRows);
   ok('コピーのタップ領域は44px以上', multiRows.every(r => r.h >= 44), multiRows);
   ok('コピーに copyBriefFor が仕込まれている', multiRows.every(r => /copyBriefFor/.test(r.linkOn || '')), multiRows);
 
@@ -96,9 +105,12 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     const l = [...document.querySelectorAll('#view .lbl.grp')].find(x => /今日のリマインダー/.test(x.textContent));
     const btn = l.querySelector('.grp-edit');
     const st = getComputedStyle(btn);
-    return { text: btn.textContent.trim(), fontWeight: st.fontWeight, on: btn.getAttribute('onclick') };
+    const icon = btn.querySelector('svg.copy-ic');
+    const rects = icon ? [...icon.querySelectorAll('rect')].map(rc => getComputedStyle(rc).fill) : [];
+    return { text: btn.textContent.trim(), fontWeight: st.fontWeight, on: btn.getAttribute('onclick'), hasIcon: !!icon, rectFills: rects };
   });
-  ok('見出しの一括コピーは「⧉ 一括コピー」', head.text === '⧉ 一括コピー', head.text);
+  ok('見出しの一括コピーは「一括コピー」とアイコンで構成される', head.text === '一括コピー' && head.hasIcon, head.text);
+  ok('見出しのアイコンも手前の四角が塗りつぶし', head.rectFills[1] !== 'none' && head.rectFills[1] !== 'rgba(0, 0, 0, 0)', head.rectFills);
   ok('見出しの一括コピーも細字(「編集」「追加」等の太字とは別)', +head.fontWeight <= 400, head.fontWeight);
   ok('押すと区分ぜんぶをコピーする', /copyBrief\(\)/.test(head.on || ''), head.on);
 

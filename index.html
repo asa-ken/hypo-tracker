@@ -73,6 +73,7 @@
      コピーのような軽い操作は、個別リマインダー画面の「⧉ コピー」と同じ、
      枠なし・細字(通常太さ)のテキストリンクにする */
   .copylink{display:inline-flex; align-items:center; gap:var(--sp1); min-height:44px; padding:0 4px; color:var(--navy); font-size:12px; font-weight:400; cursor:pointer;}
+  .copy-ic{width:0.95em; height:0.95em; flex:none;}
   .muted{color:var(--ink3); font-size:12px;}
   /* 画面の区切り。以前は11pxのグレーで本文より弱く、どこからどこまでが一塊か読み取れなかった */
   .lbl{font-size:12px; color:var(--ink2); font-weight:700; letter-spacing:.02em; margin:20px 0 8px;}
@@ -94,7 +95,7 @@
       ・編集も44pxの枠を持たせ、その間に16px空ける
       ・間の余白は見出し側の判定に入る。押し間違えても、開くだけで済むほうへ倒す */
   .lbl.grp .grp-right{display:inline-flex; align-items:center; gap:16px; flex:none;}
-  .lbl.grp .grp-edit{color:var(--navy); font-weight:600; display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0 8px;}
+  .lbl.grp .grp-edit{color:var(--navy); font-weight:600; display:inline-flex; align-items:center; justify-content:center; gap:var(--sp1); min-width:44px; min-height:44px; padding:0 8px;}
   /* 「編集」「追加」等の太字はそのままに、ホームの一括コピーだけ細字(通常の太さ)にする */
   .lbl.grp .grp-edit.thin{font-weight:400; font-size:12px;}
   .lbl.grp .grp-caret{display:inline-flex; align-items:center; justify-content:flex-end; width:44px; min-height:44px;}
@@ -882,7 +883,7 @@ function renderHome(v){
     ['home:今日のリマインダー', `今日のリマインダー (${todayRem.length})`, actionCard(todayRem,'copyBriefFor'), todayRem.length?'copyBrief()':null],
     ['home:期限切れ', `期限切れ (${expiredRem.length})`, actionCard(expiredRem,'copyExpiredFor'), expiredRem.length?'copyExpired()':null],
     ['home:今週の予定', `今週の予定 (${upcoming.length})`, sched, null],
-  ].map(g=>g[3]?groupBlockWithEdit(g[0], g[1], g[3], g[2], '⧉ 一括コピー', 'thin'):groupBlock(g[0], g[1], g[2])).join('');
+  ].map(g=>g[3]?groupBlockWithEdit(g[0], g[1], g[3], g[2], copyIconSvg()+'<span class="txt">一括コピー</span>', 'thin'):groupBlock(g[0], g[1], g[2])).join('');
   v.innerHTML=h;
 }
 // 期限切れ・今日のリマインダーの中身を、市場・銘柄分析トップや銘柄詳細の分析セクションと
@@ -913,7 +914,7 @@ function actionCard(list, perStockCopyFn){
       ${stockIds.map(sid=>{ const g=groups[sid]; const sn=stock(sid);
         return `<div class="list-row" onclick="${reach(g, sid)}">
           <div class="lt"><div class="ttl">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${g.length}件・${esc(g[0].title)}${g.length>1?' ほか':''}</div></div>
-          <span class="copylink" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">⧉ コピー</span>
+          <span class="copylink" onclick="event.stopPropagation();${perStockCopyFn}('${sid}')">${copyIconSvg()}<span class="txt">コピー</span></span>
         </div>`; }).join('')}
     </div>`;
 }
@@ -935,6 +936,11 @@ function plusSvg(){
 function caretSvg(closed){
   return `<svg class="caret${closed?'':' open'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 }
+// コピー操作のアイコン。奥の四角は輪郭のみ、手前の四角は塗りつぶし(currentColor)にする。
+// 文字と同じ .copylink / .grp-edit / .btn.sm から使うため、色は常に親のテキスト色を継承する
+function copyIconSvg(){
+  return `<svg class="copy-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1" y="1" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect class="copy-ic-front" x="5" y="5" width="10" height="10" rx="1.5" fill="currentColor"/></svg>`;
+}
 function toggleGroup(key){
   const a=closedGroups(); const i=a.indexOf(key);
   if(i<0) a.push(key); else a.splice(i,1);
@@ -955,7 +961,7 @@ function groupBlockWithEdit(key, label, editAction, contentHtml, editLabel, edit
   const closed=groupClosed(key);
   return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
       <span>${esc(label)}</span>
-      <span class="grp-right"><span class="grp-edit${editCls?' '+editCls:''}" onclick="event.stopPropagation();${editAction}">${esc(editLabel||'編集')}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
+      <span class="grp-right"><span class="grp-edit${editCls?' '+editCls:''}" onclick="event.stopPropagation();${editAction}">${editLabel||'編集'}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
     </div>`+(closed?'':contentHtml);
 }
 function detailGroupKey(s, label){ return 'detail:'+s.id+':'+label; }
@@ -2093,7 +2099,7 @@ function openReminder(id){
     </div>
     ${actP.text?`<div class="muted mono clip3" style="font-size:11px;white-space:pre-wrap;cursor:pointer" onclick="this.classList.toggle('open')">${esc(actP.text)}</div>
     ${actP.text.length>110?'<div class="muted" style="font-size:11px;margin-top:3px">タップで全文表示</div>':''}
-    <button class="btn sm" style="margin-top:8px" onclick='copy(${JSON.stringify(actP.text)},"プロンプトをコピーしました")'>⧉ コピー</button>`
+    <button class="btn sm" style="margin-top:8px" onclick='copy(${JSON.stringify(actP.text)},"プロンプトをコピーしました")'>${copyIconSvg()}<span class="txt">コピー</span></button>`
     :'<div class="hint">まだありません。リマインドされたときに外部AIへ投げる指示文を書いておけます。</div>'}
   </div>`;
   if((r.changes||[]).some(c=>c.prompt)){ h+=`<div class="muted" style="font-size:11px;margin:-4px 0 8px">※ 頻度変更のタイミングで、確認ポイント(プロンプト)も自動で切り替わります</div>`; }

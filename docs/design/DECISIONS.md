@@ -220,3 +220,11 @@
 - **Evidence:** `test/e2e/splitcopy.js` を、案内文の**不在**を確認する向きに書き換え(単一銘柄時に案内文が出ないことを確認する行は、比較対象の案内文自体が無くなったため削除)。`npm test` 121件、対象スイート(`homeflat homegroup homeorder homereach splitcopy design colortoken contrast a11ytext pendhint remclass homeempty copylink copyhead`)・`npm run e2e` 全59スイート green。
 - **付随修正(設計判断ではない):** 回帰確認の過程で `homegroup.js` `homeorder.js` `homereach.js` `design.js` の4スイートが、本変更と無関係に失敗することを発見した。フィクスチャのリマインダー `r_t2`(頻度「平日」・休止していない)が実行日(平日)に一致し、「今日」区分の件数がテストの期待値とずれるのが原因だった。休止中の `r_t3` は既に対象外だったため影響なし。各テストの `reload()` 直後に `r_t2` を明示的に休止する1行を追加し、実行日に依存しない状態に固定した。設計判断を伴わない、既存テストの前提の穴を塞ぐ修正。
 - **Status:** 採用
+
+### 2026-08-10 — コピーアイコンの手前の四角を塗りつぶしにする
+
+- **Problem:** `.copylink`/`.grp-edit`/個別リマインダー画面のコピーボタンで使っていた「⧉」は文字グリフで、奥・手前どちらの四角も輪郭線のみ(塗りが無い)。ユーザーから「前面の四角が透過しない塗りつぶしにしてみてください」と指摘された。文字グリフは輪郭の太さ・比率をCSSから制御できず、一方の四角だけ塗りを変えることができない。
+- **Decision:** 「⧉」の文字グリフをやめ、`copyIconSvg()`(2つの矩形からなるインラインSVG、`caretSvg()` と同じ構成の関数)に差し替えた。奥の四角(左上)は `fill="none"`(輪郭のみ)のまま、手前の四角(右下)を `fill="currentColor"` の塗りつぶしにする。色は親のテキスト色(`.copylink`は`--navy`、`.btn.sm`は`--ink`)をそのまま継承するので、新しい色を追加していない。
+- **Reason:** 塗り分けはCSSのみでは実現できない(文字グリフには内部要素が無い)ため、SVGへの置き換えが唯一の手段だった。`caretSvg()` という既存の前例に倣い、同じ関数の作り(`viewBox`・`currentColor`・`aria-hidden`)を踏襲して実装の一貫性を保った。
+- **Evidence:** `test/e2e/copylink.js`・`copyhead.js` を、アイコン内の2つの `<rect>` の実効 `fill`(`getComputedStyle`)を見る向きに書き換え、奥の矩形が `none`・手前の矩形が `none`/透過ではないことを検証。修正前(文字グリフ)ではこれらのテストの前提(`svg.copy-ic` の不在)自体が成り立たないことを確認済み。実データで `.copylink`(ホーム)・`.grp-edit`(区分見出し)・`.btn.sm`(個別リマインダー画面)の3箇所をズームスクリーンショットで目視確認し、いずれも手前の四角だけ塗りつぶしになっていることを確認した。`npm test` 121件・`npm run e2e` 全59スイート green。
+- **Status:** 採用
