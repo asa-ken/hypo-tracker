@@ -5,9 +5,12 @@
 // UI_REVIEW_LOOP.md の Stop Conditions は「Phase 1 のスコアカードが揃っていない」を
 // 検査対象に挙げているが、npm test / npm run e2e のどちらもそれ自体を検査していなかった。
 //
-// このスイートは、index.html に変更があるのに DECISIONS.md へ11次元そろったスコアカードが
+// このスイートは、index.html に変更があるのに DECISIONS.md へ12次元そろったスコアカードが
 // 追加されていない状態を機械的に検出する。対象は「UIらしい変更かどうか」を人手で判定させず、
 // index.html への変更すべてとする(判定を人に委ねると同じ形で省略が起きるため)。
+// 12次元目「データ整合性」は2026-08-10に追加(表示文言と実データ・検出結果の論理的整合性を見る次元。
+// DESIGN_SCORECARD.md 参照)。このゲートは各次元の欄が埋まっているかの手続き検査であり、
+// データ整合性の欠陥そのものを自動検出するものではない(観察方法の明文化のみで対応する方針のため)。
 const { execSync } = require('child_process');
 const ROOT = __dirname + '/../..';
 const ok = (label, pass, detail) =>
@@ -19,7 +22,7 @@ const sh = cmd => {
 };
 
 const DIMENSIONS = ['認知負荷', '情報構造', '視覚的ノイズ', '情報密度', 'Typography', 'Spacing',
-  'Hit Area', 'Color', 'Accessibility', '一貫性', '実運用摩擦'];
+  'Hit Area', 'Color', 'Accessibility', '一貫性', '実運用摩擦', 'データ整合性'];
 
 // origin/main を基準にする。ローカルに無ければ一度だけ取得を試みる。
 // それでも参照できない(オフライン等)場合は、判定不能としてチェック自体を素通りさせる
@@ -47,7 +50,7 @@ if (!base) {
     const dimRe = d => new RegExp('\\|\\s*\\*{0,2}' + d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\*{0,2}\\s*\\|');
     const missing = DIMENSIONS.filter(d => !dimRe(d).test(added));
 
-    ok('index.html の変更に対応して DECISIONS.md に11次元そろったスコアカードが追加されている',
+    ok('index.html の変更に対応して DECISIONS.md に12次元そろったスコアカードが追加されている',
       missing.length === 0,
       missing.length ? { base, missing } : { base });
   }
