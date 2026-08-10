@@ -903,12 +903,13 @@ function actionCard(list, perStockCopyFn){
   // 1件だけならリマインダー本体へ直接、複数件なら銘柄で絞ったリマインダー一覧へ送る
   const reach=(rs, sid)=> rs.length===1 ? `openReminder('${rs[0].id}')` : `openRem('${sid}')`;
   // 件数はバッジにせず、行の文字情報(タイトル)の中で表す(元の表現)。
-  // コピーは、個別リマインダー画面の「⧉ コピー」と同じ、枠なし・細字のテキストリンクとして置く
+  // コピーは、個別リマインダー画面の「⧉ コピー」と同じ、枠なし・細字のテキストリンクとして置く。
+  // 一括コピー(見出し)と銘柄別コピー(行)が並んでいれば、何をコピーするかは見ればわかるため、
+  // 使い分けを言葉で説明する案内文は置かない(冗長)
   if(stockIds.length<=1){
     return `<div class="list flat"><div class="list-row" onclick="${reach(list, stockIds[0])}"><div class="lt"><div class="ttl">${esc(list[0].title)}${list.length>1?' ほか':''}</div></div><span class="arrow">›</span></div></div>`;
   }
-  return `<div class="hint" style="margin:0 0 8px 20px">チャットを対象ごとに分けている場合は、対象ごとにコピーできます。</div>
-    <div class="list flat">
+  return `<div class="list flat">
       ${stockIds.map(sid=>{ const g=groups[sid]; const sn=stock(sid);
         return `<div class="list-row" onclick="${reach(g, sid)}">
           <div class="lt"><div class="ttl">${esc(sn?sn.name:'(削除済み)')}</div><div class="meta">${g.length}件・${esc(g[0].title)}${g.length>1?' ほか':''}</div></div>
