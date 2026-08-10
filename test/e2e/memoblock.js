@@ -19,8 +19,11 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     await p.evaluate(t => { document.querySelector('#mdIn').value = t; parseAndPreview(); }, md);
     await p.waitForTimeout(320);
   };
+  // 2026-08-10: メモ候補は表示専用(.clip3)になった(スワイプ削除・タップで全文表示に変更、
+  // 個別銘柄のメモ・注目ポイントと同じ見せ方に揃えたため)。旧来の編集用テキストエリア(.mc-text)は
+  // 解析結果には使われなくなり、「＋追加」で書き足す分だけに残る
   const memos = () => p.evaluate(() =>
-    [...document.querySelectorAll('#memoCandList .mc-text')].map(t => t.value));
+    [...document.querySelectorAll('#memoCandList .clip3')].map(t => t.textContent));
 
   // ---- 説明書にメモの定義が入る ----
   const brief = await p.evaluate(() => briefingText());
