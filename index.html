@@ -108,7 +108,7 @@
   /* 分析の大カテゴリだけは別の記号。閉じているときは＋、開くと45°回って×になる。
      区分見出し(矢尻)の中身であって、開く方向を示す場所ではないので記号を分ける */
   .plusmark{width:22px; height:22px; flex:none; color:var(--ink2); transition:transform .18s, color .18s;}
-  .sec.open .h .plusmark{transform:rotate(45deg); color:var(--navy);}
+  .sec.open > .h .plusmark{transform:rotate(45deg); color:var(--navy);}
   @media (prefers-reduced-motion: reduce){ .plusmark{transition:none;} }
   h2.blk{font-size:13px; font-weight:700; margin:0 0 3px;}
   /* 一覧は「カードを積む」のではなく「1枚の枠に行を並べる」。
@@ -220,14 +220,17 @@
   .metric .m.stale .k,.metric .m.stale .v,.metric .m.stale .d{color:var(--amber-tx);}
   /* 分析の大カテゴリ。一覧の区分見出し(.lbl.grp)と同じ表し方に揃える:
      カードの外枠で囲わず、区分の間に細い線を1本引き、開いた中身は字下げだけで表す */
-  .sec .h{display:flex; justify-content:space-between; align-items:center; min-height:52px; cursor:pointer; user-select:none; font-size:13px; font-weight:700; color:var(--ink); border-top:1px solid var(--line); transition:color .15s;}
-  .sec .h:active{color:var(--navy);}
-  /* .sec はDOMのクラス付け替えだけで開閉する(再描画しない)ので、矢尻の向きはCSS側で持つ */
-  .sec .h .caret{transform:none;}
-  .sec.open .h .caret{transform:rotate(180deg);}
-  .sec .b{display:none; padding:0 0 10px; font-size:13px; color:var(--ink2);}
-  .sec.open .b{display:block;}
-  @media (prefers-reduced-motion: reduce){ .sec .h{transition:none;} }
+  .sec > .h{display:flex; justify-content:space-between; align-items:center; min-height:52px; cursor:pointer; user-select:none; font-size:13px; font-weight:700; color:var(--ink); border-top:1px solid var(--line); transition:color .15s;}
+  .sec > .h:active{color:var(--navy);}
+  /* .sec はDOMのクラス付け替えだけで開閉する(再描画しない)ので、矢尻の向きはCSS側で持つ。
+     子孫セレクタ(.sec .b等)だと、①の中に「説明書の中身を見る」のような入れ子の.secがある場合、
+     外側の.sec.openが内側の.h/.bにも一致してしまい、内側の開閉ボタンが効かなくなる
+     (外側が開いていると内側も強制的に開いた見た目になる)。直下(子)だけに絞って対象を1階層に限定する */
+  .sec > .h .caret{transform:none;}
+  .sec.open > .h .caret{transform:rotate(180deg);}
+  .sec > .b{display:none; padding:0 0 10px; font-size:13px; color:var(--ink2);}
+  .sec.open > .b{display:block;}
+  @media (prefers-reduced-motion: reduce){ .sec > .h{transition:none;} }
   .mine{border-left:3px solid var(--navy); background:var(--navy-bg); border-radius:0 8px 8px 0; padding:9px 11px; margin-top:4px;}
   .mine .row2{font-size:12px; color:var(--navy-tx);} .mine .ts{font-size:11px; color:var(--navy); opacity:.7;}
   /* リマインダーの対象は、そこから元の注目ポイントを直せるようにする。
@@ -2858,12 +2861,15 @@ function sheetOrderNew(sid){
       <span class="chip ${cnt>5?'red':cnt?'navy':'gray'}">選択 ${cnt}</span>
     </div>
     ${cnt>5?`<div class="failbox" style="background:var(--amber-bg);margin-bottom:6px"><div class="t">⚠ 項目が多すぎます (${cnt}件)</div><div class="muted" style="font-size:11px;color:var(--amber-tx)">AIが分割出力する可能性が高く、書式も乱れやすくなります。5件以下に絞ることを強くおすすめします。${deepCnt>3?'<br>特に「深掘り」は文字数が多いため、3件以下が安全です。':''}</div></div>`:''}`;
-  // カテゴリ見出し(plain .lbl)+行のリストという組み立ては、リマインダー一覧・市場銘柄分析と
-  // 同じ「見出し+.list」の階層デザイン。以前は行がここだけの独自 .row(枠線・余白が非トークン)
-  // だったので、他画面と同じ .list.flat(地色・外枠なし)+ .list-row に揃える(ユーザー指摘、2026-08-10)
+  // カテゴリ見出し+行のリストという組み立ては、リマインダー一覧・市場銘柄分析と同じ
+  // 「見出し+.list」の階層デザイン。以前は行がここだけの独自 .row(枠線・余白が非トークン)
+  // だったので、他画面と同じ .list.flat(地色・外枠なし)+ .list-row に揃えた(ユーザー指摘、2026-08-10)。
+  // カテゴリ数が多いと項目も多くなるため、見出しに矢尻を付けて畳めるようにする(ユーザー指摘)。
+  // 銘柄詳細の分析カテゴリは「+/×」記号(タップで編集シートを開く別の意味)だが、
+  // ここは選ぶだけの一覧なので、開閉を表す矢尻(caretSvg、①・困ったときはと同じ)を使う。
+  // 既定は開いた状態(選ぶための一覧なので最初から見えているほうが良い)
   masterFor(s).filter(c=>c.on).forEach((c,ci)=>{
-    h+=`<div class="lbl" style="margin:12px 0 4px">${esc(c.cat)}</div>`;
-    h+='<div class="list flat">';
+    h+=`<div class="sec open"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(c.cat)}</span>${caretSvg(false)}</div><div class="b"><div class="list flat">`;
     c.subs.forEach(su=>{ const st=pk[su]||'off';
       const cur=s?s.sections[su]:null;
       const hasDeep=cur&&cur.details&&cur.details.length;
@@ -2874,7 +2880,7 @@ function sheetOrderNew(sid){
         <div class="lt"><div class="ttl" style="font-weight:400">${esc(su)}${badge}</div></div>
         <button class="btn sm" style="width:auto;padding:4px 9px;font-size:11px;${st!=='off'?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="cyclePick('${sid}','${escArg(su)}')">${st==='off'?'選択':st==='sum'?'要点のみ':'深掘り'}</button>
       </div>`; });
-    h+='</div>';
+    h+='</div></div></div>';
   });
   h+=`<button class="btn pri" style="margin-top:14px" onclick="saveTheme('${sid}');genOrderNew('${sid}')">この内容で質問文を生成</button>
       <button class="btn" style="margin-top:8px" onclick="saveTheme('${sid}');sheetSectionMaster('${sid}','order')">セクションを管理(表示/非表示)</button>
