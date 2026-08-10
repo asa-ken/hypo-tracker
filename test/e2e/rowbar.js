@@ -132,13 +132,23 @@ const noBar = st => st.content === 'none' || parseFloat(st.w || 0) === 0;
   ok('開いた大カテゴリは×になる(45度)', deg(detail.openMark) === 45);
 
   // ---- 7. 取り込み画面の展開エリアも同じ向き ----
+  // 画面内には .sec が複数ある(①・説明書の中身を見る・調べることが思いつかない時は)。
+  // ①は初回訪問時デフォルトで開いているため、必ず閉じた状態から始まる
+  // 「調べることが思いつかない時は」を対象に選ぶ(2026-08-10、①の開閉対応で.sec化)
   const impBefore = await p.evaluate(() => {
     backFromDetail(); go('import');
-    return getComputedStyle(document.querySelector('#view .sec svg.caret')).transform;
+    const sec = [...document.querySelectorAll('#view .sec')].find(s => /調べることが思いつかない時は/.test(s.textContent));
+    return getComputedStyle(sec.querySelector('.h svg.caret')).transform;
   });
-  await p.evaluate(() => document.querySelector('#view .sec').classList.add('open'));
+  await p.evaluate(() => {
+    const sec = [...document.querySelectorAll('#view .sec')].find(s => /調べることが思いつかない時は/.test(s.textContent));
+    sec.classList.add('open');
+  });
   await p.waitForTimeout(400);
-  const imp = { before: impBefore, after: await p.evaluate(() => getComputedStyle(document.querySelector('#view .sec svg.caret')).transform) };
+  const imp = { before: impBefore, after: await p.evaluate(() => {
+    const sec = [...document.querySelectorAll('#view .sec')].find(s => /調べることが思いつかない時は/.test(s.textContent));
+    return getComputedStyle(sec.querySelector('.h svg.caret')).transform;
+  }) };
   ok('取り込み画面も閉=下向き', imp.before === 'none' || /matrix\(1, 0, 0, 1/.test(imp.before));
   ok('取り込み画面も開=上向き', /matrix\(-1, 0, 0, -1/.test(imp.after));
 

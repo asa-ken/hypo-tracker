@@ -5,8 +5,7 @@
 // 同じ「低頻度・補助的な情報」を畳むという意図を持つ「困ったときは」セクションは既に .sec で
 // 開閉できるのに、①だけ開閉できず一貫していなかった(一貫性=1)。
 //
-// 対応: ①を「困ったときは」と同じ低頻度セクションの開閉パターンに揃える。
-// 見た目は②と同じ plain .lbl のまま保ち(ホームの太字区分見出しは使わない)、開閉だけを追加する。
+// 対応: ①を「困ったときは」と同じ .sec / .sec.open の開閉パターンに揃える(2026-08-10、PR#112)。
 // 初回(まだ説明書をコピーしていない)は展開、コピー済みなら次回訪問時から折りたたむ。
 // 情報は削除しない(いつでもタップで再展開・再コピーできる)。
 //
@@ -14,6 +13,11 @@
 // テキストがあると消えてしまう。この画面では既存コードも同じ理由で render() を避け、
 // parseAndPreview() で #parseOut だけを更新している。①の開閉もこれに合わせ、
 // render() を呼ばずDOM操作だけで開閉することを検証する。
+//
+// 2026-08-10 追記(ユーザー指摘): ①②困ったときはの3区分は同格なのに、当初は①②を
+// 軽い .lbl、困ったときはを重い .sec .h と見た目が揃っていなかった。加えて①の中の入れ子
+// 「説明書の中身を見る」が親の①より重く見える階層の逆転も起きていた。
+// ①②困ったときはを同じ重さ(.sec .h相当)に揃え、中身を見るはそれより軽い見た目に格下げした。
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -29,8 +33,9 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);
 
+  // ①の見出しは「困ったときは」と同じ .sec > .h 構造になった
   const briefState = () => p.evaluate(() => {
-    const head = [...document.querySelectorAll('#view .lbl')].find(x => /① /.test(x.textContent));
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     if (!head) return null;
     const body = head.nextElementSibling;
     const btn = body ? [...body.querySelectorAll('button')].find(b => /説明書をコピー/.test(b.textContent)) : null;
@@ -56,7 +61,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
 
   // ---- 2. 見出しをタップすると畳まれる(render()を経由しないDOM操作) ----
   await p.evaluate(() => {
-    const head = [...document.querySelectorAll('#view .lbl')].find(x => /① /.test(x.textContent));
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     head.click();
   });
   await p.waitForTimeout(150);
@@ -66,7 +71,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
 
   // ---- 3. もう一度タップすれば再展開できる(情報は消えていない、到達経路が残る) ----
   await p.evaluate(() => {
-    const head = [...document.querySelectorAll('#view .lbl')].find(x => /① /.test(x.textContent));
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     head.click();
   });
   await p.waitForTimeout(150);
@@ -76,7 +81,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   // ---- 4. #mdInに入力中でも①の開閉でその内容が消えない(render()を避けているかの検証) ----
   await p.evaluate(() => { document.querySelector('#mdIn').value = '入力途中のテキスト'; });
   await p.evaluate(() => {
-    const head = [...document.querySelectorAll('#view .lbl')].find(x => /① /.test(x.textContent));
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     head.click();
   });
   await p.waitForTimeout(150);
@@ -85,7 +90,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   // 元に戻す(次のケースに影響しないよう)
   await p.evaluate(() => { document.querySelector('#mdIn').value = ''; });
   await p.evaluate(() => {
-    const head = [...document.querySelectorAll('#view .lbl')].find(x => /① /.test(x.textContent));
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     if (!head.querySelector('svg.caret').classList.contains('open')) head.click();
   });
   await p.waitForTimeout(150);
@@ -112,22 +117,47 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   }));
 
   // ---- 6. 畳んだ状態でも②の貼り付けボタン・textareaは44px以上を保つ ----
-  // .lbl は「②会話を貼り付ける」のような非クリックの見出しにも付くクラスなので、
-  // タップ領域として見るのは実際にクリック可能な要素(onclick付き)だけに絞る
-  // (design.jsの観点Dが button/.list-row/.sub-row/.sec .h だけを見ているのと同じ考え方)
-  const smallTap = await p.evaluate(() => [...document.querySelectorAll('#view button,#view textarea,#view .lbl[onclick]')]
+  const smallTap = await p.evaluate(() => [...document.querySelectorAll('#view button,#view textarea,#view .sec > .h,#view .lbl')]
     .map(e => { const r = e.getBoundingClientRect(); return { c: e.className, h: Math.round(r.height), w: Math.round(r.width) }; })
     .filter(x => x.w > 0 && x.h < 44));
   ok('畳んだ状態でも44px未満のタップ要素がない', smallTap.length === 0, smallTap);
 
   // ---- 7. 畳んだ状態でも再展開してコピーし直せる(到達経路が残る) ----
   await p.evaluate(() => {
-    const head = [...document.querySelectorAll('#view .lbl')].find(x => /① /.test(x.textContent));
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     head.click();
   });
   await p.waitForTimeout(150);
   const s4 = await briefState();
   ok('畳んだ状態からでも再展開してコピーボタンに到達できる', s4 && s4.bodyVisible && s4.copyBtnVisible, s4);
+
+  // ---- 8. 階層: ①②困ったときはは同格なので見た目の重さが揃っている ----
+  const hier = await p.evaluate(() => {
+    const pick = (re) => {
+      const el = [...document.querySelectorAll('#view .sec > .h, #view .lbl')].find(x => re.test(x.textContent));
+      if (!el) return null;
+      const st = getComputedStyle(el);
+      return { fontSize: st.fontSize, color: st.color, fontWeight: st.fontWeight, borderTop: st.borderTopWidth };
+    };
+    return { s1: pick(/① /), s2: pick(/② /), s3: pick(/調べることが思いつかない時は/) };
+  });
+  ok('①②困ったときはの見出しは同じ文字サイズ', hier.s1 && hier.s2 && hier.s3 &&
+    hier.s1.fontSize === hier.s2.fontSize && hier.s2.fontSize === hier.s3.fontSize, hier);
+  ok('①②困ったときはの見出しは同じ文字色', hier.s1 && hier.s2 && hier.s3 &&
+    hier.s1.color === hier.s2.color && hier.s2.color === hier.s3.color, hier);
+  ok('①②困ったときはの見出しは同じ太さの上枠線', hier.s1 && hier.s2 && hier.s3 &&
+    hier.s1.borderTop === hier.s2.borderTop && hier.s2.borderTop === hier.s3.borderTop && parseFloat(hier.s1.borderTop) > 0, hier);
+
+  // ---- 9. 階層: 「説明書の中身を見る」は入れ子なので①より軽い見た目 ----
+  const nested = await p.evaluate(() => {
+    const s1 = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
+    const inner = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /説明書の中身を見る/.test(x.textContent));
+    const g = (el) => { const st = getComputedStyle(el); return { fontSize: parseFloat(st.fontSize), color: st.color, borderTop: st.borderTopWidth }; };
+    return { outer: s1 ? g(s1) : null, inner: inner ? g(inner) : null };
+  });
+  ok('「説明書の中身を見る」は①より文字が小さい(入れ子として軽い見た目)',
+    nested.outer && nested.inner && nested.inner.fontSize < nested.outer.fontSize, nested);
+  ok('「説明書の中身を見る」は①と違う(薄い)文字色', nested.outer && nested.inner && nested.inner.color !== nested.outer.color, nested);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();

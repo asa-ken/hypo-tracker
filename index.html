@@ -1370,32 +1370,34 @@ function renderImport(v){
   if(s){
     h+=`<div class="banner" style="margin-bottom:11px">対象: ${esc(s.name)}(銘柄詳細から開いたため自動で設定されています)</div>`;
   }
-  // ① 説明書を渡す(最初の1回だけ)。
-  // 一度きりの作業なのに、完了状態を覚えず毎回②と同じ重さで最上部を占有し続けていた。
-  // 「困ったときは」と同じ、低頻度な情報を畳む扱いに揃える。
-  // 見出しの見た目は②と同じ plain .lbl のまま保つ(.lbl.grp を使うとホームの区分見出しと同じ
-  // 太字・ink色・枠線付きの重い見た目になり、①の方が②より強く見えてしまい本末転倒になる)。
-  // クリックと開閉矢印だけを追加する
+  // この画面には3つの同格の区分(①②困ったときは)と、①の中に1つ入れ子の詳細("説明書の中身を見る")がある。
+  // 以前は①②が plain .lbl(軽い見た目)、困ったときは/中身を見るが .sec .h(重い見た目)で、
+  // 「同格の①②困ったときは」の見た目が揃わず、逆に「入れ子の中身を見る」が親の①より重く見えるという
+  // 階層の逆転が起きていた(ユーザー指摘、2026-08-10)。
+  // 同格の3区分(①②困ったときは)は同じ重さ(.sec .h相当)に揃え、入れ子の中身を見るは
+  // それより軽い見た目に格下げすることで、太さ・色・位置だけで階層が伝わるようにする(Information First原則)。
+  //
+  // ①は「困ったときは」と同じ .sec / .sec.open の開閉CSSをそのまま使う。
   // ただしtoggleGroup()はrender()で画面全体を作り直すため、②に入力途中のテキストがあると消えてしまう。
   // この画面は元々それを避けてparseAndPreview()でしか再描画しないので、①の開閉もrender()を経由せず
-  // DOM操作(toggleImportBrief)で行う。畳むかどうかの記憶自体はHomeと同じdata(uiPrefs.anaClosed)を使う
+  // toggleImportBrief()でDOM操作のみ行う。畳むかどうかの記憶自体はHomeと同じdata(uiPrefs.anaClosed)を使う
   const briefKey='import:説明書';
   const briefClosed=groupClosed(briefKey);
-  h+=`<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;min-height:44px;cursor:pointer" onclick="toggleImportBrief(this)"><span>① このアプリの説明書をAIに渡す(最初の1回だけ)</span>${caretSvg(briefClosed)}</div>`;
-  h+=`<div class="briefbody"${briefClosed?' style="display:none"':''}>`;
+  h+=`<div class="sec${briefClosed?'':' open'}"><div class="h" onclick="toggleImportBrief(this)"><span>① このアプリの説明書をAIに渡す(最初の1回だけ)</span>${caretSvg(briefClosed)}</div><div class="b">`;
   h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
   h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
-  h+=`<div class="sec" style="margin-top:8px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg(true)}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:10px 12px;background:var(--card);border-radius:9px;margin-bottom:10px">${esc(briefingText())}</div></div>`;
-  h+='</div>';
-  // ② 会話を貼り付ける
-  h+='<div class="lbl" style="margin-top:18px">② 会話を貼り付ける</div>';
-  h+=`<div class="row" style="gap:8px;margin-bottom:6px">
+  // 「中身を見る」は①の中の入れ子の詳細なので、①より軽い見た目(小さい文字・薄い色・枠線なし)にする
+  h+=`<div class="sec" style="margin-top:8px"><div class="h" style="font-size:12px;color:var(--ink2);border-top:none;min-height:44px" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg(true)}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:10px 12px;background:var(--card);border-radius:9px;margin-bottom:10px">${esc(briefingText())}</div></div>`;
+  h+='</div></div>';
+  // ② 会話を貼り付ける。①・困ったときはと同格なので、開閉はしないが見た目の重さは揃える
+  h+=`<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;font-size:13px;font-weight:700;color:var(--ink);border-top:1px solid var(--line);margin-top:18px"><span>② 会話を貼り付ける</span></div>`;
+  h+=`<div class="row" style="gap:8px;margin:12px 0 6px">
     <button class="btn pri" style="flex:1" onclick="pasteFromClipboard()">📋 貼り付ける</button>
     <button class="btn" style="flex:0 0 88px" onclick="clearPaste()">クリア</button>
   </div>`;
   h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
-  // 困ったときは(旧STEP1・格下げ)
+  // 困ったときは(旧STEP1・格下げ)。①②と同格の区分なので同じ .sec .h の重さのまま
   h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span>${caretSvg(true)}</div><div class="b" style="padding:2px 0 12px 20px">`;
   h+=`<button class="btn" onclick="sheetOrderNew('${sel}')">調べる項目を選ぶ</button>`;
   h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
@@ -1512,18 +1514,19 @@ function copyBriefing(){
   const key='import:説明書';
   if(!groupClosed(key)){ closedGroups().push(key); save(); }
 }
-// ①の開閉。toggleGroup()と違いrender()は呼ばず、この見出し直下だけをDOM操作で開閉する
+// ①の開閉。toggleGroup()と違いrender()は呼ばず、.sec/.sec.openのCSS(困ったときはと同じ)を
+// このヘッダー(el)の親.secに直接付け外しするだけで開閉する
 // (②の貼り付け欄に入力中のテキストがあっても消さないため)。畳むかどうかの記憶はtoggleGroup()と共有する
 function toggleImportBrief(el){
+  const sec=el.closest('.sec');
   const key='import:説明書';
-  const a=closedGroups(); const i=a.indexOf(key);
-  const willClose=i<0;
-  if(willClose) a.push(key); else a.splice(i,1);
-  save();
-  const body=el.nextElementSibling;
-  if(body) body.style.display=willClose?'none':'';
+  const willOpen=!sec.classList.contains('open');
+  sec.classList.toggle('open', willOpen);
   const caret=el.querySelector('svg.caret');
-  if(caret) caret.classList.toggle('open', !willClose);
+  if(caret) caret.classList.toggle('open', willOpen);
+  const a=closedGroups(); const i=a.indexOf(key);
+  if(willOpen){ if(i>=0) a.splice(i,1); } else if(i<0) a.push(key);
+  save();
 }
 // 説明書が使う見出し語。「#」が落ちた行をこれと突き合わせて見出しに戻す
 const BARE_HEADINGS=/^(指標|業績推移|ざっくりまとめ|分析|注目ポイント|メモ|リマインダー|回答フォーマット)$/;
@@ -2855,18 +2858,23 @@ function sheetOrderNew(sid){
       <span class="chip ${cnt>5?'red':cnt?'navy':'gray'}">選択 ${cnt}</span>
     </div>
     ${cnt>5?`<div class="failbox" style="background:var(--amber-bg);margin-bottom:6px"><div class="t">⚠ 項目が多すぎます (${cnt}件)</div><div class="muted" style="font-size:11px;color:var(--amber-tx)">AIが分割出力する可能性が高く、書式も乱れやすくなります。5件以下に絞ることを強くおすすめします。${deepCnt>3?'<br>特に「深掘り」は文字数が多いため、3件以下が安全です。':''}</div></div>`:''}`;
+  // カテゴリ見出し(plain .lbl)+行のリストという組み立ては、リマインダー一覧・市場銘柄分析と
+  // 同じ「見出し+.list」の階層デザイン。以前は行がここだけの独自 .row(枠線・余白が非トークン)
+  // だったので、他画面と同じ .list.flat(地色・外枠なし)+ .list-row に揃える(ユーザー指摘、2026-08-10)
   masterFor(s).filter(c=>c.on).forEach((c,ci)=>{
     h+=`<div class="lbl" style="margin:12px 0 4px">${esc(c.cat)}</div>`;
+    h+='<div class="list flat">';
     c.subs.forEach(su=>{ const st=pk[su]||'off';
       const cur=s?s.sections[su]:null;
       const hasDeep=cur&&cur.details&&cur.details.length;
       let badge='';
       if(cur&&hasDeep) badge=` <span class="chip green" style="font-size:11px">深掘り済 ${cur.details.length}</span>`;
       else if(cur) badge=' <span class="chip gray" style="font-size:11px">要点のみ</span>';
-      h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
-        <span style="flex:1;font-size:13px">${esc(su)}${badge}</span>
+      h+=`<div class="list-row" style="cursor:default">
+        <div class="lt"><div class="ttl" style="font-weight:400">${esc(su)}${badge}</div></div>
         <button class="btn sm" style="width:auto;padding:4px 9px;font-size:11px;${st!=='off'?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="cyclePick('${sid}','${escArg(su)}')">${st==='off'?'選択':st==='sum'?'要点のみ':'深掘り'}</button>
       </div>`; });
+    h+='</div>';
   });
   h+=`<button class="btn pri" style="margin-top:14px" onclick="saveTheme('${sid}');genOrderNew('${sid}')">この内容で質問文を生成</button>
       <button class="btn" style="margin-top:8px" onclick="saveTheme('${sid}');sheetSectionMaster('${sid}','order')">セクションを管理(表示/非表示)</button>
