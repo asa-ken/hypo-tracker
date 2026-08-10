@@ -1782,6 +1782,14 @@ function copyMetFix(){
     + '\n\n以後も、指標名は私が渡した一覧の表記を一字一句そのまま使ってください。言い換え・省略・括弧の全半角変更をしないでください。';
   copy(t, 'コピーしました。AIに貼り付けて、出し直してもらってください');
 }
+// 貼り付け結果を「取り込み前に確認してください」等の作業順の区分にまとめるための開閉ブロック。
+// 中身が空なら区分ごと出さない(見出しだけ残る空区分を作らない)。
+// #parseOutはoninputのたびに丸ごと再構築されるため、開閉状態は持ち回さず既定で開く
+// (困ったときは・説明書の中身を見るなど、この画面の他の低頻度セクションと同じ考え方)
+function parseGroup(label, bodyHtml){
+  if(!bodyHtml) return '';
+  return `<div class="sec open" style="margin-top:16px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(label)}</span>${caretSvg(false)}</div><div class="b">${bodyHtml}</div></div>`;
+}
 function parseAndPreview(){
   // 設定の切り替えなど、取り込み画面の外から呼ばれることがある。貼り付け欄が無ければ何もしない
   const ta=$('#mdIn'); if(!ta) return;
@@ -1831,22 +1839,51 @@ function parseAndPreview(){
       ${DB.stocks.map(x=>`<option value="${x.id}"${STATE._importPick===x.id?' selected':''}>${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select>
       <div class="hint">${picked?'選び直すと、読み込みプレビューの「更新前」も選んだ銘柄のものに切り替わります。':'選ぶまでは比較相手が決まらないため、「更新前」は表示できません。'}次からは、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けるようAIに伝えておくと選ばずに済みます。</div></label>`;
   }
+  // 結果は「何をすればいいか」の順に3区分へまとめる(ユーザー指摘、2026-08-10)。
+  // 以前は 似た指標→リマインダー候補→該当セクション不明→プレビュー→メモ候補 の順で並んでおり、
+  // 画面が縦に長いうえ並び順から次に何をすべきかが読み取れなかった。
+  // 区分1: 取り込む前提が崩れていないかの確認(似た指標・該当セクション不明・読めなかった行)
+  // 区分2: 取り込む付随データの選択(リマインダー・メモ候補)
+  // 区分3: 取り込む本体の確認(読み込みプレビュー)
+  // という「確認→選択→確認」の作業順に揃える。各区分は開閉できるようにし、
+  // 対応し終えた区分を畳めば画面が縮む(ユーザー指摘の「縦長すぎる」への対応も兼ねる)
+
+  // ---- 区分1: 取り込み前に確認してください(似た指標・該当セクション不明・読めなかった行) ----
+  let grp1='';
   // 新しく増える指標の告知。取り込みは止めない(既定のまま読み込めば追加される)。
   // 似た名前が既にある場合だけ、その名前を名指しして外部AI側の修正へ誘導する
-  h+=newMetricsBox(newMets);
+  grp1+=newMetricsBox(newMets);
+  if(p.rows.length && orphans.length){
+    grp1+=`<div class="failbox" style="background:var(--red-bg)"><div class="t" style="color:var(--red-tx)">⚠ 該当セクションが見つからない行 (${orphans.length})</div>
+      <div class="muted" style="font-size:11px;color:var(--red-tx);margin:3px 0 6px">下記はどのセクションにも紐づきません。取り込むにはチェックしてください(取り込む場合は「その他」として保存されます)。</div>`;
+    orphans.forEach((r,i)=>{ grp1+=`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0"><input type="checkbox" style="width:auto;margin:3px 0 0 0" id="orp${i}"><label for="orp${i}" class="l" style="flex:1;cursor:pointer">${esc(r.key)}: ${esc(r.value.slice(0,60))}…</label></div>`; });
+    grp1+='</div>';
+  }
+  if(p.failed.length){
+    grp1+=`<div class="failbox"><div class="t">読めなかった行 (${p.failed.length})</div>`;
+    p.failed.forEach(l=>grp1+=`<div class="l">${esc(l)}</div>`);
+    grp1+=`<button class="btn sm" style="margin-top:8px" onclick="copyReformat()">整形しなおすプロンプトをコピー</button></div>`;
+    window._failed=p.failed;
+  }
+  h+=parseGroup('取り込み前に確認してください', grp1);
+
+  // ---- 区分2: 取り込むリマインダー/メモを選択してください ----
+  let grp2='';
   // 日付つきの注目ポイントを、その場でリマインダーにするか決める
-  h+=remPickBox(okRows);
-  // diff table
+  grp2+=remPickBox(okRows);
+  // メモ候補(見出し・箇条書きに当てはまらなかった自由文。動的に追加・削除・編集できる)
+  grp2+='<div class="lbl">メモ候補</div>';
+  if(p.memoCandidates.length) grp2+='<div class="hint" style="margin:-4px 0 6px">フォーマットに当てはまらなかった文章です。不要なものは×で消し、書き足したい内容は追加できます。</div>';
+  else grp2+='<div class="muted" style="padding:0 2px 6px">今回はありません。</div>';
+  grp2+='<div id="memoCandList">'+p.memoCandidates.map(t=>memoCandField(t)).join('')+'</div>';
+  grp2+='<button class="btn sm" onclick="addMemoCandidateField()">＋ メモ候補を追加</button>';
+  // メモ候補は「＋追加」で解析結果が空でも書き足せるので、区分2は常に出す
+  h+=parseGroup('取り込むリマインダー/メモを選択してください', grp2);
+
+  // ---- 区分3: 読み込み内容を確認してください(読み込みプレビュー) ----
   if(p.rows.length){
-    if(orphans.length){
-      h+=`<div class="failbox" style="background:var(--red-bg)"><div class="t" style="color:var(--red-tx)">⚠ 該当セクションが見つからない行 (${orphans.length})</div>
-        <div class="muted" style="font-size:11px;color:var(--red-tx);margin:3px 0 6px">下記はどのセクションにも紐づきません。取り込むにはチェックしてください(取り込む場合は「その他」として保存されます)。</div>`;
-      orphans.forEach((r,i)=>{ h+=`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0"><input type="checkbox" style="width:auto;margin:3px 0 0 0" id="orp${i}"><label for="orp${i}" class="l" style="flex:1;cursor:pointer">${esc(r.key)}: ${esc(r.value.slice(0,60))}…</label></div>`; });
-      h+='</div>';
-    }
-    h+='<div class="lbl">読み込みプレビュー</div>';
-    h+='<div class="difflegend"><span>セルをタップで全文表示</span><span class="d-del">削除される部分</span><span class="d-add">新しく追加される部分</span></div>';
-    h+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
+    let grp3='<div class="difflegend"><span>セルをタップで全文表示</span><span class="d-del">削除される部分</span><span class="d-add">新しく追加される部分</span></div>';
+    grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
       const afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
@@ -1885,33 +1922,21 @@ function parseAndPreview(){
       if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw)+(r.eventDate?`<div class="muted" style="font-size:11px">${bellIcon(11)} リマインド候補: ${esc(r.eventDate)}</div>`:''); }
       else if(isSame){ beforeHtml=esc(before); afterHtml='<span class="muted">変更なし</span>'; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
-      h+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:11px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
+      grp3+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:11px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
         <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${beforeHtml}</div></td>
         <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${afterHtml}</div></td></tr>`;
     });
-    h+='</table></div>';
+    grp3+='</table></div>';
     window._orphans=orphans;
     const sameCnt=okRows.filter(r=>r._skip).length;
-    if(sameCnt) h+=`<div class="muted" style="margin-top:8px;font-size:11px">前回と同じ内容の ${sameCnt}件 は読み込みません(鮮度のみ更新)。</div>`;
+    if(sameCnt) grp3+=`<div class="muted" style="margin-top:8px;font-size:11px">前回と同じ内容の ${sameCnt}件 は読み込みません(鮮度のみ更新)。</div>`;
+    h+=parseGroup('読み込み内容を確認してください', grp3);
   } else {
     window._orphans=[];
   }
-  // メモ候補(見出し・箇条書きに当てはまらなかった自由文。動的に追加・削除・編集できる)
-  h+='<div class="lbl" style="margin-top:16px">メモ候補</div>';
-  if(p.memoCandidates.length) h+='<div class="hint" style="margin:-4px 0 6px">フォーマットに当てはまらなかった文章です。不要なものは×で消し、書き足したい内容は追加できます。</div>';
-  else h+='<div class="muted" style="padding:0 2px 6px">今回はありません。</div>';
-  h+='<div id="memoCandList">'+p.memoCandidates.map(t=>memoCandField(t)).join('')+'</div>';
-  h+='<button class="btn sm" onclick="addMemoCandidateField()">＋ メモ候補を追加</button>';
-  // メモ候補は画面上で後から追加できるので、解析結果が空でも読み込むボタンは常に出す
-  // (中身が無いままだと commitImport 側で弾く)
-  h+=`<button class="btn pri" style="margin-top:12px" onclick="commitImport()">✓ 読み込む</button>`;
+
+  h+=`<button class="btn pri" style="margin-top:16px" onclick="commitImport()">✓ 読み込む</button>`;
   window._parsed=p;
-  if(p.failed.length){
-    h+=`<div class="failbox"><div class="t">読めなかった行 (${p.failed.length})</div>`;
-    p.failed.forEach(l=>h+=`<div class="l">${esc(l)}</div>`);
-    h+=`<button class="btn sm" style="margin-top:8px" onclick="copyReformat()">整形しなおすプロンプトをコピー</button></div>`;
-    window._failed=p.failed;
-  }
   out.innerHTML=h;
 }
 function memoCandField(text){
