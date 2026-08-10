@@ -59,12 +59,14 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
       const link = r.querySelector('.copylink');
       const st = link ? getComputedStyle(link) : null;
       const icon = link ? link.querySelector('svg.copy-ic') : null;
-      const rects = icon ? [...icon.querySelectorAll('rect')].map(rc => getComputedStyle(rc).fill) : [];
+      const rectEls = icon ? [...icon.querySelectorAll('rect')] : [];
+      const rects = rectEls.map(rc => getComputedStyle(rc).fill);
+      const strokes = rectEls.map(rc => getComputedStyle(rc).stroke);
       return { meta: r.querySelector('.meta') ? r.querySelector('.meta').textContent.trim() : null,
         hasChip: !!r.querySelector('.chip'), hasBtn: !!r.querySelector('button'),
         linkText: link ? link.textContent.trim() : null, linkOn: link ? link.getAttribute('onclick') : null,
         fontWeight: st ? st.fontWeight : null, border: st ? st.borderWidth : null, bg: st ? st.backgroundColor : null,
-        h: link ? Math.round(link.getBoundingClientRect().height) : 0, hasIcon: !!icon, rectFills: rects };
+        h: link ? Math.round(link.getBoundingClientRect().height) : 0, hasIcon: !!icon, rectFills: rects, rectStrokes: strokes };
     });
   });
   ok('今日は2銘柄の行がある(テスト前提)', multiRows.length === 2, multiRows);
@@ -79,6 +81,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('アイコンは奥・手前の四角2つで構成される(テスト前提)', multiRows.every(r => r.rectFills.length === 2), multiRows);
   ok('奥の四角は輪郭のみ(塗りは透過のまま)', multiRows.every(r => r.rectFills[0] === 'none'), multiRows);
   ok('手前の四角は塗りつぶし(透過にしない)', multiRows.every(r => r.rectFills[1] !== 'none' && r.rectFills[1] !== 'rgba(0, 0, 0, 0)'), multiRows);
+  // 手前の四角はページの地色(var(--app) #f7f8f9)で塗りつぶし、地色に溶けて見えなくならないよう
+  // 奥と同じ色(currentColor)の外枠線を付ける(2026-08-10、ユーザー指示)
+  ok('手前の四角はページの地色(var(--app))で塗りつぶす', multiRows.every(r => r.rectFills[1] === 'rgb(247, 248, 249)'), multiRows);
+  ok('手前の四角にも奥と同じ色の外枠線がある', multiRows.every(r => r.rectStrokes[1] !== 'none' && r.rectStrokes[1] === r.rectStrokes[0]), multiRows);
   ok('コピーのタップ領域は44px以上', multiRows.every(r => r.h >= 44), multiRows);
   ok('コピーに copyBriefFor が仕込まれている', multiRows.every(r => /copyBriefFor/.test(r.linkOn || '')), multiRows);
 
@@ -106,11 +112,14 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     const btn = l.querySelector('.grp-edit');
     const st = getComputedStyle(btn);
     const icon = btn.querySelector('svg.copy-ic');
-    const rects = icon ? [...icon.querySelectorAll('rect')].map(rc => getComputedStyle(rc).fill) : [];
-    return { text: btn.textContent.trim(), fontWeight: st.fontWeight, on: btn.getAttribute('onclick'), hasIcon: !!icon, rectFills: rects };
+    const rectEls = icon ? [...icon.querySelectorAll('rect')] : [];
+    const rects = rectEls.map(rc => getComputedStyle(rc).fill);
+    const strokes = rectEls.map(rc => getComputedStyle(rc).stroke);
+    return { text: btn.textContent.trim(), fontWeight: st.fontWeight, on: btn.getAttribute('onclick'), hasIcon: !!icon, rectFills: rects, rectStrokes: strokes };
   });
   ok('見出しの一括コピーは「一括コピー」とアイコンで構成される', head.text === '一括コピー' && head.hasIcon, head.text);
   ok('見出しのアイコンも手前の四角が塗りつぶし', head.rectFills[1] !== 'none' && head.rectFills[1] !== 'rgba(0, 0, 0, 0)', head.rectFills);
+  ok('見出しの手前の四角も地色塗り+外枠線', head.rectFills[1] === 'rgb(247, 248, 249)' && head.rectStrokes[1] === head.rectStrokes[0], head);
   ok('見出しの一括コピーも細字(「編集」「追加」等の太字とは別)', +head.fontWeight <= 400, head.fontWeight);
   ok('押すと区分ぜんぶをコピーする', /copyBrief\(\)/.test(head.on || ''), head.on);
 
