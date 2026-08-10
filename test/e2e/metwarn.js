@@ -54,9 +54,19 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
     const t = document.querySelector('#parseOut table').getBoundingClientRect().top;
     return w < t;
   }));
-  ok('警告は銘柄チップのすぐ下にある', await p.evaluate(() => {
+  // 2026-08-10: 貼り付け結果は「取り込み前に確認してください」等の作業順の区分にまとめられ、
+  // 警告(.metwarn)はその最初の区分の中に入った。区分の見出し分だけ銘柄チップとの間隔が空くため、
+  // 正確な位置(px)ではなく「その区分がチップと表の間にある」ことを見る
+  ok('警告は銘柄チップと同じ区分(取り込み前に確認してください)の中にある', await p.evaluate(() => {
+    const warn = document.querySelector('.metwarn');
+    const sec = warn.closest('.sec');
+    const head = sec ? sec.querySelector(':scope > .h') : null;
+    return !!head && /取り込み前に確認してください/.test(head.textContent);
+  }));
+  ok('その区分は銘柄チップのすぐ下にある(表より前)', await p.evaluate(() => {
     const c = document.querySelector('#parseOut .pill-row').getBoundingClientRect().bottom;
-    const w = document.querySelector('.metwarn').getBoundingClientRect().top;
+    const sec = document.querySelector('.metwarn').closest('.sec');
+    const w = sec.getBoundingClientRect().top;
     return w - c >= 0 && w - c < 60;
   }));
 
