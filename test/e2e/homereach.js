@@ -19,6 +19,9 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.goto('http://127.0.0.1:8731/index.html');
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);
+  // フィクスチャの r_t2(平日)は実行日が平日だと「今日」に混ざり、件数の期待値が崩れる。
+  // このスイートは件数を厳密に見るので、日付に依存しないよう休止させておく
+  await p.evaluate(() => { const r = DB.reminders.find(x => x.id === 'r_t2'); if (r) r.paused = true; save(); });
 
   // 実行日に依存しないよう、期限切れと今日の分をその場で作る。
   // 9001は期限切れ2件(複数件の銘柄)、9002は期限切れ1件(1件だけの銘柄)、

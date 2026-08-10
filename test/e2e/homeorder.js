@@ -24,6 +24,9 @@ const ORDER = ['今日のリマインダー', '期限切れ', '今週の予定']
   await p.goto('http://127.0.0.1:8731/index.html');
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);
+  // フィクスチャの r_t2(平日)は実行日が平日だと「今日」に混ざり、通常データの件数が崩れる。
+  // 最初の h0 チェックは実データ(フィクスチャそのまま)を見るため、日付に依存しないよう休止させておく
+  await p.evaluate(() => { const r = DB.reminders.find(x => x.id === 'r_t2'); if (r) r.paused = true; save(); });
 
   // 見出しを上から順に、名前・件数・画面上のy座標で取る
   const heads = () => p.evaluate(() => [...document.querySelectorAll('#view .lbl.grp')].map(e => {

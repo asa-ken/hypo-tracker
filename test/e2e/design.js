@@ -13,6 +13,9 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
   await page.goto('http://127.0.0.1:8731/index.html');
   await page.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await page.reload(); await page.waitForTimeout(400);
+  // フィクスチャの r_t2(平日)は実行日が平日だと「今日」に混ざり、下のホームの検査が崩れる。
+  // 日付に依存しないよう休止させておく
+  await page.evaluate(() => { const r = DB.reminders.find(x => x.id === 'r_t2'); if (r) r.paused = true; save(); });
 
   // ---- A. 文字サイズは6段階だけ ----
   const src = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
@@ -24,9 +27,7 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
     return getComputedStyle(document.querySelector('.metric')).gridTemplateColumns.split(' ').length; });
   ok('指標グリッドは2列', cols === 2);
 
-  // ---- B. 一覧はリスト構造・地色が付くのは対応が必要なカードだけ ----
-  // 期限切れ・今日のリマインダーの色差は、実データに依存せず確かめられるよう homegroup.js 側で見る
-  // (このフィクスチャは実行日によって「今日」に該当する項目が無いことがあるため)
+  // ---- B. 一覧はリスト構造 ----
   const home = await page.evaluate(() => { go('home');
     return { rows: document.querySelectorAll('#view .list .list-row').length,
              looseCards: [...document.querySelectorAll('#view > .card')].filter(c => !c.classList.contains('attn')).length,

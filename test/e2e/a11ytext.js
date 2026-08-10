@@ -50,10 +50,11 @@ const rgb = s => (s.match(/\d+/g) || []).slice(0, 3).map(Number);
     document.querySelectorAll('#view *').forEach(e => {
       if (e.children.length || !e.textContent.trim()) return;
       const isHint = e.classList.contains('hint');
-      // 「操作のラベル」= button の中の文字。押せる行の中にある補助情報(.meta など)は含めない。
+      // 「操作のラベル」= button、または button と同じ役割の枠なしリンク(.copylink / .grp-edit)の中の文字。
+      // 押せる行の中にある補助情報(.meta など)は含めない。
       // .meta は読まなくても操作できる添え物で、こちらは --ink3 の定義そのものの話になるため
       // このスイートの対象から外し、REVIEW_BACKLOG.md に残してある
-      const isLabel = !!e.closest('button');
+      const isLabel = !!e.closest('button,.copylink,.grp-edit');
       if (!isHint && !isLabel) return;
       const st = getComputedStyle(e);
       let bg = 'rgba(0, 0, 0, 0)', n = e;
