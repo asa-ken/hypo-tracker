@@ -43,9 +43,14 @@ const MD = `# 銘柄: テスト精機 (9001)
   await feed();
 
   // ---- 欄が出る ----
+  // 2026-08-11: 見出しは区分名「取り込むリマインダー/メモを選択してください」と語を合わせ、
+  // 「日付つきの注目ポイント」→「リマインダー登録」に変更した(ユーザー指摘)。
+  // 取り込み元(日付ありの注目ポイント)の説明は下の案内文に移した
   ok('リマインダー欄が出る', await p.evaluate(() => !!document.querySelector('#parseOut .rembox')));
-  ok('日付つきの件数を出す', await p.evaluate(() =>
-    /日付つきの注目ポイント 3件/.test(document.querySelector('#parseOut .rembox').textContent)));
+  ok('件数を出す(区分名と語を合わせた見出し)', await p.evaluate(() =>
+    /リマインダー登録 3件/.test(document.querySelector('#parseOut .rembox').textContent)));
+  ok('取り込み元(注目ポイント)の説明が案内文にある', await p.evaluate(() =>
+    /日付ありの注目ポイントを/.test(document.querySelector('#parseOut .rembox').textContent)));
   const r0 = await rows();
   ok('日付つきの3件だけ並ぶ', r0.length === 3);
   ok('日付のない注目ポイントは並ばない', !r0.some(x => /日付のない/.test(x.text)));

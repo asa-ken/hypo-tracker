@@ -43,10 +43,8 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
   ok('どちらの一覧かが分かる', /業績推移/.test(box.txt));
   ok('絵文字ではなく線画アイコンを使う', box.hasIcon && !/⚠/.test(box.txt));
   ok('修正指示のコピーボタンがある', box.btn);
-  ok('上部のチップにも件数が出る', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標名 1/.test(c.textContent))));
-  ok('チップは注意色(amber)になる', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標/.test(c.textContent) && c.classList.contains('amber'))));
+  // 2026-08-11: 上部チップの「読取N行」「新しい指標名N」は、それ単体を見ても取り込み判断の
+  // 材料にならないため削除した(ユーザー指摘)。判断が要ることは.metwarn自体で分かる
 
   // ---- 位置: プレビューの表より上にある ----
   ok('警告はプレビューの表より上にある', await p.evaluate(() => {
@@ -100,8 +98,6 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
   }));
   ok('個別の名前は読み込み内容確認の表で見える', await p.evaluate(() =>
     [...document.querySelectorAll('#parseOut table tr')].some(tr => /ROIC/.test(tr.textContent) && /新規/.test(tr.textContent))));
-  ok('その場合のチップは注意色にしない', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標名/.test(c.textContent) && !c.classList.contains('amber'))));
 
   // ---- スナップショットの表記揺れ ----
   await feed(paste('## 指標\n- 予想PER: 18.2 | 単位:倍 | 2026/8/1'));

@@ -59,8 +59,7 @@ const NOHEAD = `## 指標
     const c = [...document.querySelectorAll('#parseOut .pill-row .chip')].find(x => /対象の銘柄/.test(x.textContent));
     return !!c && c.classList.contains('green');
   }));
-  ok('読取行数のチップも出る', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /読取 3行/.test(c.textContent))));
+  // 2026-08-11: 「読取N行」チップは、それ単体を見ても取り込み判断の材料にならないため削除した(ユーザー指摘)
   ok('選び直せるようプルダウンは残る', await p.evaluate(() => !!document.querySelector('#importStockPick')));
   ok('案内文が切り替わる', await p.evaluate(() =>
     /選び直すと、読み込みプレビューの「更新前」も/.test(document.querySelector('#parseOut').textContent)));
