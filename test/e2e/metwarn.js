@@ -104,14 +104,16 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
   ok('スナップショット指標の揺れも拾う', await p.evaluate(() => {
     const e = document.querySelector('.metwarn'); return !!e && /PER\(予想\)/.test(e.textContent);
   }));
+  // 2026-08-11: 個別行は.rembox/.memoboxと同じ.rrow(.tx > .ttl/.meta)構造に統一した
+  // (ユーザー指摘: 「配色以外のデザインをリマインダー/メモ選択セクションと完全に一致させて」)
   ok('スナップショット側は「指標」と表示する', await p.evaluate(() => {
-    const e = document.querySelector('.metwarn .r .chip'); return e && e.textContent.trim() === '指標';
+    const e = document.querySelector('.metwarn .rrow .chip'); return e && e.textContent.trim() === '指標';
   }));
 
   // ---- 同じ名前が複数行でも1件 ----
   await feed(paste('## 業績推移\n- 売上: 25年3月期=1 | 単位:百万円 | 2026/8/1\n- 売上: 26年3月期=2 | 単位:百万円 | 2026/8/1'));
   ok('同名が複数行でも1件だけ知らせる', await p.evaluate(() =>
-    document.querySelectorAll('.metwarn .r').length === 1));
+    document.querySelectorAll('.metwarn .rrow').length === 1));
 
   // ---- 市場カードは業績推移を持たない ----
   await p.evaluate(() => go('import'));

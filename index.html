@@ -323,13 +323,15 @@
   .failbox .t{font-size:12px; color:var(--amber-tx); font-weight:700;}
   .failbox .l{font-family:var(--mono); font-size:11px; color:var(--amber-tx); margin-top:3px; word-break:break-all;}
   /* 取り込みで新しく増える指標の告知。表記揺れは別の指標として登録され、
-     グラフも履歴も分かれてしまう。プレビューの表より上に置き、下りる前に目に入るようにする */
-  .metwarn{background:var(--amber-bg); border-radius:9px; padding:10px 12px; margin-bottom:11px;}
-  .metwarn .t{display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--amber-tx);}
-  .metwarn .r{background:var(--card); border-radius:8px; padding:7px 9px; margin-top:7px;}
-  .metwarn .r .n{font-size:13px; font-weight:700;}
-  .metwarn .r .s{font-size:11px; color:var(--amber-tx); margin-top:2px;}
-  .metwarn .d{font-size:11px; color:var(--amber-tx); margin-top:9px; line-height:1.5;}
+     グラフも履歴も分かれてしまう。プレビューの表より上に置き、下りる前に目に入るようにする。
+     配色(amber)以外の構造(枠線・角丸・余白・見出し・行・ボタン)は、リマインダー/メモ選択
+     セクション(.candbox)と完全に一致させる(ユーザー指摘、2026-08-11)。.candboxを外枠として
+     共有し(マークアップ側で class="candbox metwarn" にする)、.metwarnは色の上書きだけを担当する */
+  .metwarn{background:var(--amber-bg); border-color:var(--amber-tx);}
+  .metwarn .rh .rt{color:var(--amber-tx);}
+  .metwarn .meta{color:var(--amber-tx);}
+  .metwarn .d{color:var(--amber-tx); font-size:11px; margin:4px 0 2px; line-height:1.5;}
+  .metwarn .lnk{color:var(--amber-tx);}
   /* 取り込みプレビューの中でリマインダーにするかを決める欄 */
   /* リマインダー候補(.rembox)とメモ候補(.memobox)は別の意味のクラス名として使い分けつつ、
      カードの外枠・見出し行・行(トグル選択)の見た目は.candboxとして共有する
@@ -1846,15 +1848,16 @@ function newMetricsBox(newMets){
   // 個別の名前は下の「読み込み内容を確認してください」の表で新規行として既に見えており、
   // ここに控えめな一行を重ねて出すと同じ情報の二重表示になっていた(ユーザー指摘、2026-08-10)
   if(!near.length) return '';
-  let h=`<div class="metwarn"><div class="t">${warnIcon()} 似た名前の指標があります (${near.length})</div>`;
-  h+=`<div class="d" style="margin-top:2px">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div>`;
+  // リマインダー/メモ選択セクション(.candbox)と同じ構造(.rh見出し・.rrow行・.lnk.footボタン)にする。
+  // 色(amber)だけ.metwarnが上書きする(ユーザー指摘、2026-08-11)
+  let h=`<div class="candbox metwarn"><div class="rh"><span class="rt">${warnIcon()} 似た名前の指標があります (${near.length})</span></div>`;
+  h+=`<div class="d">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div>`;
   near.forEach(x=>{
-    h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>
-      <div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div></div>`;
+    h+=`<div class="rrow"><span class="tx"><span class="ttl">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></span>
+      <span class="meta">既にある「<b>${esc(x.near.name)}</b>」と似ています</span></span></div>`;
   });
-  // 枠線ありだと似た指標の警告(amber地)の中で主張が強すぎるため、既存の.btn.ghost(枠線なし)を使う
-  // (ユーザー指摘、2026-08-11)
-  h+=`<button class="btn ghost sm" style="margin-top:8px" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div>`;
+  // 「次回から確認せず、すべてオンにする」と同じ.lnk.foot(枠なし・全幅・中央寄せ)にする
+  h+=`<button class="lnk foot" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div>`;
   return h;
 }
 function copyMetFix(){
