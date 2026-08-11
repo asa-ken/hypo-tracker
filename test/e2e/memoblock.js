@@ -105,6 +105,18 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await feed('# 銘柄: テスト精機 (9001)\n分析すると、来期は厳しそうだと思った。');
   ok('「分析すると…」は見出し扱いしない', (await memos()).some(t => /来期は厳しそう/.test(t)));
 
+  // ---- タップの目印(tapmark): メモ候補も長文だけ出す(ユーザー指摘、2026-08-11) ----
+  await feed(`# 銘柄: テスト精機 (9001)
+## メモ
+- 本文: 短いメモ
+- 本文: IRで受注残について聞かれた時の答え方が去年より慎重だった気がする。気のせいかもしれないが一応記録しておく。次の決算説明会でも同じ質問が出るか注視したい。`);
+  const memoMarks = await p.evaluate(() => [...document.querySelectorAll('#memoCandList .ttl.clip3')].map(el => ({
+    short: el.textContent.length < 20,
+    show: !!el.querySelector('.tapmark.show'),
+  })));
+  ok('短いメモ候補にはタップの目印を出さない', memoMarks.some(m => m.short && !m.show), memoMarks);
+  ok('長いメモ候補にはタップの目印を出す', memoMarks.some(m => !m.short && m.show), memoMarks);
+
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
 })();
