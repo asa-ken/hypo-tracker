@@ -328,9 +328,10 @@
      セクション(.candbox)と完全に一致させる(ユーザー指摘、2026-08-11)。.candboxを外枠として
      共有し(マークアップ側で class="candbox metwarn" にする)、.metwarnは色の上書きだけを担当する */
   .metwarn{background:var(--amber-bg); border-color:var(--amber-tx);}
-  .metwarn .rh .rt{color:var(--amber-tx);}
+  /* 見出し・説明文の文字色はリマインダー登録(.rembox)と同じにする(ユーザー指摘、2026-08-11)。
+     背景・枠線のamberは維持し、地の文字色だけ他の.candbox系と揃える */
+  .metwarn .d{color:var(--ink3); font-size:11px; margin:4px 0 2px; line-height:1.5;}
   .metwarn .meta{color:var(--amber-tx);}
-  .metwarn .d{color:var(--amber-tx); font-size:11px; margin:4px 0 2px; line-height:1.5;}
   .metwarn .lnk{color:var(--amber-tx);}
   /* 取り込みプレビューの中でリマインダーにするかを決める欄 */
   /* リマインダー候補(.rembox)とメモ候補(.memobox)は別の意味のクラス名として使い分けつつ、
