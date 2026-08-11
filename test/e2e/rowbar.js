@@ -133,24 +133,25 @@ const noBar = st => st.content === 'none' || parseFloat(st.w || 0) === 0;
 
   // ---- 7. 取り込み画面の展開エリアも同じ向き ----
   // 画面内には .sec が複数ある(①・説明書の中身を見る・調べることが思いつかない時は)。
-  // ①は初回訪問時デフォルトで開いているため、必ず閉じた状態から始まる
-  // 「調べることが思いつかない時は」を対象に選ぶ(2026-08-10、①の開閉対応で.sec化)
+  // 2026-08-11: 「調べることが思いつかない時は」は①の入れ子に移り、展開記号も矢尻(caret)から
+  // 銘柄詳細の大カテゴリと同じ＋×(plusmark)に変わった(ユーザー指摘)。同じplusmarkの回転規約
+  // (閉=0度の＋、開=45度回転した×)に従っているかを検証する対象として引き続き使う
   const impBefore = await p.evaluate(() => {
     backFromDetail(); go('import');
-    const sec = [...document.querySelectorAll('#view .sec')].find(s => /調べることが思いつかない時は/.test(s.textContent));
-    return getComputedStyle(sec.querySelector('.h svg.caret')).transform;
+    const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
+    return getComputedStyle(h.querySelector('svg.plusmark')).transform;
   });
   await p.evaluate(() => {
-    const sec = [...document.querySelectorAll('#view .sec')].find(s => /調べることが思いつかない時は/.test(s.textContent));
-    sec.classList.add('open');
+    const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
+    h.closest('.sec').classList.add('open');
   });
   await p.waitForTimeout(400);
   const imp = { before: impBefore, after: await p.evaluate(() => {
-    const sec = [...document.querySelectorAll('#view .sec')].find(s => /調べることが思いつかない時は/.test(s.textContent));
-    return getComputedStyle(sec.querySelector('.h svg.caret')).transform;
+    const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
+    return getComputedStyle(h.querySelector('svg.plusmark')).transform;
   }) };
-  ok('取り込み画面も閉=下向き', imp.before === 'none' || /matrix\(1, 0, 0, 1/.test(imp.before));
-  ok('取り込み画面も開=上向き', /matrix\(-1, 0, 0, -1/.test(imp.after));
+  ok('取り込み画面も閉=無回転(＋のまま)', imp.before === 'none' || deg(imp.before) === 0);
+  ok('取り込み画面も開=45度回転(×になる)', deg(imp.after) === 45);
 
   // ---- 8. タップ動作は変わらない ----
   await p.evaluate(() => { go('analysis'); document.querySelector('#view .list.flat .list-row').click(); });

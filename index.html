@@ -1402,11 +1402,14 @@ function renderImport(v){
   if(s){
     h+=`<div class="banner" style="margin-bottom:11px">対象: ${esc(s.name)}(銘柄詳細から開いたため自動で設定されています)</div>`;
   }
-  // この画面には3つの同格の区分(①②困ったときは)と、①の中に1つ入れ子の詳細("説明書の中身を見る")がある。
+  // この画面には2つの同格の区分(①②)と、①の中に2つ入れ子の詳細("説明書の中身を見る"
+  // "調べることが思いつかない時は")がある。以前は「調べることが思いつかない時は」も①②と同格の
+  // 独立区分だったが、実際には①(説明書を渡す)に付随する補助機能のため、①の入れ子に移した
+  // (ユーザー指摘、2026-08-11)。
   // 以前は①②が plain .lbl(軽い見た目)、困ったときは/中身を見るが .sec .h(重い見た目)で、
   // 「同格の①②困ったときは」の見た目が揃わず、逆に「入れ子の中身を見る」が親の①より重く見えるという
   // 階層の逆転が起きていた(ユーザー指摘、2026-08-10)。
-  // 同格の3区分(①②困ったときは)は同じ重さ(.sec .h相当)に揃え、入れ子の中身を見るは
+  // 同格の区分(①②)は同じ重さ(.sec .h相当)に揃え、入れ子の2項目は
   // それより軽い見た目に格下げすることで、太さ・色・位置だけで階層が伝わるようにする(Information First原則)。
   //
   // ①は「困ったときは」と同じ .sec / .sec.open の開閉CSSをそのまま使う。
@@ -1418,10 +1421,20 @@ function renderImport(v){
   h+=`<div class="sec${briefClosed?'':' open'}"><div class="h" onclick="toggleImportBrief(this)"><span>① このアプリの説明書をAIに渡す(最初の1回だけ)</span>${caretSvg(briefClosed)}</div><div class="b">`;
   h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
   h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
-  // 「中身を見る」は①の中の入れ子の詳細なので、①より軽い見た目(小さい文字・薄い色・枠線なし)にする
-  h+=`<div class="sec" style="margin-top:8px"><div class="h" style="font-size:12px;color:var(--ink2);border-top:none;min-height:44px" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${caretSvg(true)}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:10px 12px;background:var(--card);border-radius:9px;margin-bottom:10px">${esc(briefingText())}</div></div>`;
+  // 「中身を見る」「調べることが思いつかない時は」はどちらも①に付随する機能で、同じ階層の
+  // 入れ子として扱う(ユーザー指摘、2026-08-11: 「調べることが思いつかないは、①に付随する機能として
+  // 整理した方がしっくりくる」)。以前は「調べることが思いつかない時は」は①②と同格の独立区分だったが、
+  // 実際には「説明書を渡してもAIから何を聞けばいいか思いつかない」場面の補助であり、①に従属する内容と
+  // 判断した。見た目も「中身を見る」と同じ軽さ(小さい文字・薄い色・枠線なし)に揃える。
+  // 展開記号も矢尻(caretSvg)ではなく、銘柄詳細の分析カテゴリと同じ＋×(plusSvg)にする
+  // (ユーザー指摘: 「説明書の中身を見る、調査項目の展開記号は矢尻ではなく＋×」)
+  h+=`<div class="sec" style="margin-top:8px"><div class="h" style="font-size:12px;color:var(--ink2);border-top:none;min-height:44px" onclick="this.parentNode.classList.toggle('open')"><span>説明書の中身を見る</span>${plusSvg()}</div><div class="b mono" style="white-space:pre-wrap;font-size:11px;padding:10px 12px;background:var(--card);border-radius:9px;margin-bottom:10px">${esc(briefingText())}</div></div>`;
+  h+=`<div class="sec" style="margin-top:8px"><div class="h" style="font-size:12px;color:var(--ink2);border-top:none;min-height:44px" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span>${plusSvg()}</div><div class="b" style="padding:2px 0 12px 20px">`;
+  h+=`<button class="btn" onclick="sheetOrderNew('${sel}')">調べる項目を選ぶ</button>`;
+  h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
   h+='</div></div>';
-  // ② 会話を貼り付ける。①・困ったときはと同格なので、開閉はしないが見た目の重さは揃える
+  h+='</div></div>';
+  // ② 会話を貼り付ける。①と同格なので、開閉はしないが見た目の重さは揃える
   h+=`<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;font-size:13px;font-weight:700;color:var(--ink);border-top:1px solid var(--line);margin-top:18px"><span>② 会話を貼り付ける</span></div>`;
   h+=`<div class="row" style="gap:8px;margin:12px 0 6px">
     <button class="btn pri" style="flex:1" onclick="pasteFromClipboard()">📋 貼り付ける</button>
@@ -1429,11 +1442,6 @@ function renderImport(v){
   </div>`;
   h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
   h+='<div id="parseOut"></div>';
-  // 困ったときは(旧STEP1・格下げ)。①②と同格の区分なので同じ .sec .h の重さのまま
-  h+=`<div class="sec" style="margin-top:18px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>調べることが思いつかない時は</span>${caretSvg(true)}</div><div class="b" style="padding:2px 0 12px 20px">`;
-  h+=`<button class="btn" onclick="sheetOrderNew('${sel}')">調べる項目を選ぶ</button>`;
-  h+='<div class="hint">質問文をコピーしたら、AI(ChatGPT等)に貼り付けて回答をもらってください。回答は上の貼り付け欄にどうぞ。</div>';
-  h+='</div></div>';
   v.innerHTML=h;
 }
 function briefingText(){
@@ -1809,7 +1817,9 @@ function newMetricsBox(newMets){
     h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>
       <div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div></div>`;
   });
-  h+=`<button class="btn sm" style="margin-top:8px" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div>`;
+  // 枠線ありだと似た指標の警告(amber地)の中で主張が強すぎるため、既存の.btn.ghost(枠線なし)を使う
+  // (ユーザー指摘、2026-08-11)
+  h+=`<button class="btn ghost sm" style="margin-top:8px" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div>`;
   return h;
 }
 function copyMetFix(){
