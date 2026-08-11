@@ -93,12 +93,12 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   });
   ok('区分3に読み込みプレビューの表が入っている', grp3.hasTable, grp3);
 
-  // ---- 5. 読み込むボタンはどの区分にも属さず、最後に独立している ----
+  // ---- 5. 取り込むボタンはどの区分にも属さず、最後に独立している ----
   const btnPos = await p.evaluate(() => {
-    const btn = [...document.querySelectorAll('#parseOut button')].find(b => /読み込む/.test(b.textContent));
+    const btn = [...document.querySelectorAll('#parseOut button')].find(b => /^✓ 取り込む$/.test(b.textContent.trim()));
     return { insideSec: !!btn.closest('.sec'), isLast: btn === document.querySelector('#parseOut').lastElementChild };
   });
-  ok('読み込むボタンはどの区分の中にも無い(全体に効く操作のため)', !btnPos.insideSec, btnPos);
+  ok('取り込むボタンはどの区分の中にも無い(全体に効く操作のため)', !btnPos.insideSec, btnPos);
 
   // ---- 6. 区分は開閉でき、畳むと画面が縮む ----
   const heightOpen = await p.evaluate(() => document.querySelector('#view').scrollHeight);
