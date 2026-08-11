@@ -142,6 +142,36 @@ const MD = `# 銘柄: テスト精機 (9001)
   await p.waitForTimeout(300);
   ok('日付つきが無ければ欄を出さない', await p.evaluate(() => !document.querySelector('#parseOut .rembox')));
 
+  // ---- タップの目印(tapmark): 実際に3行を超えて隠れているときだけ出す ----
+  // 2026-08-11(ユーザー指摘): タップで展開できることの視認性を上げるため、既存の矢尻を
+  // 3行クランプの右下に表示する。ただし隠れている行が無いのに出すと誤解を招くため、
+  // -webkit-line-clampはscrollHeightで切り詰め検出できない(実測で判明)ことを踏まえ、
+  // 一時的にクランプを外して実高さを比較する方式(markClip3Truncated)で判定する
+  await p.evaluate(t => { document.querySelector('#mdIn').value = t; parseAndPreview(); },
+    `# 銘柄: テスト精機 (9001)\n## 注目ポイント\n- 本文: 短い注目ポイント\n- イベント日: 2026/11/12\n## 注目ポイント\n- 本文: 1Q決算で受注残が前年同期を上回って維持できているかを確認する。仮に下回った場合は、期初計画からの下方修正リスクも合わせて点検し、通期見通しへの影響を試算する必要がある。\n- イベント日: 2026/9/18`);
+  await p.waitForTimeout(300);
+  const marks = await p.evaluate(() => [...document.querySelectorAll('#parseOut .rembox .ttl.clip3')].map(el => ({
+    short: el.textContent.length < 20,
+    show: !!el.querySelector('.tapmark.show'),
+  })));
+  ok('短い本文にはタップの目印を出さない', marks.some(m => m.short && !m.show), marks);
+  ok('3行を超えて隠れている本文にはタップの目印を出す', marks.some(m => !m.short && m.show), marks);
+  ok('目印は既存の矢尻(caretSvg)を流用している', await p.evaluate(() =>
+    !!document.querySelector('#parseOut .rembox .tapmark svg.caret')));
+  // タップして展開すると、目印の向きが反転する(閉=下向き→開=上向き)ことをCSSの回転量で確認
+  const rot = () => p.evaluate(() => {
+    const el = [...document.querySelectorAll('#parseOut .rembox .ttl.clip3')].find(e => e.querySelector('.tapmark.show'));
+    return getComputedStyle(el.querySelector('.tapmark svg')).transform;
+  });
+  const rotBefore = await rot();
+  await p.evaluate(() => {
+    const el = [...document.querySelectorAll('#parseOut .rembox .ttl.clip3')].find(e => e.querySelector('.tapmark.show'));
+    el.closest('.tx').click();
+  });
+  await p.waitForTimeout(150);
+  const rotAfter = await rot();
+  ok('展開すると目印が回転する(開いたことが分かる)', rotBefore !== rotAfter, { rotBefore, rotAfter });
+
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
 })();

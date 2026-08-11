@@ -355,13 +355,15 @@
   .candbox .tx:active{opacity:.6;}
   .candbox .swtap{flex:none; align-self:stretch; display:flex; align-items:center; cursor:pointer;}
   .candbox .swtap:active{opacity:.6;}
-  /* 個別銘柄側のリマインダー一覧(list-row .ttl/.meta)と同じ文字サイズ・太さ・色に揃える
+  /* 個別銘柄側のリマインダー一覧(list-row .ttl/.meta)と同じ文字サイズ・色に揃える
      (以前は独自の.d/.bで、色・太さの付け方が違った。ユーザー指摘、2026-08-10:「同じ機能は同じデザインにすべき」)。
      このカードは選択トグル(複数選択)が要るため list-row そのものは使えないが、文字の見せ方だけ合わせる。
-     メモ候補もリマインダー候補と同じ太字細字の関係にする(ユーザー指摘、2026-08-11) */
+     メモ候補もリマインダー候補と同じ太字細字の関係にする(ユーザー指摘、2026-08-11)。
+     太さはサンプル比較のうえ細字(400)を採用(ユーザー指摘、2026-08-11)。list-row .ttl(600)とは
+     ここだけ意図的に異なる(選ぶ/読む対象の一覧であり、個別銘柄の確定済み一覧ほど強調しない) */
   /* display は指定しない。.ttl は常に.clip3(3行クランプ、-webkit-box)と併用するため、
      ここでblockを指定すると.clip3のdisplay:-webkit-boxをクラスの詳細度で上書きしてしまう */
-  .candbox .ttl{font-size:13px; font-weight:600; line-height:1.4; color:var(--ink);}
+  .candbox .ttl{font-size:13px; font-weight:400; line-height:1.4; color:var(--ink);}
   .candbox .meta{display:block; font-size:11px; color:var(--ink3); margin-top:1px;}
   /* オン・オフのつまみ。チェックボックスより状態が一目で分かる */
   .sw{width:44px; height:26px; border-radius:13px; background:var(--line2); position:relative; flex:none; margin-top:2px; transition:background .15s;}
@@ -398,6 +400,17 @@
   .clip2{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5;}
   .clip3{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45;}
   .clip3.open{-webkit-line-clamp:unset; overflow:visible;}
+  /* タップで全文表示できることの視認性を上げる矢印(ユーザー指摘、2026-08-11)。
+     実際に3行を超えて隠れている場合だけJS側(markClip3Truncated)で.showを付ける。
+     position:absoluteで通常の行の流れから外れるため、-webkit-line-clampの行数計算には影響しない。
+     開いている間(.clip3.open)は上向きに回転し、畳めることを示す */
+  .candbox .ttl.clip3{position:relative;}
+  .tapmark{display:none; position:absolute; right:0; bottom:0; padding-left:14px;
+    background:linear-gradient(to right, transparent, var(--card) 40%); color:var(--ink3);}
+  .tapmark.show{display:inline-flex; align-items:center;}
+  .tapmark svg{transition:transform .15s;}
+  .clip3.open .tapmark svg{transform:rotate(180deg);}
+  @media (prefers-reduced-motion: reduce){ .tapmark svg{transition:none;} }
   .dbody.open2{display:block !important;}
   .d-del{text-decoration:line-through; color:var(--ink3);}
   .d-add{color:#1257a8; font-weight:600;}
@@ -729,6 +742,28 @@ function bellIcon(size){
 // (ユーザー指摘、2026-08-11: 「リマインダーと同様、線画のメモアイコンを作って」)
 function memoIcon(size){
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="width:${size||13}px;height:${size||13}px;vertical-align:-2px;flex:none;display:inline-block"><path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>`;
+}
+// タップで全文表示できる.clip3の末尾に付ける目印。既存の矢尻(caretSvg)を流用する
+// (ユーザー指摘、2026-08-11: 「実装するはまだわからないがタップのアイコン作って欲しい」
+// →3案提示し、既存アイコンとの一貫性からchevron案を採用)。既定は非表示(.show)で、
+// 実際に3行を超えて隠れている場合だけmarkClip3Truncated()が.showを付ける
+function tapMarkHtml(){ return `<span class="tapmark">${caretSvg(true)}</span>`; }
+// -webkit-line-clampを使った要素は、隠れている行があってもscrollHeightがclientHeightと
+// 同じ値になり(実測して判明)、通常のoverflow:hiddenで使う「scrollHeightとclientHeightを
+// 比べる」切り詰め判定が使えない。クランプを一時的に外して実際の高さを測り、クランプ後の
+// 高さと比較する(隠れていないのに「タップで続きがある」と誤解させないための判定)。
+// 描画直後(必ず畳んだ状態)に1回だけ判定すればよい。開閉自体はCSS(.clip3.open)側で
+// 矢印の向きを変えるだけなので、開いたあとに再判定する必要はない
+function markClip3Truncated(root){
+  (root||document).querySelectorAll('.candbox .ttl.clip3').forEach(el=>{
+    const mark=el.querySelector('.tapmark');
+    if(!mark) return;
+    const clampedHeight=el.clientHeight;
+    el.style.webkitLineClamp='unset';
+    const fullHeight=el.scrollHeight;
+    el.style.webkitLineClamp='';
+    if(fullHeight-clampedHeight>1) mark.classList.add('show');
+  });
 }
 // バックアップ(書き出し・復元)の目印。⚙ の絵文字は書体依存で色付き・厚みもまちまちに描かれ、
 // タブバーなどの線画アイコンから浮くため、同じ線画の「保管箱」に置き換える
@@ -1792,7 +1827,7 @@ function remPickBox(rows){
     // タップ領域を分離した(ユーザー指摘、2026-08-11)。トグル側は見た目は44x26pxのままだが、
     // .swtapが行の高さいっぱいに広がるため実際のタップ領域は44px以上を保つ
     h+=`<div class="rrow">
-      <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(String(r.value))}</span><span class="meta">${esc(r.eventDate)}</span></span>
+      <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(String(r.value))}${tapMarkHtml()}</span><span class="meta">${esc(r.eventDate)}</span></span>
       <span class="swtap" onclick="toggleRemPick('${escArg(sig)}')"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span></span>
     </div>`;
   });
@@ -2009,6 +2044,7 @@ function parseAndPreview(){
   h+=`<button class="btn pri" style="margin-top:16px" onclick="commitImport()">✓ 読み込む</button>`;
   window._parsed=p;
   out.innerHTML=h;
+  markClip3Truncated(out);
 }
 // 解析で見つかったメモ候補は「読む・要不要を決める」対象であって、その場で書き換える対象ではない。
 // メモ候補もリマインダー候補と同じ「トグルで選ぶ」形にする(ユーザー指摘、2026-08-11: 「メモも
@@ -2032,7 +2068,7 @@ function bulkMemoPick(on){
 function memoCandView(text){
   const on=memoPickOn(text), sig=memoSig(text);
   return `<div class="rrow">
-    <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(text)}</span></span>
+    <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(text)}${tapMarkHtml()}</span></span>
     <span class="swtap" onclick="toggleMemoPick('${escArg(sig)}')"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span></span>
   </div>`;
 }
