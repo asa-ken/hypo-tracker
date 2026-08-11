@@ -416,6 +416,7 @@
   .dbody.open2{display:block !important;}
   .d-del{text-decoration:line-through; color:var(--ink3);}
   .d-add{color:#1257a8; font-weight:600;}
+  .d-new{color:var(--green-tx); font-weight:600;}
   .d-orphan{color:var(--red-tx); font-weight:600;}
   .difflegend{font-size:11px; color:var(--ink3); margin:2px 0 6px;}
   /* 横一列だと項目の境目が読みにくかったため、項目ごとに改行する(ユーザー指摘、2026-08-11) */
@@ -1982,7 +1983,9 @@ function parseAndPreview(){
     // 「セルをタップで全文表示」はこの表に限った機能ではなくなった(リマインダー/メモ候補でも
     // 同じ操作ができる)ため削除。「削除される部分」「新しく追加される部分」は項目名として
     // 簡潔に(ユーザー指摘、2026-08-11)。横一列だと項目の境目が読みにくいため、項目ごとに改行する
-    let grp3='<div class="difflegend"><span class="d-del">削除対象</span><span class="d-add">新規追加</span>'
+    // 2026-08-11: 凡例が実態と不一致だった(青字=修正時の追加文字なのに「新規追加」と表示、
+    // 新規行そのものは緑背景のみで凡例に無かった)。新規行の値も緑字にして凡例と一致させた(ユーザー指摘)
+    let grp3='<div class="difflegend"><span class="d-new">新規追加</span><span class="d-add">修正</span><span class="d-del">削除対象</span>'
       +(orphans.length?'<span class="d-orphan">既存指標に該当せず</span>':'')+'</div>';
     grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
@@ -2020,7 +2023,7 @@ function parseAndPreview(){
       let confb='';
       let beforeHtml, afterHtml;
       if(isSame) r._skip=true;
-      if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=esc(afterRaw)+(r.eventDate?`<div class="muted" style="font-size:11px">${bellIcon(11)} リマインド候補: ${esc(r.eventDate)}</div>`:''); }
+      if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=`<span class="d-new">${esc(afterRaw)}</span>`+(r.eventDate?`<div class="muted" style="font-size:11px">${bellIcon(11)} リマインド候補: ${esc(r.eventDate)}</div>`:''); }
       else if(isSame){ beforeHtml=esc(before); afterHtml='<span class="muted">変更なし</span>'; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
       grp3+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:11px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
