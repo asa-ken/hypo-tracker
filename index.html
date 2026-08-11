@@ -1836,7 +1836,11 @@ function copyMetFix(){
 // (困ったときは・説明書の中身を見るなど、この画面の他の低頻度セクションと同じ考え方)
 function parseGroup(label, bodyHtml){
   if(!bodyHtml) return '';
-  return `<div class="sec open" style="margin-top:16px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(label)}</span>${caretSvg(false)}</div><div class="b">${bodyHtml}</div></div>`;
+  // 展開記号を矢尻(caretSvg)から＋×(plusSvg)に変更した(ユーザー指摘、2026-08-11)。
+  // 「説明書の中身を見る」「調べることが思いつかない時は」と同じ記号にすることで、
+  // #parseOut内の3区分(取り込み前に確認してください/取り込むリマインダー・メモを選択してください/
+  // 読み込み内容を確認してください)も含め、この画面の開閉記号が＋×に揃った
+  return `<div class="sec open" style="margin-top:16px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(label)}</span>${plusSvg()}</div><div class="b">${bodyHtml}</div></div>`;
 }
 function parseAndPreview(){
   // 設定の切り替えなど、取り込み画面の外から呼ばれることがある。貼り付け欄が無ければ何もしない
