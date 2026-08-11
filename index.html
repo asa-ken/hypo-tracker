@@ -332,23 +332,34 @@
   .metwarn .d{font-size:11px; color:var(--amber-tx); margin-top:9px; line-height:1.5;}
   /* 取り込みプレビューの中でリマインダーにするかを決める欄 */
   /* リマインダー候補(.rembox)とメモ候補(.memobox)は別の意味のクラス名として使い分けつつ、
-     カードの外枠・見出し行だけは.candboxとして共有する(見た目の重みを揃える、ユーザー指摘、2026-08-10)。
+     カードの外枠・見出し行・行(トグル選択)の見た目は.candboxとして共有する
+     (見た目の重みを揃える、ユーザー指摘、2026-08-10/2026-08-11: 「メモもリマインダーと合わせて
+     トグルボタンに変えて」「太字細字の関係性もリマインダーと合わせて」)。
      .rembox単体を「リマインダー候補が無ければ出ない」の判定に使っている既存箇所があるため、
-     クラス名自体は統合しない */
+     外枠のクラス名自体(.rembox/.memobox)は統合しない */
   .candbox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:11px;}
   .candbox .rh{display:flex; align-items:center; justify-content:space-between; gap:8px;}
   .candbox .rh .rt{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;}
-  .rembox .lnk{border:none; background:none; font-family:inherit; font-size:12px; font-weight:600;
+  .candbox .lnk{border:none; background:none; font-family:inherit; font-size:12px; font-weight:600;
                color:var(--navy); cursor:pointer; padding:8px 2px; min-height:44px;}
-  .rembox .lnk.foot{display:block; width:100%; text-align:center; border-top:1px solid var(--line); margin-top:6px;}
-  .rembox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; border-top:1px solid var(--line); cursor:pointer; min-height:44px;}
-  .rembox .rrow:active{opacity:.6;}
-  .rembox .tx{flex:1; min-width:0;}
+  .candbox .lnk.foot{display:block; width:100%; text-align:center; border-top:1px solid var(--line); margin-top:6px;}
+  /* 本文(タップで全文表示)とトグル(タップでON/OFF)は役割が違うタップ領域なので、
+     行全体を1つのタップ領域にせず、.tx(本文)と.swtap(トグル)それぞれで受ける。
+     align-items:stretchで両方とも行の高さいっぱいに広げ、トグルの見た目(44x26px)より
+     実際のタップ領域を大きく保つ(ユーザー指摘、2026-08-11) */
+  .candbox .rrow{display:flex; align-items:stretch; gap:12px; padding:9px 0; border-top:1px solid var(--line); min-height:44px;}
+  .candbox .tx{flex:1; min-width:0; cursor:pointer; display:flex; flex-direction:column; justify-content:center;}
+  .candbox .tx:active{opacity:.6;}
+  .candbox .swtap{flex:none; display:flex; align-items:center; cursor:pointer;}
+  .candbox .swtap:active{opacity:.6;}
   /* 個別銘柄側のリマインダー一覧(list-row .ttl/.meta)と同じ文字サイズ・太さ・色に揃える
      (以前は独自の.d/.bで、色・太さの付け方が違った。ユーザー指摘、2026-08-10:「同じ機能は同じデザインにすべき」)。
-     このカードは選択トグル(複数選択)が要るため list-row そのものは使えないが、文字の見せ方だけ合わせる */
-  .rembox .ttl{display:block; font-size:13px; font-weight:600; line-height:1.4; color:var(--ink);}
-  .rembox .meta{display:block; font-size:11px; color:var(--ink3); margin-top:1px;}
+     このカードは選択トグル(複数選択)が要るため list-row そのものは使えないが、文字の見せ方だけ合わせる。
+     メモ候補もリマインダー候補と同じ太字細字の関係にする(ユーザー指摘、2026-08-11) */
+  /* display は指定しない。.ttl は常に.clip3(3行クランプ、-webkit-box)と併用するため、
+     ここでblockを指定すると.clip3のdisplay:-webkit-boxをクラスの詳細度で上書きしてしまう */
+  .candbox .ttl{font-size:13px; font-weight:600; line-height:1.4; color:var(--ink);}
+  .candbox .meta{display:block; font-size:11px; color:var(--ink3); margin-top:1px;}
   /* オン・オフのつまみ。チェックボックスより状態が一目で分かる */
   .sw{width:44px; height:26px; border-radius:13px; background:var(--line2); position:relative; flex:none; margin-top:2px; transition:background .15s;}
   .sw.on{background:var(--navy);}
@@ -709,6 +720,11 @@ function escArg(s){return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace
 // color:currentColor で置かれた場所の文字色をそのまま拾う(navy/amber/inkなど)
 function bellIcon(size){
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="width:${size||13}px;height:${size||13}px;vertical-align:-2px;flex:none;display:inline-block"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>`;
+}
+// メモ候補の目印。リマインダー候補のbellIconと対になる形で、線画のメモ帳アイコンを同じ描き方で用意する
+// (ユーザー指摘、2026-08-11: 「リマインダーと同様、線画のメモアイコンを作って」)
+function memoIcon(size){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="width:${size||13}px;height:${size||13}px;vertical-align:-2px;flex:none;display:inline-block"><path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>`;
 }
 // バックアップ(書き出し・復元)の目印。⚙ の絵文字は書体依存で色付き・厚みもまちまちに描かれ、
 // タブバーなどの線画アイコンから浮くため、同じ線画の「保管箱」に置き換える
@@ -1755,9 +1771,13 @@ function remPickBox(rows){
     <div class="muted" style="font-size:11px;margin:4px 0 2px">オンにした分は読み込みと同時にリマインダーになります。同じ日は1つにまとまります。</div>`;
   dated.forEach(r=>{
     const on=remPickOn(r), sig=remSig(r);
-    h+=`<div class="rrow" onclick="toggleRemPick('${escArg(sig)}')">
-      <span class="tx"><span class="ttl">${esc(String(r.value).slice(0,60))}${String(r.value).length>60?'…':''}</span><span class="meta">${esc(r.eventDate)}</span></span>
-      <span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span>
+    // 以前は行全体(本文込み)がトグルのタップ領域だった。本文を3行クランプ+タップで全文表示に
+    // するにあたり、本文タップは「全文表示」、トグルは「選択のON/OFF」と役割が競合するため、
+    // タップ領域を分離した(ユーザー指摘、2026-08-11)。トグル側は見た目は44x26pxのままだが、
+    // .swtapが行の高さいっぱいに広がるため実際のタップ領域は44px以上を保つ
+    h+=`<div class="rrow">
+      <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(String(r.value))}</span><span class="meta">${esc(r.eventDate)}</span></span>
+      <span class="swtap" onclick="toggleRemPick('${escArg(sig)}')"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span></span>
     </div>`;
   });
   h+=`<button class="lnk foot" onclick="setAutoRemind(true)">次回から確認せず、すべてオンにする</button></div>`;
@@ -1883,19 +1903,20 @@ function parseAndPreview(){
   let grp2='';
   // 日付つきの注目ポイントを、その場でリマインダーにするか決める
   grp2+=remPickBox(okRows);
-  // メモ候補(見出し・箇条書きに当てはまらなかった自由文)。個別銘柄のメモ・注目ポイントと
-  // 同じ見せ方(表示のみ・3行で畳む・タップで全文・スワイプで削除)にする。
-  // 新しく書き足す分だけは別枠(#memoCandNew)の入力欄で扱う。
-  // 以前はここだけ素の.lbl(枠なし)で、すぐ上のリマインダー候補(.rembox、枠線・背景・見出し付き)と
-  // 視覚的な重みが揃わず、「コンテンツをこの区分にまとめただけ」に見えていた(ユーザー指摘、2026-08-10)。
-  // 同じ区分内の兄弟グループとして、.remboxと同じカードの見た目に揃える
-  grp2+=`<div class="candbox memobox"><div class="rh"><span class="rt">メモ候補 ${p.memoCandidates.length}件</span></div>`;
-  if(p.memoCandidates.length) grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">フォーマットに当てはまらなかった文章です。不要なものはスワイプで消し、書き足したい内容は追加できます。</div>';
+  // メモ候補(見出し・箇条書きに当てはまらなかった自由文)。リマインダー候補と同じ
+  // カード・見出し・トグル選択の見た目に揃える(ユーザー指摘、2026-08-10/2026-08-11)。
+  // 以前はここだけ素の.lbl(枠なし)で、すぐ上のリマインダー候補と視覚的な重みが揃わず
+  // 「コンテンツをこの区分にまとめただけ」に見えていた
+  const memoOnCnt=p.memoCandidates.filter(memoPickOn).length;
+  grp2+=`<div class="candbox memobox"><div class="rh">
+      <span class="rt">${memoIcon()} メモ候補 ${p.memoCandidates.length}件</span>
+      ${p.memoCandidates.length?`<button class="lnk" onclick="bulkMemoPick(${memoOnCnt===p.memoCandidates.length?'false':'true'})">${memoOnCnt===p.memoCandidates.length?'すべてオフ':'すべてオン'}</button>`:''}
+    </div>`;
+  if(p.memoCandidates.length) grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">フォーマットに当てはまらなかった文章です。オンにした分だけ読み込みと同時にメモになります。</div>';
   else grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">今回はありません。</div>';
-  if(p.memoCandidates.length) grp2+='<div id="memoCandList" class="list cards" style="margin-top:4px">'+p.memoCandidates.map(t=>memoCandView(t)).join('')+'</div>';
-  grp2+='<div id="memoCandNew"></div>';
-  grp2+='<button class="btn sm" style="margin-top:8px" onclick="addMemoCandidateField()">＋ メモ候補を追加</button></div>';
-  // メモ候補は「＋追加」で解析結果が空でも書き足せるので、区分2は常に出す
+  if(p.memoCandidates.length) grp2+='<div id="memoCandList">'+p.memoCandidates.map(t=>memoCandView(t)).join('')+'</div>';
+  grp2+='</div>';
+  // メモ候補が0件でもカード自体(「今回はありません」)は常に出るので、区分2は常に出る
   h+=parseGroup('取り込むリマインダー/メモを選択してください', grp2);
 
   // ---- 区分3: 読み込み内容を確認してください(読み込みプレビュー) ----
@@ -1967,29 +1988,30 @@ function parseAndPreview(){
   out.innerHTML=h;
 }
 // 解析で見つかったメモ候補は「読む・要不要を決める」対象であって、その場で書き換える対象ではない。
-// 個別銘柄のメモ・注目ポイントと同じ見せ方(スワイプで削除)・同じ畳み方(読み込みプレビューと同じ
-// clip3、タップで全文表示)に揃える(ユーザー指摘、2026-08-10)。編集はできなくなるが、
-// 元々ここは「AIの応答から拾った文をそのまま持ち込むかどうか」を決める場であり、
-// 書き換えたい内容は貼り付け文(#mdIn)側を直すのが筋なので実用上の後退ではないと判断した
+// メモ候補もリマインダー候補と同じ「トグルで選ぶ」形にする(ユーザー指摘、2026-08-11: 「メモも
+// リマインダーと合わせてトグルボタンに変えて」)。以前はスワイプ削除+「＋追加」の手書き欄だったが、
+// 削除は取り消せず、追加は貼り付け文(#mdIn)側を直すのが筋(元のコメント参照)という考えから、
+// リマインダー候補と同じ「既定オンで、外したいものだけオフにする」という取り消し可能な選び方に揃えた。
+// 「＋ メモ候補を追加」ボタンは不要という指示のため削除した
+function memoSig(text){ return String(text||'').slice(0,60); }
+function memoPickOn(text){
+  const m=STATE._memoPick||(STATE._memoPick={}); const k=memoSig(text);
+  if(m[k]===undefined) m[k]=true;
+  return m[k];
+}
+function toggleMemoPick(sig){ const m=STATE._memoPick||(STATE._memoPick={}); m[sig]=!m[sig]; parseAndPreview(); }
+function bulkMemoPick(on){
+  const p=window._parsed; if(!p) return;
+  const m=STATE._memoPick||(STATE._memoPick={});
+  (p.memoCandidates||[]).forEach(t=>{ m[memoSig(t)]=!!on; });
+  parseAndPreview();
+}
 function memoCandView(text){
-  return `<div class="swipe">
-    <div class="list-row" style="align-items:flex-start;cursor:pointer" onclick="showCell(this)">
-      <div class="lt"><div class="clip3" style="font-size:13px;white-space:pre-wrap">${esc(text)}</div></div>
-    </div>
-    <button class="del-btn" onclick="this.closest('.swipe').remove()">削除</button>
+  const on=memoPickOn(text), sig=memoSig(text);
+  return `<div class="rrow">
+    <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(text)}</span></span>
+    <span class="swtap" onclick="toggleMemoPick('${escArg(sig)}')"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span></span>
   </div>`;
-}
-// 「＋ メモ候補を追加」は解析結果に無い内容をゼロから書く行為なので、
-// こちらは引き続き入力欄(テキストエリア)のまま、表示専用の一覧(#memoCandList)とは別に置く
-function memoCandEditField(text){
-  return `<div class="mc-item" style="position:relative;margin-bottom:8px">
-    <textarea class="mc-text" style="min-height:52px;padding-right:34px">${esc(text)}</textarea>
-    <span class="del" style="position:absolute;top:8px;right:10px;cursor:pointer" onclick="this.closest('.mc-item').remove()">×</span>
-  </div>`;
-}
-function addMemoCandidateField(){
-  const list=$('#memoCandNew'); if(!list) return;
-  list.insertAdjacentHTML('beforeend', memoCandEditField(''));
 }
 function commitImport(){
   const p=window._parsed; if(!p){toast('読み込む内容がありません');return;}
@@ -1997,12 +2019,8 @@ function commitImport(){
   if(!p.stock){ const pickEl=$('#importStockPick'); const picked=stock((pickEl&&pickEl.value)||STATE._importPick); if(picked) p.stock={name:picked.name, code:picked.id}; }
   if(!p.stock){toast('対象の銘柄を選んでください');return;}
   const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
-  // メモ候補は「解析で見つかった分(表示専用、スワイプで削除済みのものは除かれる)」+
-  // 「＋追加で書き足した分(入力欄)」の両方を合わせて取り込む
-  const memoTexts=[
-    ...[...document.querySelectorAll('#memoCandList .clip3')].map(d=>d.textContent.trim()),
-    ...[...document.querySelectorAll('#memoCandNew .mc-text')].map(ta=>ta.value.trim()),
-  ].filter(Boolean);
+  // メモ候補は、リマインダー候補と同じ「トグルがオンのものだけ」取り込む
+  const memoTexts=(p.memoCandidates||[]).filter(memoPickOn);
   if(!p.rows.length && !memoTexts.length){ toast('取り込む内容がありません'); return; }
   const newWatchWithEvent=[];
   // 該当なし行は「その他」カテゴリへ常に取り込む(以前はチェックボックスで選んだ分だけだったが、
