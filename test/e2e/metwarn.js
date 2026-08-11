@@ -68,9 +68,10 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
     return w - c >= 0 && w - c < 60;
   }));
 
-  // ---- 止めない: 読み込むボタンは押せる ----
-  ok('読み込むボタンは無効化されない', await p.evaluate(() => {
-    const btn = [...document.querySelectorAll('#parseOut button')].find(x => /読み込む/.test(x.textContent));
+  // ---- 止めない: 取り込むボタンは押せる ----
+  // 2026-08-11: 「✓ 読み込む」→「✓ 取り込む」に変更(ユーザー指摘、機能名の「取り込み」と表記を合わせる)
+  ok('取り込むボタンは無効化されない', await p.evaluate(() => {
+    const btn = [...document.querySelectorAll('#parseOut button')].find(x => /取り込む/.test(x.textContent));
     return !!btn && !btn.disabled;
   }));
 
