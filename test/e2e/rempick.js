@@ -32,10 +32,12 @@ const MD = `# 銘柄: テスト精機 (9001)
     await p.evaluate(t => { document.querySelector('#mdIn').value = t; parseAndPreview(); }, MD);
     await p.waitForTimeout(320);
   };
+  // 2026-08-10: 日付(.d)/本文(.b)という独自クラス名を、個別銘柄側のリマインダー一覧と
+  // 同じ.ttl(本文)/.meta(日付)に統一した(同じ機能は同じデザインにする、ユーザー指摘)
   const rows = () => p.evaluate(() => [...document.querySelectorAll('#parseOut .rembox .rrow')].map(e => ({
     on: e.querySelector('.sw').classList.contains('on'),
-    date: e.querySelector('.d').textContent.trim(),
-    text: e.querySelector('.b').textContent.trim().slice(0, 12),
+    date: e.querySelector('.meta').textContent.trim(),
+    text: e.querySelector('.ttl').textContent.trim().slice(0, 12),
   })));
 
   await feed();
@@ -55,6 +57,14 @@ const MD = `# 銘柄: テスト精機 (9001)
     < document.querySelector('#parseOut table').getBoundingClientRect().top));
   ok('つまみのタップ領域は44px以上', await p.evaluate(() =>
     [...document.querySelectorAll('#parseOut .rembox .rrow')].every(e => e.getBoundingClientRect().height >= 44)));
+  // 2026-08-10: トグルは左側にあり一般的なON/OFF配置(ラベル左・トグル右)と逆だった(ユーザー指摘)。
+  // 本文・日付(.tx)を左、つまみ(.sw)を右に置くよう直したので、位置関係を実測で固定する
+  ok('つまみはラベルより右側にある(一般的なトグル配置)', await p.evaluate(() => {
+    const row = document.querySelector('#parseOut .rembox .rrow');
+    const tx = row.querySelector('.tx').getBoundingClientRect();
+    const sw = row.querySelector('.sw').getBoundingClientRect();
+    return sw.left > tx.left;
+  }));
 
   // ---- 個別に切り替え ----
   await p.evaluate(() => document.querySelectorAll('#parseOut .rembox .rrow')[2].click());

@@ -44,7 +44,7 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
   ok('絵文字ではなく線画アイコンを使う', box.hasIcon && !/⚠/.test(box.txt));
   ok('修正指示のコピーボタンがある', box.btn);
   ok('上部のチップにも件数が出る', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標 1/.test(c.textContent))));
+    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標名 1/.test(c.textContent))));
   ok('チップは注意色(amber)になる', await p.evaluate(() =>
     [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標/.test(c.textContent) && c.classList.contains('amber'))));
 
@@ -89,12 +89,19 @@ const paste = body => `# 銘柄: テスト精機 (9001)\n${body}`;
   ok('コピー文に再発防止の指示が入る', /一字一句/.test(fix || ''));
 
   // ---- 似たものが無い新指標は、警告ではなく控えめな告知 ----
+  // 2026-08-10: 似た指標が無い新規指標の告知(「新しい指標が○件増えます」)は、
+  // 「読み込み内容を確認してください」表の新規行と同じ情報の重複表示だったため削除した
+  // (ユーザー指摘)。件数は上部チップ、個別の名前は表の新規行だけで見える形にする
   await feed(paste('## 指標\n- ROIC: 8.4 | 単位:% | 2026/8/1'));
   ok('似た指標が無ければ警告箱は出さない', await p.evaluate(() => !document.querySelector('.metwarn')));
-  ok('増えることは控えめに知らせる', await p.evaluate(() =>
-    /新しい指標が 1件 増えます: ROIC/.test(document.querySelector('#parseOut').textContent)));
+  ok('取り込み前に確認してくださいに重複告知を出さない', await p.evaluate(() => {
+    const head = [...document.querySelectorAll('#parseOut .sec > .h')].find(x => /取り込み前に確認してください/.test(x.textContent));
+    return !head || !/増えます/.test(head.closest('.sec').querySelector(':scope > .b').textContent);
+  }));
+  ok('個別の名前は読み込み内容確認の表で見える', await p.evaluate(() =>
+    [...document.querySelectorAll('#parseOut table tr')].some(tr => /ROIC/.test(tr.textContent) && /新規/.test(tr.textContent))));
   ok('その場合のチップは注意色にしない', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標/.test(c.textContent) && !c.classList.contains('amber'))));
+    [...document.querySelectorAll('#parseOut .pill-row .chip')].some(c => /新しい指標名/.test(c.textContent) && !c.classList.contains('amber'))));
 
   // ---- スナップショットの表記揺れ ----
   await feed(paste('## 指標\n- 予想PER: 18.2 | 単位:倍 | 2026/8/1'));
