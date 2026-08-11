@@ -345,12 +345,15 @@
   .candbox .lnk.foot{display:block; width:100%; text-align:center; border-top:1px solid var(--line); margin-top:6px;}
   /* 本文(タップで全文表示)とトグル(タップでON/OFF)は役割が違うタップ領域なので、
      行全体を1つのタップ領域にせず、.tx(本文)と.swtap(トグル)それぞれで受ける。
-     align-items:stretchで両方とも行の高さいっぱいに広げ、トグルの見た目(44x26px)より
-     実際のタップ領域を大きく保つ(ユーザー指摘、2026-08-11) */
-  .candbox .rrow{display:flex; align-items:stretch; gap:12px; padding:9px 0; border-top:1px solid var(--line); min-height:44px;}
-  .candbox .tx{flex:1; min-width:0; cursor:pointer; display:flex; flex-direction:column; justify-content:center;}
+     .swtapはalign-self:stretchで行の高さいっぱいに広げ、トグルの見た目(44x26px)より
+     実際のタップ領域を大きく保つ(ユーザー指摘、2026-08-11)。
+     .tx自体はdisplay:flexにしない。中の.clip3(3行クランプ、display:-webkit-box)が
+     flexアイテムになると、-webkit-line-clampとflexの組み合わせがブラウザによって
+     不安定になり、3行に収まらず4行以上表示されることがあるため(ユーザー報告で判明) */
+  .candbox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; border-top:1px solid var(--line); min-height:44px;}
+  .candbox .tx{flex:1; min-width:0; cursor:pointer;}
   .candbox .tx:active{opacity:.6;}
-  .candbox .swtap{flex:none; display:flex; align-items:center; cursor:pointer;}
+  .candbox .swtap{flex:none; align-self:stretch; display:flex; align-items:center; cursor:pointer;}
   .candbox .swtap:active{opacity:.6;}
   /* 個別銘柄側のリマインダー一覧(list-row .ttl/.meta)と同じ文字サイズ・太さ・色に揃える
      (以前は独自の.d/.bで、色・太さの付け方が違った。ユーザー指摘、2026-08-10:「同じ機能は同じデザインにすべき」)。
@@ -400,7 +403,8 @@
   .d-add{color:#1257a8; font-weight:600;}
   .d-orphan{color:var(--red-tx); font-weight:600;}
   .difflegend{font-size:11px; color:var(--ink3); margin:2px 0 6px;}
-  .difflegend span{margin-right:9px;}
+  /* 横一列だと項目の境目が読みにくかったため、項目ごとに改行する(ユーザー指摘、2026-08-11) */
+  .difflegend span{display:block; margin:2px 0;}
   .swipe{position:relative; overflow:hidden;}
   .swipe .del-btn{position:absolute; right:0; top:0; bottom:0; width:64px; background:var(--red-tx); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; border:none;}
 </style>
@@ -1758,17 +1762,21 @@ function remPickBox(rows){
   if(!dated.length) return '';
   // 自動に設定しているときは選ばせない。確認なしで全部登録するのが設定の意味なので、
   // ここで一覧を出すと結局「見て確認する」ことになってしまう
+  // 見出しが「日付つきの注目ポイント」だと、区分見出し「取り込むリマインダー/メモを選択してください」
+  // の「リマインダー」と語が同期しておらず、これがリマインダーの選択欄だと結びつきにくかった
+  // (ユーザー指摘、2026-08-11)。見出しを区分名と合わせて「リマインダー登録」にし、
+  // 元の「日付つきの注目ポイント」が示していた「取り込み元」の情報は説明文の方に移した
   if(autoRemindOn()){
-    return `<div class="candbox rembox"><div class="rh"><span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span></div>
-      <div class="muted" style="font-size:11px;margin-top:4px">読み込みと同時に、すべてリマインダーに登録します。不要な分は後から消せます。</div>
+    return `<div class="candbox rembox"><div class="rh"><span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span></div>
+      <div class="muted" style="font-size:11px;margin-top:4px">日付ありの注目ポイントを、読み込みと同時にすべてリマインダーに登録します。不要な分は後から消せます。</div>
       <button class="lnk" onclick="setAutoRemind(false)">毎回選ぶように戻す</button></div>`;
   }
   const onCnt=dated.filter(remPickOn).length;
   let h=`<div class="candbox rembox"><div class="rh">
-      <span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span>
+      <span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span>
       <button class="lnk" onclick="bulkRemPick(${onCnt===dated.length?'false':'true'})">${onCnt===dated.length?'すべてオフ':'すべてオン'}</button>
     </div>
-    <div class="muted" style="font-size:11px;margin:4px 0 2px">オンにした分は読み込みと同時にリマインダーになります。同じ日は1つにまとまります。</div>`;
+    <div class="muted" style="font-size:11px;margin:4px 0 2px">日付ありの注目ポイントを、オンにした分だけリマインダーとして登録します。同じ日は1つにまとまります。</div>`;
   dated.forEach(r=>{
     const on=remPickOn(r), sig=remSig(r);
     // 以前は行全体(本文込み)がトグルのタップ領域だった。本文を3行クランプ+タップで全文表示に
@@ -1855,19 +1863,17 @@ function parseAndPreview(){
   const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
   // 取り込むと新しく増える指標。表記揺れ(売上高→売上)もここに現れる。
   // 取り込み先が未確定のうちは、どのマスターと突き合わせるか決まらないので出さない。
-  // このチップの件数は「指標・業績推移の新しい名称」だけを数えており、下の「読み込み内容を
-  // 確認してください」表の「新規」ラベル(分析・注目ポイント等も含む、値が無かった行すべて)とは
-  // 数える対象が違う。チップの文言を「新しい指標名」とし、指標の名称に限定した集計であることを
-  // 明示することで、数が一致しないのを不整合ではなく別々の集計だと分かるようにする(ユーザー指摘、2026-08-10)
+  // 「読取N行」「新しい指標名N」のチップは、それ単体を見ても取り込み判断の材料にならない
+  // (行数・件数だけでは対応が要るかどうか分からない)ため削除した(ユーザー指摘、2026-08-11)。
+  // 判断が要る場合は「取り込み前に確認してください」の似た指標ボックスで具体的に示される
   const newMets=target?newMetricsIn(okRows, target):[];
-  const nearMets=newMets.filter(x=>x.near);
   if(p.stock){
-    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標名 ${newMets.length}</span>`:''}</div>`;
+    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span></div>`;
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、この銘柄に取り込みます。別の銘柄に入れる場合は、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けてください。</div>';
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>${p.stock.isMarket?'新規テーマとして登録':'新規銘柄として登録'}</button>`; }
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
   } else {
-    h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象の銘柄: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標名 ${newMets.length}</span>`:''}</div>`;
+    h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象の銘柄: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span></div>`;
     h+=`<label class="fld"><span class="t">対象の銘柄を選んでください</span><select id="importStockPick" onchange="pickImportStock(this.value)">
       <option value="">— 選択 —</option>
       ${DB.stocks.map(x=>`<option value="${x.id}"${STATE._importPick===x.id?' selected':''}>${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select>
@@ -1921,7 +1927,10 @@ function parseAndPreview(){
 
   // ---- 区分3: 読み込み内容を確認してください(読み込みプレビュー) ----
   if(p.rows.length){
-    let grp3='<div class="difflegend"><span>セルをタップで全文表示</span><span class="d-del">削除される部分</span><span class="d-add">新しく追加される部分</span>'
+    // 「セルをタップで全文表示」はこの表に限った機能ではなくなった(リマインダー/メモ候補でも
+    // 同じ操作ができる)ため削除。「削除される部分」「新しく追加される部分」は項目名として
+    // 簡潔に(ユーザー指摘、2026-08-11)。横一列だと項目の境目が読みにくいため、項目ごとに改行する
+    let grp3='<div class="difflegend"><span class="d-del">削除対象</span><span class="d-add">新規追加</span>'
       +(orphans.length?'<span class="d-orphan">既存指標に該当せず</span>':'')+'</div>';
     grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
