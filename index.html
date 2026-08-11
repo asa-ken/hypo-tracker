@@ -331,17 +331,24 @@
   .metwarn .r .s{font-size:11px; color:var(--amber-tx); margin-top:2px;}
   .metwarn .d{font-size:11px; color:var(--amber-tx); margin-top:9px; line-height:1.5;}
   /* 取り込みプレビューの中でリマインダーにするかを決める欄 */
-  .rembox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:11px;}
-  .rembox .rh{display:flex; align-items:center; justify-content:space-between; gap:8px;}
-  .rembox .rh .rt{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;}
+  /* リマインダー候補(.rembox)とメモ候補(.memobox)は別の意味のクラス名として使い分けつつ、
+     カードの外枠・見出し行だけは.candboxとして共有する(見た目の重みを揃える、ユーザー指摘、2026-08-10)。
+     .rembox単体を「リマインダー候補が無ければ出ない」の判定に使っている既存箇所があるため、
+     クラス名自体は統合しない */
+  .candbox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:11px;}
+  .candbox .rh{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .candbox .rh .rt{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;}
   .rembox .lnk{border:none; background:none; font-family:inherit; font-size:12px; font-weight:600;
                color:var(--navy); cursor:pointer; padding:8px 2px; min-height:44px;}
   .rembox .lnk.foot{display:block; width:100%; text-align:center; border-top:1px solid var(--line); margin-top:6px;}
   .rembox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; border-top:1px solid var(--line); cursor:pointer; min-height:44px;}
   .rembox .rrow:active{opacity:.6;}
   .rembox .tx{flex:1; min-width:0;}
-  .rembox .d{display:block; font-size:11px; color:var(--navy); font-weight:700;}
-  .rembox .b{display:block; font-size:12px; color:var(--ink);}
+  /* 個別銘柄側のリマインダー一覧(list-row .ttl/.meta)と同じ文字サイズ・太さ・色に揃える
+     (以前は独自の.d/.bで、色・太さの付け方が違った。ユーザー指摘、2026-08-10:「同じ機能は同じデザインにすべき」)。
+     このカードは選択トグル(複数選択)が要るため list-row そのものは使えないが、文字の見せ方だけ合わせる */
+  .rembox .ttl{display:block; font-size:13px; font-weight:600; line-height:1.4; color:var(--ink);}
+  .rembox .meta{display:block; font-size:11px; color:var(--ink3); margin-top:1px;}
   /* オン・オフのつまみ。チェックボックスより状態が一目で分かる */
   .sw{width:44px; height:26px; border-radius:13px; background:var(--line2); position:relative; flex:none; margin-top:2px; transition:background .15s;}
   .sw.on{background:var(--navy);}
@@ -1736,12 +1743,12 @@ function remPickBox(rows){
   // 自動に設定しているときは選ばせない。確認なしで全部登録するのが設定の意味なので、
   // ここで一覧を出すと結局「見て確認する」ことになってしまう
   if(autoRemindOn()){
-    return `<div class="rembox"><div class="rh"><span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span></div>
+    return `<div class="candbox rembox"><div class="rh"><span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span></div>
       <div class="muted" style="font-size:11px;margin-top:4px">読み込みと同時に、すべてリマインダーに登録します。不要な分は後から消せます。</div>
       <button class="lnk" onclick="setAutoRemind(false)">毎回選ぶように戻す</button></div>`;
   }
   const onCnt=dated.filter(remPickOn).length;
-  let h=`<div class="rembox"><div class="rh">
+  let h=`<div class="candbox rembox"><div class="rh">
       <span class="rt">${bellIcon()} 日付つきの注目ポイント ${dated.length}件</span>
       <button class="lnk" onclick="bulkRemPick(${onCnt===dated.length?'false':'true'})">${onCnt===dated.length?'すべてオフ':'すべてオン'}</button>
     </div>
@@ -1749,8 +1756,8 @@ function remPickBox(rows){
   dated.forEach(r=>{
     const on=remPickOn(r), sig=remSig(r);
     h+=`<div class="rrow" onclick="toggleRemPick('${escArg(sig)}')">
+      <span class="tx"><span class="ttl">${esc(String(r.value).slice(0,60))}${String(r.value).length>60?'…':''}</span><span class="meta">${esc(r.eventDate)}</span></span>
       <span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span>
-      <span class="tx"><span class="d">${esc(r.eventDate)}</span><span class="b">${esc(String(r.value).slice(0,60))}${String(r.value).length>60?'…':''}</span></span>
     </div>`;
   });
   h+=`<button class="lnk foot" onclick="setAutoRemind(true)">次回から確認せず、すべてオンにする</button></div>`;
@@ -1760,25 +1767,21 @@ function newMetricsBox(newMets){
   if(!newMets.length) return '';
   window._newMets=newMets;
   const near=newMets.filter(x=>x.near);
-  const plain=newMets.filter(x=>!x.near);
   // 以前は1件でも似た指標があれば、似ていない新規指標も同じ警告箱に混ぜて出していた。
   // 見出しの件数(near.length)と箱の中身(newMets全体)が食い違い、「似た指標はありません」の行が
   // 「似た名前の指標が増えます」という見出しの下に出て紛らわしかった(ユーザー指摘、2026-08-10)。
-  // 似た指標がある行だけをこの箱に入れ、無い行は下の控えめな告知に分ける
-  let h='';
-  if(near.length){
-    h+=`<div class="metwarn"><div class="t">${warnIcon()} 似た名前の指標があります (${near.length})</div>`;
-    h+=`<div class="d" style="margin-top:2px">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div>`;
-    near.forEach(x=>{
-      h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>
-        <div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div></div>`;
-    });
-    h+=`<button class="btn sm" style="margin-top:8px" onclick="copyMetFix()">表記をそろえる指示をコピー</button></div>`;
-  }
-  // 似た既存名が無いなら、単に指標が増えるだけ。警告の見た目にはしない
-  if(plain.length){
-    h+=`<div class="muted" style="margin:${near.length?'8px':'-2px'} 0 10px;font-size:11px">新しい指標が ${plain.length}件 増えます: ${esc(plain.map(x=>x.name).join(' / '))}</div>`;
-  }
+  // 似た指標がある行だけをこの箱に入れる。似た既存名が無い(判断不要な)分は、この区分
+  // (取り込み前に確認してください)には出さない。件数は上部チップの「新しい指標N」で、
+  // 個別の名前は下の「読み込み内容を確認してください」の表で新規行として既に見えており、
+  // ここに控えめな一行を重ねて出すと同じ情報の二重表示になっていた(ユーザー指摘、2026-08-10)
+  if(!near.length) return '';
+  let h=`<div class="metwarn"><div class="t">${warnIcon()} 似た名前の指標があります (${near.length})</div>`;
+  h+=`<div class="d" style="margin-top:2px">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div>`;
+  near.forEach(x=>{
+    h+=`<div class="r"><div class="n">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></div>
+      <div class="s">既にある「<b>${esc(x.near.name)}</b>」と似ています</div></div>`;
+  });
+  h+=`<button class="btn sm" style="margin-top:8px" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div>`;
   return h;
 }
 function copyMetFix(){
@@ -1831,16 +1834,20 @@ function parseAndPreview(){
   });
   const okRows=p.rows.filter(r=>!(r._res&&!r._res.sub));
   // 取り込むと新しく増える指標。表記揺れ(売上高→売上)もここに現れる。
-  // 取り込み先が未確定のうちは、どのマスターと突き合わせるか決まらないので出さない
+  // 取り込み先が未確定のうちは、どのマスターと突き合わせるか決まらないので出さない。
+  // このチップの件数は「指標・業績推移の新しい名称」だけを数えており、下の「読み込み内容を
+  // 確認してください」表の「新規」ラベル(分析・注目ポイント等も含む、値が無かった行すべて)とは
+  // 数える対象が違う。チップの文言を「新しい指標名」とし、指標の名称に限定した集計であることを
+  // 明示することで、数が一致しないのを不整合ではなく別々の集計だと分かるようにする(ユーザー指摘、2026-08-10)
   const newMets=target?newMetricsIn(okRows, target):[];
   const nearMets=newMets.filter(x=>x.near);
   if(p.stock){
-    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標 ${newMets.length}</span>`:''}</div>`;
+    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標名 ${newMets.length}</span>`:''}</div>`;
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、この銘柄に取り込みます。別の銘柄に入れる場合は、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けてください。</div>';
     if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>${p.stock.isMarket?'新規テーマとして登録':'新規銘柄として登録'}</button>`; }
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
   } else {
-    h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象の銘柄: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標 ${newMets.length}</span>`:''}</div>`;
+    h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象の銘柄: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span><span class="chip gray">読取 ${p.rows.length}行</span>${newMets.length?`<span class="chip ${nearMets.length?'amber':'gray'}">新しい指標名 ${newMets.length}</span>`:''}</div>`;
     h+=`<label class="fld"><span class="t">対象の銘柄を選んでください</span><select id="importStockPick" onchange="pickImportStock(this.value)">
       <option value="">— 選択 —</option>
       ${DB.stocks.map(x=>`<option value="${x.id}"${STATE._importPick===x.id?' selected':''}>${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select>
@@ -1867,7 +1874,7 @@ function parseAndPreview(){
   if(p.failed.length){
     grp1+=`<div class="failbox"><div class="t">読めなかった行 (${p.failed.length})</div>`;
     p.failed.forEach(l=>grp1+=`<div class="l">${esc(l)}</div>`);
-    grp1+=`<button class="btn sm" style="margin-top:8px" onclick="copyReformat()">整形しなおすプロンプトをコピー</button></div>`;
+    grp1+=`<button class="btn sm" style="margin-top:8px" onclick="copyReformat()">${copyIconSvg()}<span class="txt">整形しなおすプロンプトをコピー</span></button></div>`;
     window._failed=p.failed;
   }
   h+=parseGroup('取り込み前に確認してください', grp1);
@@ -1878,13 +1885,16 @@ function parseAndPreview(){
   grp2+=remPickBox(okRows);
   // メモ候補(見出し・箇条書きに当てはまらなかった自由文)。個別銘柄のメモ・注目ポイントと
   // 同じ見せ方(表示のみ・3行で畳む・タップで全文・スワイプで削除)にする。
-  // 新しく書き足す分だけは別枠(#memoCandNew)の入力欄で扱う
-  grp2+='<div class="lbl">メモ候補</div>';
-  if(p.memoCandidates.length) grp2+='<div class="hint" style="margin:-4px 0 6px">フォーマットに当てはまらなかった文章です。不要なものはスワイプで消し、書き足したい内容は追加できます。</div>';
-  else grp2+='<div class="muted" style="padding:0 2px 6px">今回はありません。</div>';
-  if(p.memoCandidates.length) grp2+='<div id="memoCandList" class="list cards">'+p.memoCandidates.map(t=>memoCandView(t)).join('')+'</div>';
+  // 新しく書き足す分だけは別枠(#memoCandNew)の入力欄で扱う。
+  // 以前はここだけ素の.lbl(枠なし)で、すぐ上のリマインダー候補(.rembox、枠線・背景・見出し付き)と
+  // 視覚的な重みが揃わず、「コンテンツをこの区分にまとめただけ」に見えていた(ユーザー指摘、2026-08-10)。
+  // 同じ区分内の兄弟グループとして、.remboxと同じカードの見た目に揃える
+  grp2+=`<div class="candbox memobox"><div class="rh"><span class="rt">メモ候補 ${p.memoCandidates.length}件</span></div>`;
+  if(p.memoCandidates.length) grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">フォーマットに当てはまらなかった文章です。不要なものはスワイプで消し、書き足したい内容は追加できます。</div>';
+  else grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">今回はありません。</div>';
+  if(p.memoCandidates.length) grp2+='<div id="memoCandList" class="list cards" style="margin-top:4px">'+p.memoCandidates.map(t=>memoCandView(t)).join('')+'</div>';
   grp2+='<div id="memoCandNew"></div>';
-  grp2+='<button class="btn sm" onclick="addMemoCandidateField()">＋ メモ候補を追加</button>';
+  grp2+='<button class="btn sm" style="margin-top:8px" onclick="addMemoCandidateField()">＋ メモ候補を追加</button></div>';
   // メモ候補は「＋追加」で解析結果が空でも書き足せるので、区分2は常に出す
   h+=parseGroup('取り込むリマインダー/メモを選択してください', grp2);
 
