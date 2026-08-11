@@ -67,7 +67,7 @@ const MD = `# 銘柄: テスト精機 (9001)
   }));
 
   // ---- 個別に切り替え ----
-  await p.evaluate(() => document.querySelectorAll('#parseOut .rembox .rrow')[2].click());
+  await p.evaluate(() => document.querySelectorAll('#parseOut .rembox .rrow')[2].querySelector('.swtap').click());
   await p.waitForTimeout(300);
   const r1 = await rows();
   ok('押した行だけオフになる', r1[2].on === false && r1[0].on && r1[1].on);
@@ -84,7 +84,7 @@ const MD = `# 銘柄: テスト精機 (9001)
 
   // ---- 選んだ分だけ登録される(同じ日はまとまる) ----
   await feed();
-  await p.evaluate(() => document.querySelectorAll('#parseOut .rembox .rrow')[2].click());  // 9/18 をオフ
+  await p.evaluate(() => document.querySelectorAll('#parseOut .rembox .rrow')[2].querySelector('.swtap').click());  // 9/18 をオフ
   await p.waitForTimeout(300);
   await p.evaluate(() => commitImport());
   await p.waitForTimeout(600);
