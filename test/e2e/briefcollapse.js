@@ -131,7 +131,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const s4 = await briefState();
   ok('畳んだ状態からでも再展開してコピーボタンに到達できる', s4 && s4.bodyVisible && s4.copyBtnVisible, s4);
 
-  // ---- 8. 階層: ①②困ったときはは同格なので見た目の重さが揃っている ----
+  // ---- 8. 階層: ①②は同格なので見た目の重さが揃っている ----
+  // 2026-08-11: 「調べることが思いつかない時は」は①②と同格の独立区分だったが、実際には
+  // ①(説明書を渡す)に付随する補助機能のため、①の入れ子(「説明書の中身を見る」と同じ階層)に
+  // 移した(ユーザー指摘)。同格の区分は①②の2つだけになった
   const hier = await p.evaluate(() => {
     const pick = (re) => {
       const el = [...document.querySelectorAll('#view .sec > .h, #view .lbl')].find(x => re.test(x.textContent));
@@ -139,25 +142,39 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
       const st = getComputedStyle(el);
       return { fontSize: st.fontSize, color: st.color, fontWeight: st.fontWeight, borderTop: st.borderTopWidth };
     };
-    return { s1: pick(/① /), s2: pick(/② /), s3: pick(/調べることが思いつかない時は/) };
+    return { s1: pick(/① /), s2: pick(/② /) };
   });
-  ok('①②困ったときはの見出しは同じ文字サイズ', hier.s1 && hier.s2 && hier.s3 &&
-    hier.s1.fontSize === hier.s2.fontSize && hier.s2.fontSize === hier.s3.fontSize, hier);
-  ok('①②困ったときはの見出しは同じ文字色', hier.s1 && hier.s2 && hier.s3 &&
-    hier.s1.color === hier.s2.color && hier.s2.color === hier.s3.color, hier);
-  ok('①②困ったときはの見出しは同じ太さの上枠線', hier.s1 && hier.s2 && hier.s3 &&
-    hier.s1.borderTop === hier.s2.borderTop && hier.s2.borderTop === hier.s3.borderTop && parseFloat(hier.s1.borderTop) > 0, hier);
+  ok('①②の見出しは同じ文字サイズ', hier.s1 && hier.s2 && hier.s1.fontSize === hier.s2.fontSize, hier);
+  ok('①②の見出しは同じ文字色', hier.s1 && hier.s2 && hier.s1.color === hier.s2.color, hier);
+  ok('①②の見出しは同じ太さの上枠線', hier.s1 && hier.s2 &&
+    hier.s1.borderTop === hier.s2.borderTop && parseFloat(hier.s1.borderTop) > 0, hier);
 
-  // ---- 9. 階層: 「説明書の中身を見る」は入れ子なので①より軽い見た目 ----
+  // ---- 9. 階層: 「説明書の中身を見る」「調べることが思いつかない時は」は入れ子なので①より軽い見た目 ----
+  // 2つの入れ子項目は互いに同じ軽さで揃っている
   const nested = await p.evaluate(() => {
     const s1 = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
-    const inner = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /説明書の中身を見る/.test(x.textContent));
+    const inner1 = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /説明書の中身を見る/.test(x.textContent));
+    const inner2 = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
     const g = (el) => { const st = getComputedStyle(el); return { fontSize: parseFloat(st.fontSize), color: st.color, borderTop: st.borderTopWidth }; };
-    return { outer: s1 ? g(s1) : null, inner: inner ? g(inner) : null };
+    return { outer: s1 ? g(s1) : null, inner1: inner1 ? g(inner1) : null, inner2: inner2 ? g(inner2) : null,
+             inner2InsideOuter: inner2 ? !!inner2.closest('.sec > .b .sec') : false };
   });
   ok('「説明書の中身を見る」は①より文字が小さい(入れ子として軽い見た目)',
-    nested.outer && nested.inner && nested.inner.fontSize < nested.outer.fontSize, nested);
-  ok('「説明書の中身を見る」は①と違う(薄い)文字色', nested.outer && nested.inner && nested.inner.color !== nested.outer.color, nested);
+    nested.outer && nested.inner1 && nested.inner1.fontSize < nested.outer.fontSize, nested);
+  ok('「説明書の中身を見る」は①と違う(薄い)文字色', nested.outer && nested.inner1 && nested.inner1.color !== nested.outer.color, nested);
+  ok('「調べることが思いつかない時は」も①の入れ子で、同じ軽さ',
+    nested.inner1 && nested.inner2 && nested.inner1.fontSize === nested.inner2.fontSize && nested.inner1.color === nested.inner2.color, nested);
+  ok('「調べることが思いつかない時は」は①の中(入れ子)にある', nested.inner2InsideOuter, nested);
+
+  // ---- 9b. 展開記号: 入れ子2項目は矢尻ではなく＋×(plusSvg)を使う ----
+  const marks = await p.evaluate(() => {
+    const has = (re, sel) => { const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => re.test(x.textContent)); return h ? !!h.querySelector(sel) : false; };
+    return {
+      innerHasPlus: has(/説明書の中身を見る/, 'svg.plusmark') && has(/調べることが思いつかない時は/, 'svg.plusmark'),
+      innerHasCaret: has(/説明書の中身を見る/, 'svg.caret') || has(/調べることが思いつかない時は/, 'svg.caret'),
+    };
+  });
+  ok('入れ子2項目は矢尻ではなく＋×を使う', marks.innerHasPlus && !marks.innerHasCaret, marks);
 
   // ---- 10. バグ修正: ①が開いていても「説明書の中身を見る」自体の開閉ボタンが機能する ----
   // .sec .b / .sec.open .b が子孫セレクタだと、外側①の.sec.openが内側(入れ子)の.h/.bにも
@@ -192,6 +209,24 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.waitForTimeout(150);
   const afterClose = await nestedState();
   ok('もう一度タップすると畳める', !afterClose.open && !afterClose.bodyVisible, afterClose);
+
+  // ---- 11. 「調べることが思いつかない時は」も同じ入れ子構造で独立して開閉できる ----
+  const otherState = () => p.evaluate(() => {
+    const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
+    const sec = h.closest('.sec');
+    const body = sec.querySelector(':scope > .b');
+    return { open: sec.classList.contains('open'), bodyVisible: getComputedStyle(body).display !== 'none' };
+  });
+  const otherBefore = await otherState();
+  ok('①が開いていても、調べることが思いつかない時はは最初は閉じている', !otherBefore.open && !otherBefore.bodyVisible, otherBefore);
+  await p.evaluate(() => {
+    const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
+    h.click();
+  });
+  await p.waitForTimeout(150);
+  const otherAfter = await otherState();
+  ok('調べることが思いつかない時はをタップすると開く', otherAfter.open && otherAfter.bodyVisible, otherAfter);
+  ok('調べる項目を選ぶボタンに到達できる', await p.evaluate(() => !!document.querySelector('#view button[onclick^="sheetOrderNew"]')));
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
