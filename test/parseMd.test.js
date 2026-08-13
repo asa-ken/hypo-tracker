@@ -302,3 +302,24 @@ describe('見出しの「#」が落ちても読める', () => {
     expect(r.stock).toMatchObject({ code: '1234' });
   });
 });
+
+// 対象未選択のまま質問文を生成すると、アプリ自身が指示文に
+// 「# 銘柄またはテーマ: (会話の中で対象を明記してください)」というプレースホルダー見出しを
+// 埋め込む(index.html genOrderNew)。外部AIがこれを字面通り使って回答することがあるため、
+// 「銘柄:」「テーマ:」と同じ意味の見出しとして読めるようにした(ユーザー報告、2026-08-13)
+describe('「銘柄またはテーマ:」見出し(genOrderNewのプレースホルダーがそのまま返るケース)', () => {
+  const ctx = { metricsMaster, sectionMaster, marketSectionMaster };
+  test('コード付きなら銘柄として認識する', () => {
+    const r = parseMd('# 銘柄またはテーマ: 日東工器 (6151)\n## 指標\n- PBR: 1.2 | 2026/8/7', ctx);
+    expect(r.stock).toMatchObject({ name: '日東工器', code: '6151' });
+    expect(r.stock.isMarket).toBeFalsy();
+  });
+  test('全角カッコのコードも銘柄として認識する', () => {
+    const r = parseMd('# 銘柄またはテーマ: 日東工器（6151）／AIデータセンター液冷技術\n## 指標\n- PBR: 1.2 | 2026/8/7', ctx);
+    expect(r.stock).toMatchObject({ name: '日東工器', code: '6151' });
+  });
+  test('コードが無ければテーマとして認識する', () => {
+    const r = parseMd('# 銘柄またはテーマ: AIデータセンター液冷技術\n## 指標\n- 市場規模: 1.2 | 単位:兆円 | 2026/8/7', ctx);
+    expect(r.stock).toMatchObject({ name: 'AIデータセンター液冷技術', isMarket: true });
+  });
+});

@@ -120,6 +120,28 @@ const NOHEAD = `## 指標
   ok('銘柄行があればプルダウンは出ない', await p.evaluate(() => !document.querySelector('#importStockPick')));
   ok('銘柄行があれば従来どおり更新前が出る', /18\.4/.test((await rowsOf())[0].before));
 
+  // ---- 「銘柄またはテーマ:」見出し(genOrderNewが対象未選択時に埋め込むプレースホルダー) ----
+  // 2026-08-13: このプレースホルダーをAIがそのまま使って回答すると「銘柄またはテーマ:」という
+  // 見出しになり、従来は「銘柄:」「テーマ:」に一致せず「銘柄を特定できません」に落ちて
+  // 新規登録ボタンも出なかった(ユーザー報告)。コード付きなら銘柄、無ければテーマとして読む
+  await p.evaluate(() => { document.querySelector('#mdIn').value =
+    '# 銘柄またはテーマ: 日東工器（6151）／AIデータセンター液冷技術\n## 指標\n- PBR: 3.2 | 単位:倍 | 2026/8/13';
+    parseAndPreview(); });
+  await p.waitForTimeout(300);
+  ok('「銘柄またはテーマ:」もコード付きなら銘柄として認識する(特定できませんに落ちない)', await p.evaluate(() =>
+    /未登録: 日東工器/.test(document.querySelector('#parseOut').textContent)));
+  ok('未登録の銘柄なら新規登録ボタンが出る', await p.evaluate(() =>
+    [...document.querySelectorAll('#parseOut button')].some(b => /新規銘柄として登録/.test(b.textContent))));
+
+  await p.evaluate(() => { document.querySelector('#mdIn').value =
+    '# 銘柄またはテーマ: AIデータセンター液冷技術\n## 指標\n- 市場規模: 1.2 | 単位:兆円 | 2026/8/13';
+    parseAndPreview(); });
+  await p.waitForTimeout(300);
+  ok('コードが無ければテーマとして認識する', await p.evaluate(() =>
+    /未登録: AIデータセンター液冷技術/.test(document.querySelector('#parseOut').textContent)));
+  ok('テーマなら新規テーマ登録ボタンが出る', await p.evaluate(() =>
+    [...document.querySelectorAll('#parseOut button')].some(b => /新規テーマとして登録/.test(b.textContent))));
+
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
 })();
