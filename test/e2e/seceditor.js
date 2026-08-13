@@ -41,7 +41,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
 
   // ---- 切り替えると分析の一覧に反映される ----
   const before = await p.evaluate(() => DB.sectionMaster.filter(c => c.on).length);
-  await p.evaluate(() => { const i = DB.sectionMaster.findIndex(c => c.on); DB.sectionMaster[i].on = false; save(); sheetSectionMaster(STATE.stockId, null); });
+  await p.evaluate(() => { const i = DB.sectionMaster.findIndex(c => c.on); DB.sectionMaster[i].on = false; save(); sheetSectionMaster(STATE.stockId); });
   await p.waitForTimeout(250);
   await p.evaluate(() => { closeSheet(); render(); });
   await p.waitForTimeout(300);
@@ -68,10 +68,12 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const mm = await p.evaluate(() => { closeSheet(); sheetMarketMetricsMaster(); return document.querySelector('#sheet').innerText; });
   ok('市場の指標設定からも入口が消えている', !/大カテゴリの表示\/非表示/.test(mm));
 
-  // ---- 「調べる項目を選ぶ」からは戻れる ----
-  const ord = await p.evaluate(sid => { closeSheet(); openStock(sid); sheetSectionMaster(sid, 'order'); return document.querySelector('#sheet').innerText; }, sid);
+  // ---- 「調べる項目を選ぶ」からの入口は削除した(2026-08-13、ユーザー指摘) ----
+  // 以前はここから分析セクションの管理へ遷移でき、戻るボタンも出ていたが、項目を選ぶ画面と
+  // セクション管理画面は役割が別のため、遷移ボタンごと削除した(分析の編集リンクからは引き続き開ける)
+  const orderSheet = await p.evaluate(sid => { closeSheet(); openStock(sid); sheetOrderNew(sid); return document.querySelector('#sheet').innerText; }, sid);
   await p.waitForTimeout(250);
-  ok('項目選択から来たときは戻るボタンが出る', /項目選択に戻る/.test(ord));
+  ok('「調べる項目を選ぶ」にセクション管理への遷移ボタンが無い', !/セクションを管理/.test(orderSheet));
 
   // ---- 大カテゴリの表示(入力済み件数はバッジのみ)と、小項目の日付表記 ----
   await p.evaluate(sid => { closeSheet(); DB.sectionMaster.forEach(c => c.on = true); save(); openStock(sid);

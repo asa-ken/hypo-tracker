@@ -3012,12 +3012,21 @@ function sheetAnalysisItem(sid,su){
 }
 let currentSid=null;
 
-function sheetOrderNew(sid){
+// keepTheme: cyclePick/clearPicks が選択操作のたびにこの画面を描き直すための内部呼び出しで
+// true を渡す(入力中の深掘りテーマを消さないため)。それ以外(外部からこの画面を開くとき)は
+// 常に深掘りテーマを空にする
+function sheetOrderNew(sid, keepTheme){
   const s=sid?stock(sid):null;
   // 選択は毎回リセット(前回の選択を引き継がない。深掘りは3件ずつ複数回に分ける運用を想定)
   if(STATE._pickSession===undefined || STATE._pickSession===null || STATE._pickSession!==sid){ DB.askPrefs.picks={}; STATE._pickSession=sid; }
+  // 深掘りテーマは、銘柄詳細の「注目テーマ」カード(DB.askPrefs.themes、永続・別画面で編集)とは
+  // 別の一時入力にしてある(STATE._deepTheme、ページ内メモリのみ・保存しない)。以前は保存先を
+  // 共有しており、ここへの入力がその銘柄の「注目テーマ」まで上書きしてしまっていた上、画面を
+  // 開き直しても前回の入力が残り続けていた(ユーザー指摘、2026-08-13)。この画面を外部から開く
+  // たびに必ず空欄に戻す
+  if(!keepTheme) STATE._deepTheme='';
   const pk=DB.askPrefs.picks||{};
-  const th=(DB.askPrefs.themes||{})[sid]||'';
+  const th=STATE._deepTheme||'';
   const cnt=Object.values(pk).filter(x=>x&&x!=='off').length;
   const deepCnt=Object.values(pk).filter(x=>x==='deep').length;
   let h=`<h3>調べる項目を選ぶ</h3>
@@ -3057,14 +3066,15 @@ function sheetOrderNew(sid){
       </div>`; });
     h+='</div></div></div>';
   });
-  h+=`<button class="btn pri" style="margin-top:14px" onclick="saveTheme('${sid}');genOrderNew('${sid}')">この内容で質問文を生成</button>
-      <button class="btn" style="margin-top:8px" onclick="saveTheme('${sid}');sheetSectionMaster('${sid}','order')">セクションを管理(表示/非表示)</button>
-      <button class="btn ghost" style="margin-top:8px" onclick="saveTheme('${sid}');closeSheet()">← 閉じる</button>`;
+  h+=`<button class="btn pri" style="margin-top:14px" onclick="saveDeepTheme();genOrderNew('${sid}')">この内容で質問文を生成</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="saveDeepTheme();closeSheet()">← 閉じる</button>`;
   openSheet(h);
 }
-function clearPicks(sid){ DB.askPrefs.picks={}; save(); sheetOrderNew(sid); }
-function cyclePick(sid,su){ saveTheme(sid); const pk=DB.askPrefs.picks||(DB.askPrefs.picks={}); const cur=pk[su]||'off'; pk[su]= cur==='off'?'sum': cur==='sum'?'deep':'off'; save(); sheetOrderNew(sid); }
-function saveTheme(sid){ const el=document.getElementById('ord_theme'); if(el){ if(!DB.askPrefs.themes)DB.askPrefs.themes={}; DB.askPrefs.themes[sid]=el.value.trim(); save(); } }
+function clearPicks(sid){ saveDeepTheme(); DB.askPrefs.picks={}; save(); sheetOrderNew(sid, true); }
+function cyclePick(sid,su){ saveDeepTheme(); const pk=DB.askPrefs.picks||(DB.askPrefs.picks={}); const cur=pk[su]||'off'; pk[su]= cur==='off'?'sum': cur==='sum'?'deep':'off'; save(); sheetOrderNew(sid, true); }
+// 「調べる項目を選ぶ」内でだけ使う一時値(ページ内メモリのみ・DBには保存しない)。
+// 銘柄詳細の「注目テーマ」(doSaveTheme/DB.askPrefs.themes)とは別物なので混同しないこと
+function saveDeepTheme(){ const el=document.getElementById('ord_theme'); if(el) STATE._deepTheme=el.value.trim(); }
 
 function catOf(su){ const c=DB.sectionMaster.find(x=>x.subs.includes(su)); return c?c.cat:''; }
 function genOrderNew(sid){
@@ -3073,7 +3083,7 @@ function genOrderNew(sid){
   // 市場・テーマも指標(水準)を聞ける。銘柄用とは別のマスターを使う
   const need=[]; if(s) snapKeys(metricsMasterFor(s)).forEach(k=>{const m=s.metrics[k]; if(!m||daysSince(m.d)>30)need.push(k);});
   if(!sums.length&&!deeps.length&&!need.length){ toast('項目を選んでください'); return; }
-  const theme=((DB.askPrefs.themes||{})[sid]||'').trim();
+  const theme=(STATE._deepTheme||'').trim();
   const head=s?(isMkt(s)?`# テーマ: ${s.name}`:`# 銘柄: ${s.name} (${s.code})`):'# 銘柄またはテーマ: (会話の中で対象を明記してください)';
   let p=`以下の項目を調査し、指定フォーマットで回答してください。\n`;
   if(theme) p+=`\n■注目テーマ: ${theme}\n各項目は、このテーマとの関連を軸に調べてください。テーマに関係が薄い項目は一般的な内容で構いません。\n`;
@@ -3096,8 +3106,7 @@ function showPrompt(p, backSid){
     <button class="btn pri" style="margin-top:10px" onclick='copyOrder(${JSON.stringify(p)})'>質問文をコピーしてAIへ</button>
     ${backSid?`<button class="btn ghost" style="margin-top:8px" onclick="sheetOrderNew('${backSid}')">← 項目の選択に戻る</button>`:'<button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">← 閉じる</button>'}`);
 }
-// back に 'order' を渡すと「調べる項目を選ぶ」へ戻る。省略時は単独の画面として閉じるだけにする
-function sheetSectionMaster(sid, back){
+function sheetSectionMaster(sid){
   const s0=sid&&sid!=='null'?stock(sid):null;
   const mkt=s0&&isMkt(s0);
   const mname=mkt?scopeKeys(s0).sec:'sectionMaster';
@@ -3107,10 +3116,9 @@ function sheetSectionMaster(sid, back){
   M.forEach((c,i)=>{
     h+=`<div class="row" style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line)">
       <span style="flex:1;font-size:13px">${esc(c.cat)}<div class="muted" style="font-size:11px">${esc(c.subs.join('・'))}</div></span>
-      <button class="btn sm" style="width:auto;padding:4px 10px;font-size:11px;${c.on?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="DB.${mname}[${i}].on=!DB.${mname}[${i}].on;save();sheetSectionMaster(${sid&&sid!=='null'?`'${sid}'`:'null'},${back?`'${back}'`:'null'})">${c.on?'表示':'非表示'}</button>
+      <button class="btn sm" style="width:auto;padding:4px 10px;font-size:11px;${c.on?'background:var(--navy);color:#fff;border-color:var(--navy)':''}" onclick="DB.${mname}[${i}].on=!DB.${mname}[${i}].on;save();sheetSectionMaster(${sid&&sid!=='null'?`'${sid}'`:'null'})">${c.on?'表示':'非表示'}</button>
     </div>`; });
-  h+=`${back==='order'&&sid&&sid!=='null'?`<button class="btn" style="margin-top:12px" onclick="sheetOrderNew('${sid}')">← 項目選択に戻る</button>`:''}
-      <button class="btn ghost" style="margin-top:12px" onclick="closeSheet();render()">閉じる</button>`;
+  h+=`<button class="btn ghost" style="margin-top:12px" onclick="closeSheet();render()">閉じる</button>`;
   openSheet(h);
 }
 function copyOrder(p){ copy(p,'質問文をコピーしました。AIに貼り付けて、回答をSTEP2へ'); STATE._pickSession=null; DB.askPrefs.picks={}; save(); closeSheet(); if(STATE.tab!=='import') go('import'); else render(); }
