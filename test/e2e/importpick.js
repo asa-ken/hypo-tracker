@@ -130,17 +130,48 @@ const NOHEAD = `## 指標
   await p.waitForTimeout(300);
   ok('「銘柄またはテーマ:」もコード付きなら銘柄として認識する(特定できませんに落ちない)', await p.evaluate(() =>
     /未登録: 日東工器/.test(document.querySelector('#parseOut').textContent)));
-  ok('未登録の銘柄なら新規登録ボタンが出る', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut button')].some(b => /新規銘柄として登録/.test(b.textContent))));
+  // 2026-08-13: 「新規銘柄として登録」ボタンは削除し、「取り込む」を押した時点でまとめて
+  // 登録するよう変更した(ユーザー指示: 取り込みが2手順になっていた)
+  ok('未登録でも別ボタンは出ない(取り込むボタンにまとまる)', await p.evaluate(() =>
+    ![...document.querySelectorAll('#parseOut button')].some(b => /新規銘柄として登録/.test(b.textContent))));
+  ok('取り込むと登録される旨を案内する', await p.evaluate(() =>
+    /「取り込む」を押すと、新規銘柄として登録されます/.test(document.querySelector('#parseOut').textContent)));
+  await p.evaluate(() => commitImport());
+  await p.waitForTimeout(500);
+  ok('「取り込む」で新規銘柄が実際に登録される', await p.evaluate(() => !!stock('6151') && stock('6151').name === '日東工器'));
+  ok('取り込んだ内容も同時に反映される', await p.evaluate(() => stock('6151').metrics['PBR'].v === '3.2'));
 
+  await p.evaluate(() => go('import')); await p.waitForTimeout(250);
   await p.evaluate(() => { document.querySelector('#mdIn').value =
     '# 銘柄またはテーマ: AIデータセンター液冷技術\n## 指標\n- 市場規模: 1.2 | 単位:兆円 | 2026/8/13';
     parseAndPreview(); });
   await p.waitForTimeout(300);
   ok('コードが無ければテーマとして認識する', await p.evaluate(() =>
     /未登録: AIデータセンター液冷技術/.test(document.querySelector('#parseOut').textContent)));
-  ok('テーマなら新規テーマ登録ボタンが出る', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut button')].some(b => /新規テーマとして登録/.test(b.textContent))));
+  ok('テーマも別ボタンは出ない', await p.evaluate(() =>
+    ![...document.querySelectorAll('#parseOut button')].some(b => /新規テーマとして登録/.test(b.textContent))));
+  ok('テーマは取り込むと新規テーマとして登録される旨を案内する', await p.evaluate(() =>
+    /「取り込む」を押すと、新規テーマとして登録されます/.test(document.querySelector('#parseOut').textContent)));
+  await p.evaluate(() => commitImport());
+  await p.waitForTimeout(500);
+  ok('「取り込む」で新規テーマが実際に登録される', await p.evaluate(() =>
+    DB.stocks.some(s => s.name === 'AIデータセンター液冷技術' && s.kind === '市場')));
+
+  // ---- 同じ文言のメモ候補が複数あっても、トグルは行ごとに独立する ----
+  // 2026-08-13: 本文だけの署名(memoSig)が同じキーを指してしまい、1件をON/OFFすると
+  // 見た目が別の行まで一緒に動いていた不具合(ユーザー報告、画像添付あり)
+  await p.evaluate(() => go('import')); await p.waitForTimeout(250);
+  await p.evaluate(() => { document.querySelector('#mdIn').value =
+    '# 銘柄: テスト精機 (9001)\n同じ内容の自由文です。これはメモ候補として拾われます。\n\n同じ内容の自由文です。これはメモ候補として拾われます。';
+    parseAndPreview(); });
+  await p.waitForTimeout(300);
+  const swBefore = await p.evaluate(() => [...document.querySelectorAll('#parseOut .memobox .sw')].map(e => e.classList.contains('on')));
+  ok('同一文言のメモ候補が2件とも出る', swBefore.length === 2);
+  ok('既定は両方オン', swBefore.every(Boolean));
+  await p.evaluate(() => document.querySelectorAll('#parseOut .memobox .swtap')[0].click());
+  await p.waitForTimeout(300);
+  const swAfter = await p.evaluate(() => [...document.querySelectorAll('#parseOut .memobox .sw')].map(e => e.classList.contains('on')));
+  ok('1件目だけオフにすると1件目だけ変わる(2件目は連動しない)', swAfter[0] === false && swAfter[1] === true, swAfter);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();

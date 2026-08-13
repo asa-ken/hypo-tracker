@@ -5,7 +5,7 @@ const fs = require('fs');
 const td = fs.readFileSync(__dirname + '/fixtures/testdata.json', 'utf8');
 const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → ' + JSON.stringify(v));
 
-// 既存の市場カード宛て(新規テーマの登録は別フロー = addStockFromImport)
+// 既存の市場カード宛て(未登録の新規テーマは「取り込む」を押した時点でまとめて登録される = registerStockFromImport)
 const MD = `# テーマ: テスト市場・AIサイクル
 
 ## 指標
