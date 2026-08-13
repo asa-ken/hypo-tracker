@@ -1927,7 +1927,9 @@ function parseAndPreview(){
   if(p.stock){
     h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span></div>`;
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、この銘柄に取り込みます。別の銘柄に入れる場合は、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けてください。</div>';
-    if(!known){ h+=`<button class="btn sm" style="margin-bottom:8px" onclick='addStockFromImport(${JSON.stringify(p.stock)})'>${p.stock.isMarket?'新規テーマとして登録':'新規銘柄として登録'}</button>`; }
+    // 2026-08-13: 「新規銘柄として登録」ボタンを別途押させると、取り込みが2手順になる。
+    // 「取り込む」を押した時点でまとめて新規登録するよう変更した(ユーザー指示)
+    if(!known) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">「取り込む」を押すと、${p.stock.isMarket?'新規テーマ':'新規銘柄'}として登録されます。</div>`;
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
   } else {
     h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象の銘柄: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span></div>`;
@@ -1977,7 +1979,7 @@ function parseAndPreview(){
     </div>`;
   if(p.memoCandidates.length) grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">フォーマットに当てはまらなかった文章です。オンにした分だけ読み込みと同時にメモになります。</div>';
   else grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">今回はありません。</div>';
-  if(p.memoCandidates.length) grp2+='<div id="memoCandList">'+p.memoCandidates.map(t=>memoCandView(t)).join('')+'</div>';
+  if(p.memoCandidates.length) grp2+='<div id="memoCandList">'+p.memoCandidates.map((t,i,arr)=>memoCandView(t,i,arr)).join('')+'</div>';
   grp2+='</div>';
   // メモ候補が0件でもカード自体(「今回はありません」)は常に出るので、区分2は常に出る
   h+=parseGroup('取り込むリマインダー/メモを選択してください', grp2);
@@ -2062,9 +2064,16 @@ function parseAndPreview(){
 // 削除は取り消せず、追加は貼り付け文(#mdIn)側を直すのが筋(元のコメント参照)という考えから、
 // リマインダー候補と同じ「既定オンで、外したいものだけオフにする」という取り消し可能な選び方に揃えた。
 // 「＋ メモ候補を追加」ボタンは不要という指示のため削除した
-function memoSig(text){ return String(text||'').slice(0,60); }
-function memoPickOn(text){
-  const m=STATE._memoPick||(STATE._memoPick={}); const k=memoSig(text);
+// 同じ文言のメモ候補が複数あると、本文だけの署名では同じキーを指してしまい、
+// 一方をON/OFFすると見た目の別の行まで一緒に動いてしまう不具合があった(ユーザー報告、2026-08-13)。
+// 配列中の「同じ文言が何番目の出現か」も署名に含め、行ごとに独立させる
+function memoSig(list, idx){
+  const arr=list||[]; const key=String(arr[idx]||'').slice(0,60);
+  let occ=0; for(let i=0;i<idx;i++){ if(String(arr[i]||'').slice(0,60)===key) occ++; }
+  return key+(occ?('#'+occ):'');
+}
+function memoPickOn(text, idx, list){
+  const m=STATE._memoPick||(STATE._memoPick={}); const k=memoSig(list, idx);
   if(m[k]===undefined) m[k]=true;
   return m[k];
 }
@@ -2072,11 +2081,11 @@ function toggleMemoPick(sig){ const m=STATE._memoPick||(STATE._memoPick={}); m[s
 function bulkMemoPick(on){
   const p=window._parsed; if(!p) return;
   const m=STATE._memoPick||(STATE._memoPick={});
-  (p.memoCandidates||[]).forEach(t=>{ m[memoSig(t)]=!!on; });
+  (p.memoCandidates||[]).forEach((t,i,arr)=>{ m[memoSig(arr,i)]=!!on; });
   parseAndPreview();
 }
-function memoCandView(text){
-  const on=memoPickOn(text), sig=memoSig(text);
+function memoCandView(text, idx, list){
+  const on=memoPickOn(text, idx, list), sig=memoSig(list, idx);
   return `<div class="rrow">
     <span class="tx" onclick="showCell(this)"><span class="ttl clip3">${esc(text)}${tapMarkHtml()}</span></span>
     <span class="swtap" onclick="toggleMemoPick('${escArg(sig)}')"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span></span>
@@ -2087,7 +2096,9 @@ function commitImport(){
   if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0) p.stock={name:sc0.name, code:sc0.code}; }
   if(!p.stock){ const pickEl=$('#importStockPick'); const picked=stock((pickEl&&pickEl.value)||STATE._importPick); if(picked) p.stock={name:picked.name, code:picked.id}; }
   if(!p.stock){toast('対象の銘柄を選んでください');return;}
-  const s=stock(p.stock.code); if(!s){toast('先に新規銘柄として登録してください');return;}
+  // 未登録の銘柄・テーマは、以前は別ボタン(「新規銘柄として登録」)で先に登録させていたが、
+  // 取り込みが2手順になっていた。「取り込む」を押した時点でまとめて登録する(ユーザー指示、2026-08-13)
+  const s=stock(p.stock.code) || registerStockFromImport(p.stock);
   // メモ候補は、リマインダー候補と同じ「トグルがオンのものだけ」取り込む
   const memoTexts=(p.memoCandidates||[]).filter(memoPickOn);
   if(!p.rows.length && !memoTexts.length){ toast('取り込む内容がありません'); return; }
@@ -2229,11 +2240,15 @@ function normalizeValueUnit(value, unit){
 }
 function normD(d){ if(!d)return '2026/7/13'; if(/^\d{1,2}\/\d{1,2}$/.test(d))return '2026/'+d; return d; }
 function copyReformat(){ const txt='次のテキストを指定書式に直してください。書式: - キー: 値 | 基準日(YYYY/M/D)。数値は単位付き確定値のみ。単位は「単位:◯◯」欄に。出典・確信度は書かない。\n--- 対象 ---\n'+(window._failed||[]).join('\n'); copy(txt,'整形プロンプトをコピーしました'); }
-function addStockFromImport(st){
+// 取り込み(commitImport)から呼ばれる。未登録の銘柄・テーマを作成し、そのレコードを返す。
+// 以前は独立ボタン(addStockFromImport)で先に登録させていたが、「取り込む」を押した時点で
+// まとめて登録するよう変更した(ユーザー指示、2026-08-13)
+function registerStockFromImport(st){
   // 取り込み経由では粒度を選べないので既定の「市場」。カードのメニューから後で変更できる
-  if(st.isMarket){ const id='mkt'+Date.now(); DB.stocks.push({id, name:st.name, code:'', kind:'市場', scope:'市場', metrics:{}, trend:{}, sections:{}, mine:[]}); st.code=id; }
-  else DB.stocks.push({id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{},mine:[]});
-  save(); toast('登録しました'); parseAndPreview();
+  if(st.isMarket){ const id='mkt'+Date.now(); const rec={id, name:st.name, code:'', kind:'市場', scope:'市場', metrics:{}, trend:{}, sections:{}, mine:[]}; DB.stocks.push(rec); st.code=id; return rec; }
+  const rec={id:st.code,name:st.name,code:st.code,kind:'ウォッチ',metrics:{},trend:{},sections:{},mine:[]};
+  DB.stocks.push(rec);
+  return rec;
 }
 
 //////////////////// REMINDER ////////////////////
