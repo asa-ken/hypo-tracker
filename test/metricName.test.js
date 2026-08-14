@@ -45,11 +45,45 @@ describe('metSim: 同じ指標を指しているかの近さ', () => {
   });
 });
 
+// 英語略称と日本語表記は文字が重ならないため、通常の2文字組一致率(語順入れ替わり用)では
+// 拾えない。実際にEPSと1株当たり当期純利益が別々の指標として登録された事例があった
+// (ユーザー報告、2026-08-13)ため、既知の組だけ表で持って救う
+describe('metSim: 英語略称⇔日本語表記(既知のエイリアス)', () => {
+  test('2文字組の一致率では拾えないことを確認する(対策前の状態)', () => {
+    // EPSと1株当たり当期純利益は共有する文字が無く、素の一致率アルゴリズムでは0点になる
+    const A = ['e', 'p', 's'], B = Array.from('1株当たり当期純利益');
+    expect(A.some(c => B.includes(c))).toBe(false);
+  });
+  test('EPS ⇔ 1株当たり当期純利益 は同一指標とみなす', () => {
+    expect(metSim('EPS', '1株当たり当期純利益')).toBe(1);
+    expect(metSim('EPS', '1株当たり純利益')).toBe(1);
+  });
+  test('ROE ⇔ 自己資本利益率 は同一指標とみなす', () => {
+    expect(metSim('ROE', '自己資本利益率')).toBe(1);
+  });
+  test('PER(予想) ⇔ 予想株価収益率、PBR ⇔ 株価純資産倍率、FCF ⇔ フリーキャッシュフロー', () => {
+    expect(metSim('PER(予想)', '予想株価収益率')).toBe(1);
+    expect(metSim('PBR', '株価純資産倍率')).toBe(1);
+    expect(metSim('FCF', 'フリーキャッシュフロー')).toBe(1);
+  });
+  test('左右を入れ替えても同じ', () => {
+    expect(metSim('1株当たり当期純利益', 'EPS')).toBe(metSim('EPS', '1株当たり当期純利益'));
+  });
+  test('エイリアス表に無い日本語名までは拾わない(誤爆しない)', () => {
+    expect(metSim('EPS', '1株益')).toBeLessThan(.6);
+    expect(metSim('ROE', '総資産利益率')).toBeLessThan(.6);
+  });
+});
+
 describe('nearestMetric: 一覧の中でいちばん近いものを返す', () => {
   test('表記揺れの相手を名指しできる', () => {
     expect(nearestMetric('売上', TREND).name).toBe('売上高');
     expect(nearestMetric('営業利益率(%)', SNAP).name).toBe('営業利益率');
     expect(nearestMetric('予想PER', SNAP).name).toBe('PER(予想)');
+  });
+  test('英語略称⇔日本語表記の相手も名指しできる(2026-08-13追加)', () => {
+    expect(nearestMetric('1株当たり当期純利益', TREND).name).toBe('EPS');
+    expect(nearestMetric('フリーキャッシュフロー', TREND).name).toBe('FCF');
   });
   test('似たものが無ければ null', () => {
     expect(nearestMetric('ROIC', SNAP)).toBe(null);

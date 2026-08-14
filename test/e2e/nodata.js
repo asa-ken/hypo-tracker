@@ -29,7 +29,9 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     const cells = [...v.querySelectorAll('.metric .m')];
     const table = v.querySelector('table');
     return {
-      cellCount: cells.length, snapCount: DB.metricsMaster.snap.length,
+      // 2026-08-13: ROE・営業利益率が非表示中の指標として存在しうるため、生のsnap.length
+      // ではなく表示対象(snapKeys、非表示分を除く)の件数と比べる
+      cellCount: cells.length, snapCount: snapKeys(DB.metricsMaster).length,
       cellNames: cells.map(c => c.querySelector('.k').textContent),
       cellValues: cells.map(c => c.querySelector('.v').textContent),
       charts: v.querySelectorAll('.nodata').length,
@@ -42,7 +44,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     };
   });
   ok('主要指標のカードは選んだ指標の分だけ全部出る', empty.cellCount === empty.snapCount && empty.cellCount > 0);
-  ok('カードの表示順・名前はマスターどおり', JSON.stringify(empty.cellNames) === JSON.stringify(await p.evaluate(() => DB.metricsMaster.snap)));
+  ok('カードの表示順・名前はマスターどおり', JSON.stringify(empty.cellNames) === JSON.stringify(await p.evaluate(() => snapKeys(DB.metricsMaster))));
   ok('値が無いカードは「データなし」と書く', empty.cellValues.every(v => v === 'データなし'));
   ok('業績推移の表も出る(消えない)', empty.hasTable);
   ok('表の行は業績推移の指標の分だけある', empty.rows.length === empty.trendInds.length);
@@ -76,9 +78,11 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     const rows = [...table.querySelectorAll('tr')].slice(1);
     const cells = [...v.querySelectorAll('.metric .m')];
     return {
-      cellCount: cells.length, snapCount: DB.metricsMaster.snap.length,
+      // 2026-08-13: ROE・営業利益率が非表示中の指標として存在しうるため、生のsnap配列
+      // ではなく表示対象(snapKeys、非表示分を除く)で数える
+      cellCount: cells.length, snapCount: snapKeys(DB.metricsMaster).length,
       nodataCells: cells.filter(c => c.querySelector('.v').textContent === 'データなし').map(c => c.querySelector('.k').textContent),
-      missingSnap: DB.metricsMaster.snap.filter(k => !stock(STATE.stockId).metrics[k]),
+      missingSnap: snapKeys(DB.metricsMaster).filter(k => !stock(STATE.stockId).metrics[k]),
       rows: rows.map(r => ({
         name: r.querySelector('td').textContent.trim(),
         empty: r.classList.contains('empty-row'),

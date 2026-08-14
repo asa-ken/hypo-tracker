@@ -95,6 +95,9 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   // ---- 5. すでに上限を超えているデータ(旧バージョン由来)にも気づける ----
   await p.evaluate(() => {
     DB.metricsMaster.hiddenTrend = [];
+    // 既定の業績推移の件数(2026-08-13にROEが加わり4件)がバージョンで変わっても再現できるよう、
+    // ここでちょうど5件に揃えてから全部ONにする
+    DB.metricsMaster.trend = DB.metricsMaster.trend.slice(0, 5);
     DB.metricsMaster.trend.forEach(t => t.graph = true);   // 5件ON
     save(); sheetMetricsMaster();
   });
@@ -105,7 +108,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('直し方も同じ言い方で書く', /どれかの指標を非表示に変更してください/.test(s4.warn));
   ok('見出しの表示も実数のまま(5\\/4)', JSON.stringify(s4.label) === JSON.stringify(['5', '4']));
   // 減らせば案内も消える
-  await tapGraph('純利益'); await p.waitForTimeout(350);
+  await tapGraph('FCF'); await p.waitForTimeout(350);
   const s5 = await sheet();
   ok('1件外すと超過の注意は消える', s5.graphOn.length === 4 && !/超えています/.test(s5.warn || s5.note || ''));
 
