@@ -278,8 +278,13 @@ describe('migrate', () => {
     expect(out.industryMetricsMaster.snap).not.toContain('ROE');
     // 日次で動くもの(株価指数・VIX・騰落レシオ)は既定に含めない(証券アプリの役割)
     expect(out.marketMetricsMaster.snap.some(x => /日経平均|TOPIX|移動平均|VIX|騰落レシオ/.test(x))).toBe(false);
-    // 銘柄側は業界と比べられるよう ROE・営業利益率を持つ
-    expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']);
+    // 2026-08-13: ROE・営業利益率は指標(単年)と業績推移(複数年)の両方で同じ意味の別名が
+    // 登録されうる(ROE⇔自己資本利益率、営業利益率⇔売上高営業利益率)ため既定の指標一覧からは外し、
+    // ROEは業績推移側の既定に置く(ユーザー指摘・確認の上)
+    expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', '自己資本比率', '配当利回り(予想)']);
+    expect(out.metricsMaster.snap).not.toContain('ROE');
+    expect(out.metricsMaster.snap).not.toContain('営業利益率');
+    expect(out.metricsMaster.trend.map(t => t.name)).toContain('ROE');
     // 市場専用のカテゴリ(金融環境)は業界には無い
     const cats = m => m.map(c => c.cat);
     expect(cats(out.marketSectionMaster)).toContain('金融環境');
@@ -337,7 +342,7 @@ describe('migrate', () => {
       metricsMaster: { snap: ['PER(予想)', 'PBR', '時価総額', '配当利回り(予想)', '信用倍率', '目標株価コンセンサス'], trend: [], hiddenSnap: [], hiddenTrend: [] },
     };
     const out = migrate(db);
-    expect(visible(out.metricsMaster)).toEqual(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']);
+    expect(visible(out.metricsMaster)).toEqual(['PER(予想)', 'PBR', '自己資本比率', '配当利回り(予想)']);
     expect(out.metricsMaster.snap).toEqual(expect.arrayContaining(['時価総額', '信用倍率', '目標株価コンセンサス']));
     expect(out.metricsMaster.hiddenSnap).toEqual(expect.arrayContaining(['時価総額', '信用倍率', '目標株価コンセンサス']));
   });
@@ -432,7 +437,7 @@ describe('migrate', () => {
       const db = {
         stocks: [], hypotheses: [], reminders: [],
         metricsMaster: {
-          snap: ['PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)'],
+          snap: ['PBR', '自己資本比率', '配当利回り(予想)'],
           trend: [{ name: '売上高', graph: true }],
           hiddenSnap: ['PER(予想)'],   // 既定では先頭の指標
           hiddenTrend: [],
@@ -440,19 +445,19 @@ describe('migrate', () => {
       };
       const out = migrate(db);
       expect(out.metricsMaster.snap[0]).toBe('PER(予想)');
-      expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']);
+      expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', '自己資本比率', '配当利回り(予想)']);
     });
 
     test('差し込み位置は前後の既定項目の間になる', () => {
       const db = {
         stocks: [], hypotheses: [], reminders: [],
         metricsMaster: {
-          snap: ['PER(予想)', 'PBR', '自己資本比率', '独自指標'],
-          trend: [], hiddenSnap: ['営業利益率'], hiddenTrend: [],   // 既定では PBR と 自己資本比率 の間(ROEの次)
+          snap: ['PER(予想)', 'PBR', '独自指標'],
+          trend: [], hiddenSnap: ['自己資本比率'], hiddenTrend: [],   // 既定では PBR と 配当利回り(予想) の間
         },
       };
       const out = migrate(db);
-      expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', '営業利益率', '自己資本比率', '独自指標']);
+      expect(out.metricsMaster.snap).toEqual(['PER(予想)', 'PBR', '自己資本比率', '独自指標']);
     });
 
     test('業績推移の指標も既定の位置に戻す', () => {
@@ -464,7 +469,8 @@ describe('migrate', () => {
         },
       };
       const out = migrate(db);
-      expect(out.metricsMaster.trend.map(t => t.name)).toEqual(['売上高', '営業利益', 'EPS']);
+      // 2026-08-13: ROEが業績推移の既定に加わったため、既定に無かった旧データにも補われる
+      expect(out.metricsMaster.trend.map(t => t.name)).toEqual(['売上高', '営業利益', 'EPS', 'ROE']);
     });
 
     test('2回流しても重複しない(冪等)', () => {
@@ -493,6 +499,110 @@ describe('migrate', () => {
       expect(out.metricsMaster.hiddenSnap).toEqual([]);
       expect(out.metricsMaster.hiddenTrend).toEqual([]);
       expect(visible(out.metricsMaster)).toEqual(out.metricsMaster.snap);
+    });
+  });
+
+  // EPS↔1株当たり当期純利益、ROE↔自己資本利益率、売上↔売上高が、それぞれ別々の指標として
+  // 登録されていた事例(実データ)があった。外部AIへの説明書(briefingText)がその重複した
+  // 一覧をそのまま埋め込むため、表記ゆれが自己増殖する状態になっていた(ユーザー報告、2026-08-13)。
+  // 既存データを1本化するマイグレーションを検証する
+  describe('指標マスターの表記ゆれ統合', () => {
+    test('業績推移どうしの別名(売上→売上高)は、正名に無い年度だけ補って統合する', () => {
+      const db = {
+        stocks: [{ id: '1', name: 'A', code: '1', kind: 'ウォッチ', metrics: {}, sections: {},
+          trend: {
+            '売上高': { unit: '百万円', '25年3月期': '100' },
+            '売上': { unit: '百万円', '25年3月期': '999', '26年3月期': '120' },  // 25年3月期は正名を優先
+          } }],
+        hypotheses: [], reminders: [],
+      };
+      const out = migrate(db);
+      const st = out.stocks[0];
+      expect(st.trend['売上']).toBeUndefined();
+      expect(st.trend['売上高']).toEqual({ unit: '百万円', '25年3月期': '100', '26年3月期': '120' });
+      expect(out.metricsMaster.trend.map(t => t.name)).not.toContain('売上');
+    });
+    test('EPS ← 1株当たり当期純利益(業績推移どうし)も統合する', () => {
+      const db = {
+        stocks: [{ id: '1', name: 'A', code: '1', kind: 'ウォッチ', metrics: {}, sections: {},
+          trend: { '1株当たり当期純利益': { unit: '円', '26年3月期': '114.5' } } }],
+        hypotheses: [], reminders: [],
+      };
+      const out = migrate(db);
+      expect(out.stocks[0].trend['1株当たり当期純利益']).toBeUndefined();
+      expect(out.stocks[0].trend['EPS']).toEqual({ unit: '円', '26年3月期': '114.5' });
+    });
+    // ROE・営業利益率(指標)は削除せず「非表示」にするだけにする。削除すると、業績推移側に
+    // データが無い銘柄(例: 自己資本利益率の業績推移を持たない銘柄のROE単年値)まで失われるため
+    test('ROE(指標)↔自己資本利益率(業績推移)は、業績推移側をROEへ一本化。指標側は非表示にするが削除しない', () => {
+      const db = {
+        stocks: [{ id: '1', name: 'A', code: '1', kind: 'ウォッチ',
+          metrics: { 'ROE': { v: '3.6', unit: '%', d: '2026/8/13' } },
+          sections: {},
+          trend: { '自己資本利益率': { unit: '%', '25年3月期': '2.3', '26年3月期': '3.6' } } }],
+        hypotheses: [], reminders: [],
+        metricsMaster: { snap: ['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)'],
+          trend: [{ name: '売上高', graph: true }], hiddenSnap: [], hiddenTrend: [] },
+      };
+      const out = migrate(db);
+      const st = out.stocks[0];
+      expect(st.metrics['ROE']).toEqual({ v: '3.6', unit: '%', d: '2026/8/13' });  // 削除しない
+      expect(st.trend['自己資本利益率']).toBeUndefined();
+      expect(st.trend['ROE']).toEqual({ unit: '%', '25年3月期': '2.3', '26年3月期': '3.6' });
+      expect(out.metricsMaster.snap).toContain('ROE');       // 一覧からは削除しない
+      expect(out.metricsMaster.hiddenSnap).toContain('ROE'); // 非表示にする
+      expect(out.metricsMaster.trend.map(t => t.name)).toContain('ROE');
+      expect(out.metricsMaster.trend.map(t => t.name)).not.toContain('自己資本利益率');
+    });
+    test('営業利益率(指標)は非表示にするが削除しない(売上高営業利益率という業績推移側の統合先を強制的には作らない)', () => {
+      const db = {
+        stocks: [{ id: '1', name: 'A', code: '1', kind: 'ウォッチ',
+          metrics: { '営業利益率': { v: '4.3', unit: '%', d: '2026/8/13' } }, sections: {}, trend: {} }],
+        hypotheses: [], reminders: [],
+        metricsMaster: { snap: ['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)'],
+          trend: [], hiddenSnap: [], hiddenTrend: [] },
+      };
+      const out = migrate(db);
+      expect(out.stocks[0].metrics['営業利益率']).toEqual({ v: '4.3', unit: '%', d: '2026/8/13' });
+      expect(out.metricsMaster.snap).toContain('営業利益率');
+      expect(out.metricsMaster.hiddenSnap).toContain('営業利益率');
+      expect(out.metricsMaster.trend.map(t => t.name)).not.toContain('売上高営業利益率');
+    });
+    test('既に売上高営業利益率(業績推移)がある場合は、統合後もそのまま残る(指標側も削除しない)', () => {
+      const db = {
+        stocks: [{ id: '1', name: 'A', code: '1', kind: 'ウォッチ',
+          metrics: { '営業利益率': { v: '4.3', unit: '%', d: '2026/8/13' } }, sections: {},
+          trend: { '売上高営業利益率': { unit: '%', '26年3月期': '4.3' } } }],
+        hypotheses: [], reminders: [],
+        metricsMaster: { snap: ['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)'],
+          trend: [], hiddenSnap: [], hiddenTrend: [] },
+      };
+      const out = migrate(db);
+      const st = out.stocks[0];
+      expect(st.metrics['営業利益率']).toEqual({ v: '4.3', unit: '%', d: '2026/8/13' });
+      expect(st.trend['売上高営業利益率']).toEqual({ unit: '%', '26年3月期': '4.3' });
+    });
+    test('指標一覧に既に無い(既定のまま等)場合はhiddenSnapへ追加しない', () => {
+      // 新規インストール相当。ROE・営業利益率は最初からsnapに無いので、隠す対象にもならない
+      const out = migrate({ stocks: [], hypotheses: [], reminders: [] });
+      expect(out.metricsMaster.hiddenSnap).not.toContain('ROE');
+      expect(out.metricsMaster.hiddenSnap).not.toContain('営業利益率');
+    });
+    test('該当データが無い銘柄・指標には影響しない', () => {
+      const db = {
+        stocks: [{ id: '1', name: 'A', code: '1', kind: 'ウォッチ', metrics: { 'PBR': { v: '2.5', unit: '倍', d: '2026/8/13' } },
+          sections: {}, trend: { '売上高': { unit: '百万円', '26年3月期': '100' } } }],
+        hypotheses: [], reminders: [],
+      };
+      const out = migrate(db);
+      const st = out.stocks[0];
+      expect(st.metrics['PBR']).toEqual({ v: '2.5', unit: '倍', d: '2026/8/13' });
+      expect(st.trend['売上高']).toEqual({ unit: '百万円', '26年3月期': '100' });
+    });
+    test('新規インストール(既定のまま)でもROEは業績推移側だけに存在する', () => {
+      const out = migrate({ stocks: [], hypotheses: [], reminders: [] });
+      expect(out.metricsMaster.snap).not.toContain('ROE');
+      expect(out.metricsMaster.trend.map(t => t.name)).toContain('ROE');
     });
   });
 

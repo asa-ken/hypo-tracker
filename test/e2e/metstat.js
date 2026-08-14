@@ -30,7 +30,8 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('指標の行がすべてバッジを持つ', r0.length > 0 && r0.every(r => r.badge));
   ok('文言は「表示中/非表示中」だけ', r0.every(r => ['表示中', '非表示中'].includes(r.badge)));
   ok('「非表示」という言い切りのボタンは無くなった', await p.evaluate(() => ![...document.querySelectorAll('#sheet button')].some(b => b.textContent.trim() === '非表示')));
-  ok('既定はすべて表示中', r0.every(r => r.badge === '表示中' && r.on && !r.off));
+  // 2026-08-13: ROE・営業利益率は表記ゆれ統合により既定で非表示になった(業績推移側のROEに一本化)ため除外する
+  ok('既定はすべて表示中(ROE・営業利益率を除く)', r0.filter(r => !['ROE', '営業利益率'].includes(r.name)).every(r => r.badge === '表示中' && r.on && !r.off));
   ok('スナップショットと業績推移が両方並ぶ', await p.evaluate(() =>
     DB.metricsMaster.snap.length + DB.metricsMaster.trend.length === document.querySelectorAll('#sheet .met-row').length));
 
@@ -44,10 +45,11 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   // ---- 2. 非表示にしても一覧から動かない ----
   const before = (await rows()).map(r => r.name);
   const idx = before.indexOf('時価総額');
+  const hiddenBase = r0.filter(r => r.badge === '非表示中').length;   // ROE・営業利益率は既定で非表示済み
   await p.evaluate(() => toggleMetric('snap', '時価総額')); await p.waitForTimeout(300);
   const r1 = await rows();
   ok('並び順は変わらない', JSON.stringify(r1.map(r => r.name)) === JSON.stringify(before));
-  ok('その指標だけ「非表示中」になる', r1[idx].badge === '非表示中' && r1.filter(x => x.badge === '非表示中').length === 1);
+  ok('その指標だけ追加で「非表示中」になる', r1[idx].badge === '非表示中' && r1.filter(x => x.badge === '非表示中').length === hiddenBase + 1);
   ok('非表示中の行は薄く表示される', r1[idx].off && r1[idx].on === false);
   ok('別リストへは移らない(非表示の指標セクションが無い)', await p.evaluate(() => !/非表示の指標/.test(document.querySelector('#sheet').innerText)));
   ok('見出しに表示中の件数が出る', await p.evaluate(() => /スナップショット指標 \(表示中 \d+\/\d+\)/.test(document.querySelector('#sheet').innerText)));

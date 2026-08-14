@@ -17,7 +17,9 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     stock: DB.metricsMaster.snap, mkt: DB.marketMetricsMaster.snap, ind: DB.industryMetricsMaster.snap,
     stockHidden: DB.metricsMaster.hiddenSnap, mktHidden: DB.marketMetricsMaster.hiddenSnap,
   }));
-  ok('銘柄=6項目(ROE/営業利益率/自己資本比率入り)', JSON.stringify(m.stock)===JSON.stringify(['PER(予想)','PBR','ROE','営業利益率','自己資本比率','配当利回り(予想)']));
+  // 2026-08-13: ROE・営業利益率は、指標(単年)と業績推移(複数年)で同じ意味の別名が
+  // 登録されうるため既定の指標一覧から外した(ROEは業績推移側の既定に置く)
+  ok('銘柄=4項目(自己資本比率入り。ROE/営業利益率は業績推移側)', JSON.stringify(m.stock)===JSON.stringify(['PER(予想)','PBR','自己資本比率','配当利回り(予想)']));
   ok('市場=3項目', JSON.stringify(m.mkt)===JSON.stringify(['予想PER(市場全体)','長期金利(10年)','為替(USD/JPY)']));
   ok('業界=PER/PBRのみ', JSON.stringify(m.ind)===JSON.stringify(['PER','PBR']));
   // ② 旧既定ちょうどの既存データ = 差し替わり、外れた項目は非表示へ退避される
@@ -36,7 +38,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     stock: snapKeys(DB.metricsMaster), stockAll: DB.metricsMaster.snap, stockHidden: DB.metricsMaster.hiddenSnap,
     mkt: snapKeys(DB.marketMetricsMaster), mktAll: DB.marketMetricsMaster.snap, mktHidden: DB.marketMetricsMaster.hiddenSnap,
   }));
-  ok('旧既定の銘柄マスターが差し替わる', JSON.stringify(m2.stock)===JSON.stringify(['PER(予想)','PBR','ROE','営業利益率','自己資本比率','配当利回り(予想)']));
+  ok('旧既定の銘柄マスターが差し替わる', JSON.stringify(m2.stock)===JSON.stringify(['PER(予想)','PBR','自己資本比率','配当利回り(予想)']));
   ok('外れた銘柄指標は非表示中になる(消えない)', ['時価総額','信用倍率','目標株価コンセンサス'].every(x=>m2.stockHidden.includes(x)));
   ok('外れた銘柄指標も一覧には残る', ['時価総額','信用倍率','目標株価コンセンサス'].every(x=>m2.stockAll.includes(x)));
   ok('1世代前の市場マスターも差し替わる', JSON.stringify(m2.mkt)===JSON.stringify(['予想PER(市場全体)','長期金利(10年)','為替(USD/JPY)']));
@@ -46,8 +48,10 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   // ③ 画面表示(seedのフジクラで確認)
   await p.evaluate(() => openStock('5803')); await p.waitForTimeout(300);
   const stk = await p.evaluate(() => document.querySelector('#view').innerText);
-  ok('銘柄画面にROEが出る', /ROE/.test(stk));
-  ok('銘柄画面に営業利益率が出る', /営業利益率/.test(stk));
+  ok('銘柄画面にROEが出る(業績推移側、既定でグラフではなく表)', /ROE/.test(stk));
+  // 2026-08-13: 営業利益率は指標の既定一覧から外し、業績推移側の既定にも追加していない
+  // (取り込みで実際に使われたときだけ「売上高営業利益率」として業績推移に登録される)
+  ok('銘柄画面に営業利益率は出ない(既定一覧から外れた)', !/営業利益率/.test(stk));
   ok('銘柄画面から信用倍率が消えた', !/信用倍率/.test(stk));
   ok('業績推移は従来どおり残る', /業績推移/.test(stk));
 

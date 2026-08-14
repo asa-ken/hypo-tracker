@@ -465,9 +465,14 @@ function load(){ try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e)
 function save(){ localStorage.setItem(KEY, JSON.stringify(DB)); }
 function seed(){
   return {
+    // ROEは指標(単年)と業績推移(複数年)の両方に登録されると、外部AIへの説明書が
+    // 「ROEは指標としても業績推移としても書ける」と伝えてしまい表記ゆれの温床になるため、
+    // 業績推移側だけに置く(ユーザー指摘・確認の上、2026-08-13)。グラフは既定でOFFにする
+    // (graph:trueにすると上限4件のうち最後の1枠を既定で埋めてしまい、既存の「3件が既定」という
+    // 前提を崩すため。表(グラフ無し)には出るので、必要ならユーザーがグラフに切り替えられる)
     metricsMaster:{
-      snap:['PER(予想)','PBR','ROE','営業利益率','自己資本比率','配当利回り(予想)'],
-      trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true}],
+      snap:['PER(予想)','PBR','自己資本比率','配当利回り(予想)'],
+      trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true},{name:'ROE',graph:false}],
       hiddenSnap:[], hiddenTrend:[]
     },
     // 市場カードは粒度(scope)ごとに語彙が違うので、指標マスターを分けて持つ。
@@ -663,6 +668,37 @@ function migrate(db){
       m.snap=m.snap||[];
       m.hiddenSnap=(m.hiddenSnap||[]).map(x=>(typeof x==='string')?x:(x&&x.name)).filter(Boolean);
       m.hiddenSnap.forEach(k=>{ if(!m.snap.includes(k)) insertByDefault(m.snap, k, def.snap, x=>x); });
+    });
+  }
+  // 指標マスターの表記ゆれ統合(2026-08-13、ユーザー報告・確認の上で実施)。
+  // EPS↔1株当たり当期純利益、ROE↔自己資本利益率、売上↔売上高が、それぞれ別々の指標として
+  // 登録され、外部AIへの説明書(briefingText)がその重複した一覧をそのまま埋め込むため、
+  // 表記ゆれが自己増殖する状態になっていた。英語略称(EPS/ROE)、またはより具体的な
+  // 業績推移名(売上高)を正として統合する
+  {
+    const mm=db.metricsMaster;
+    // 業績推移どうしの別名統合: 正名に無い年度だけ補う(両方にある年度は正名を優先)
+    const TREND_ALIAS=[['売上','売上高'],['1株当たり当期純利益','EPS'],['1株当たり純利益','EPS'],['自己資本利益率','ROE']];
+    (db.stocks||[]).forEach(st=>{
+      if(!st.trend) return;
+      TREND_ALIAS.forEach(([from,to])=>{
+        if(!st.trend[from]) return;
+        if(!st.trend[to]) st.trend[to]=st.trend[from];
+        else Object.keys(st.trend[from]).forEach(y=>{ if(y!=='unit' && !(y in st.trend[to])) st.trend[to][y]=st.trend[from][y]; });
+        delete st.trend[from];
+      });
+    });
+    const droppedTrend=['売上','1株当たり当期純利益','1株当たり純利益','自己資本利益率'];
+    mm.trend=(mm.trend||[]).filter(t=>!droppedTrend.includes(t.name));
+    // GRAPH_MAXはこの時点で未定義の可能性があるため値(4)をそのまま使う。
+    // ROEは既定でグラフ非表示(seedと同じ理由: 上限4件の最後の1枠を既定で埋めないため)
+    if(!mm.trend.some(t=>t.name==='EPS')) mm.trend.push({name:'EPS', graph:mm.trend.filter(t=>t.graph).length<4});
+    if(!mm.trend.some(t=>t.name==='ROE')) mm.trend.push({name:'ROE', graph:false});
+    // 指標(単年)は業績推移(複数年)と役割が重なるため一覧からは隠す。
+    // 既存の各銘柄のデータ自体は削除しない(非表示中の指標として復元できる、既存の仕組みと同じ扱い。
+    // 削除してしまうと、業績推移側にデータが無い銘柄の値まで失われてしまうため)
+    ['ROE','営業利益率'].forEach(name=>{
+      if(mm.snap.includes(name) && !mm.hiddenSnap.includes(name)) mm.hiddenSnap.push(name);
     });
   }
   if(!db.industrySectionMaster) db.industrySectionMaster=s0.industrySectionMaster;
@@ -1756,11 +1792,27 @@ function metNorm(s){
     .toLowerCase();
 }
 function metBigrams(s){ const a=[]; for(let i=0;i<s.length-1;i++) a.push(s.slice(i,i+2)); return a.length?a:[s]; }
+// 英語略称と日本語表記は文字が重ならないため、2文字組の一致率では拾えない
+// (EPS と 1株当たり当期純利益、ROE と 自己資本利益率など)。既知の組だけ表で持つ
+// (ユーザー報告、2026-08-13。実際にEPS/1株当たり当期純利益が別々に登録されていた)
+const METRIC_ALIASES=[
+  ['EPS','1株当たり当期純利益','1株当たり純利益'],
+  ['ROE','自己資本利益率'],
+  ['PER(予想)','予想株価収益率'],
+  ['PBR','株価純資産倍率'],
+  ['FCF','フリーキャッシュフロー'],
+];
+function metAliasGroup(name){
+  const n=metNorm(name);
+  return METRIC_ALIASES.find(g=>g.some(x=>metNorm(x)===n)) || null;
+}
 // 0〜1。1に近いほど同じ指標を指している可能性が高い
 function metSim(a,b){
   const x=metNorm(a), y=metNorm(b);
   if(!x||!y) return 0;
   if(x===y) return 1;               // 括弧や記号の違いだけ (営業利益率 と 営業利益率(%))
+  const ga=metAliasGroup(a);
+  if(ga && ga.some(n=>metNorm(n)===y)) return 1;   // 既知の英語略称⇔日本語表記
   if(x.includes(y)||y.includes(x)) return .9;  // 一方が他方を含む (売上高 と 売上)
   // 語順が入れ替わっただけの別名(PER(予想) と 予想PER)を拾うため、2文字組の一致率で見る
   const A=metBigrams(x), B=metBigrams(y), rest=B.slice();

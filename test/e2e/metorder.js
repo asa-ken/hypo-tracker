@@ -40,7 +40,8 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const mig = await p.evaluate(() => ({ snap: DB.metricsMaster.snap.slice(), trend: DB.metricsMaster.trend.map(t => t.name) }));
   ok('既定で先頭の指標は先頭に戻る(末尾に飛ばない)', mig.snap[0] === 'PER(予想)');
   ok('元の並びがそのまま復元される', JSON.stringify(mig.snap) === JSON.stringify(order0));
-  ok('業績推移も既定の位置に戻る', JSON.stringify(mig.trend) === JSON.stringify(['売上高', '営業利益', 'EPS']));
+  // 2026-08-13: ROEが業績推移の既定に加わったため、既定に無かった旧データにも補われる
+  ok('業績推移も既定の位置に戻る', JSON.stringify(mig.trend) === JSON.stringify(['売上高', '営業利益', 'EPS', 'ROE']));
   ok('戻したうえで非表示中のまま', await p.evaluate(() =>
     DB.metricsMaster.hiddenSnap.includes('PER(予想)') && DB.metricsMaster.hiddenTrend.includes('営業利益')));
 
@@ -75,8 +76,9 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('表示中/非表示中は変えないと明記する', await p.evaluate(() => /表示中\/非表示中の設定と、取り込み済みの数値は変わりません/.test(document.querySelector('#sheet').innerText)));
   await p.evaluate(() => runConfirm()); await p.waitForTimeout(500);
   const fixed = await p.evaluate(() => DB.metricsMaster.snap.slice());
-  ok('既定にある指標が既定の順に並び直る', JSON.stringify(fixed.slice(0, 6)) === JSON.stringify(['PER(予想)', 'PBR', 'ROE', '営業利益率', '自己資本比率', '配当利回り(予想)']));
-  ok('既定に無い指標は今の順のまま後ろに続く', JSON.stringify(fixed.slice(6)) === JSON.stringify(['時価総額', '信用倍率', '目標株価コンセンサス']));
+  // 2026-08-13: ROE・営業利益率は既定の指標一覧から外れたため、既定に無い項目として後ろに続く
+  ok('既定にある指標が既定の順に並び直る', JSON.stringify(fixed.slice(0, 4)) === JSON.stringify(['PER(予想)', 'PBR', '自己資本比率', '配当利回り(予想)']));
+  ok('既定に無い指標は今の順のまま後ろに続く', JSON.stringify(fixed.slice(4)) === JSON.stringify(['時価総額', '信用倍率', '営業利益率', 'ROE', '目標株価コンセンサス']));
   ok('指標は1つも増減しない', fixed.length === 9);
 
   await p.evaluate(() => closeSheet()); await p.waitForTimeout(350);
