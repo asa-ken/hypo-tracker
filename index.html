@@ -1527,10 +1527,24 @@ function briefingText(){
   const mktCats=catList(DB.marketSectionMaster||[]);
   const indCats=catList(DB.industrySectionMaster||[]);
   const thmCats=catList(DB.themeSectionMaster||[]);
-  const snap=snapKeys(DB.metricsMaster).join(' / ');
+  const snapArr=snapKeys(DB.metricsMaster), trendArr=trendInds(DB.metricsMaster).map(t=>t.name);
+  const snap=snapArr.join(' / ');
   const mktSnap=snapKeys(DB.marketMetricsMaster).join(' / ');
   const indSnap=snapKeys(DB.industryMetricsMaster).join(' / ');
-  const trend=trendInds(DB.metricsMaster).map(t=>t.name).join(' / ');
+  const trend=trendArr.join(' / ');
+  // 「同じ意味の別名を使うな」の具体例は、実在する指標からだけ組み立てる。
+  // 固定文にすると既定を入れ替えたときに文面だけ古くなり(実際に「営業利益率」で発生)、
+  // 存在しない指標を引き合いに出す説明書になってしまう(2026-08-13)
+  const allMet=[...snapArr, ...trendArr, ...snapKeys(DB.marketMetricsMaster), ...snapKeys(DB.industryMetricsMaster)];
+  const ng=[];
+  // 英語略称⇔日本語表記は文字が重ならず、外部AIが日本語表記を選びがち。
+  // アプリ側の検知(METRIC_ALIASES)と同じ組を、説明書でも名指しで禁止する
+  METRIC_ALIASES.forEach(g=>{ if(allMet.includes(g[0])) g.slice(1).forEach(a=>ng.push(`    ✕「${g[0]}」があるのに「${a}」と書く`)); });
+  const paren=allMet.find(k=>k.includes('('));
+  if(paren) ng.push(`    ✕「${paren}」があるのに「${paren.replace(/\(/g,'（').replace(/\)/g,'）')}」と書く(全角括弧も別名になります)`);
+  if(allMet.includes('売上高')) ng.push('    ✕「売上高」があるのに「売上」と書く(省略も別名になります)');
+  if(allMet.includes('PER(予想)')) ng.push('    ✕「PER(予想)」があるのに「予想PER」と書く(語順の入れ替えも別名になります)');
+  const ngList=ng.join('\n');
   return `あなたは投資記録アプリ「仮説トラッカー」と連携するアシスタントです。今後の会話の中で、次のいずれかに該当する情報が出てきたら、その都度このフォーマットで出力してください。当てはまらない話は、いつも通りの自由な文章のままで構いません(私が「メモ」として記録します)。
 
 出力の先頭には対象を明記してください:
@@ -1560,9 +1574,8 @@ function briefingText(){
       文章で書いてください。根拠や範囲を添えられる形のほうが、後から読み返して判断できます。
   一覧に無い指標は、どうしても必要なときだけ追加して構いません。ただし、一覧にある指標と
   同じ意味の別名は使わないでください。同じものが別々の指標として登録され、グラフも履歴も分かれてしまいます。
-    ✕「売上高」があるのに「売上」と書く
-    ✕「営業利益率」があるのに「営業利益率(%)」と書く
-    ✕「PER(予想)」があるのに「予想PER」「PER（予想）」と書く(全角括弧も別名になります)
+${ngList}
+  特に、英語略称で載っている指標を日本語表記に置き換えないでください(上記)。一覧の表記が正です。
   現在株価や当日の値動きは不要です(リアルタイム性が要るものは証券アプリで見ます)。
   ここで扱いたいのは、決算や指標の更新に合わせて数か月単位で見直す数字です。
 
@@ -1570,8 +1583,9 @@ function briefingText(){
 ## 業績推移
 - 指標名: 25年3月期=数値 | 26年3月期=数値 | 27年3月期(予)=数値 | 単位:◯◯ | 基準日
   指標名は下記の一覧から、一字一句そのままの表記で選んでください: ${trend}
-  一覧に無い指標は、どうしても必要なときだけ追加して構いません。ただし「売上高」を「売上」と書くような
-  言い換えはしないでください。同じものが別々の指標になり、グラフも履歴も分かれてしまいます。
+  一覧に無い指標は、どうしても必要なときだけ追加して構いません。ただし言い換え(省略・日本語表記への置換・
+  括弧の全半角・語順の入れ替え)はしないでください。上の「■ 指標」に挙げた✕の例と同じ扱いです。
+  同じものが別々の指標になり、グラフも履歴も分かれてしまいます。
   決算期は「yy年mm月期」表記、予想には(予)を付けてください(米国株など海外企業も同じ形式で、その企業の決算月に合わせてください)。
   これは個別企業の決算のみです。市場・テーマの話では使いません。
 
