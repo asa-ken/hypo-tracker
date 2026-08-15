@@ -1,5 +1,5 @@
-// 指標の非表示は「別リストへ移す」のをやめ、一覧に残したまま右端のバッジで状態を示す
-//  ・バッジの文言は「表示中 / 非表示中」(押した結果ではなく今の状態と読めるように)
+// 指標の非表示は「別リストへ移す」のをやめ、一覧に残したまま右端のスイッチで状態を示す
+//  ・スイッチのaria-labelは「表示中 / 非表示中」(押した結果ではなく今の状態と読めるように)
 //  ・非表示にしても一覧の並び順から動かない
 //  ・非表示中の指標は画面・質問文には出ない
 const { chromium } = require('playwright');
@@ -17,30 +17,35 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);
   const openSheetFor = () => p.evaluate(() => { openStock(DB.stocks.find(s => s.name === 'テスト精機').id); sheetMetricsMaster(); });
-  const rows = () => p.evaluate(() => [...document.querySelectorAll('#sheet .met-row')].map(r => ({
-    name: r.querySelector('.nm').textContent.trim(),
-    badge: r.querySelector('.stat').textContent.trim(),
-    on: r.querySelector('.stat').classList.contains('on'),
-    off: r.classList.contains('off'),
-  })));
+  const rows = () => p.evaluate(() => [...document.querySelectorAll('#sheet .met-row')].map(r => {
+    const sw = r.querySelector('.swtap[data-role="disp"] .sw');
+    return {
+      name: r.querySelector('.nm').textContent.trim(),
+      badge: sw.getAttribute('aria-label'),
+      on: sw.classList.contains('on'),
+      off: r.classList.contains('off'),
+    };
+  }));
 
-  // ---- 1. 一覧の右端がステータスバッジになっている ----
+  // ---- 1. 一覧の右端がステータススイッチになっている ----
   await openSheetFor(); await p.waitForTimeout(350);
   const r0 = await rows();
-  ok('指標の行がすべてバッジを持つ', r0.length > 0 && r0.every(r => r.badge));
-  ok('文言は「表示中/非表示中」だけ', r0.every(r => ['表示中', '非表示中'].includes(r.badge)));
+  ok('指標の行がすべてスイッチを持つ', r0.length > 0 && r0.every(r => r.badge));
+  ok('状態は「表示中/非表示中」だけ(aria-label)', r0.every(r => ['表示中', '非表示中'].includes(r.badge)));
   ok('「非表示」という言い切りのボタンは無くなった', await p.evaluate(() => ![...document.querySelectorAll('#sheet button')].some(b => b.textContent.trim() === '非表示')));
+  ok('スイッチはrole=switchでaria-checkedを持つ', await p.evaluate(() =>
+    [...document.querySelectorAll('#sheet .swtap[data-role="disp"] .sw')].every(s => s.getAttribute('role') === 'switch' && ['true', 'false'].includes(s.getAttribute('aria-checked')))));
   // 2026-08-13: ROE・営業利益率は表記ゆれ統合により既定で非表示になった(業績推移側のROEに一本化)ため除外する
   ok('既定はすべて表示中(ROE・営業利益率を除く)', r0.filter(r => !['ROE', '営業利益率'].includes(r.name)).every(r => r.badge === '表示中' && r.on && !r.off));
   ok('スナップショットと業績推移が両方並ぶ', await p.evaluate(() =>
     DB.metricsMaster.snap.length + DB.metricsMaster.trend.length === document.querySelectorAll('#sheet .met-row').length));
 
-  // バッジは押せる大きさで、切り替えても幅が変わらない(左の↑↓がずれない)
+  // スイッチは押せる大きさで、切り替えても幅が変わらない(左の↑↓がずれない)
   const badgeBox = await p.evaluate(() => {
-    const s = document.querySelector('#sheet .stat').getBoundingClientRect();
+    const s = document.querySelector('#sheet .swtap[data-role="disp"]').getBoundingClientRect();
     return { h: Math.round(s.height), w: Math.round(s.width) };
   });
-  ok('バッジは押せる大きさ(44px以上)', badgeBox.h >= 44);
+  ok('スイッチのタップ域は押せる大きさ(44px以上)', badgeBox.h >= 44 && badgeBox.w >= 44);
 
   // ---- 2. 非表示にしても一覧から動かない ----
   const before = (await rows()).map(r => r.name);
@@ -53,7 +58,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('非表示中の行は薄く表示される', r1[idx].off && r1[idx].on === false);
   ok('別リストへは移らない(非表示の指標セクションが無い)', await p.evaluate(() => !/非表示の指標/.test(document.querySelector('#sheet').innerText)));
   ok('見出しに表示中の件数が出る', await p.evaluate(() => /スナップショット指標 \(表示中 \d+\/\d+\)/.test(document.querySelector('#sheet').innerText)));
-  const w2 = await p.evaluate(() => Math.round([...document.querySelectorAll('#sheet .stat')].find(s => s.textContent.trim() === '非表示中').getBoundingClientRect().width));
+  const w2 = await p.evaluate(() => Math.round([...document.querySelectorAll('#sheet .swtap[data-role="disp"]')].find(s => s.querySelector('.sw').getAttribute('aria-label') === '非表示中').getBoundingClientRect().width));
   ok('「表示中」と「非表示中」で幅が変わらない', w2 === badgeBox.w);
 
   // ---- 3. もう一度押すと表示中に戻る ----

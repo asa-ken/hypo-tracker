@@ -53,10 +53,10 @@ const SEL = '#sheet button, #sheet select, #sheet [onclick], #sheet .list-row, #
   // 個別に高さを確かめる。閾値そのものが緩められていないかの歯止め。
   const box = await page.evaluate(() => {
     closeSheet(); sheetMetricsMaster();
-    const s = document.querySelector('#sheet .stat').getBoundingClientRect();
+    const s = document.querySelector('#sheet .swtap[data-role="disp"]').getBoundingClientRect();
     return { stat: Math.round(s.height) };
   });
-  ok('表示中/非表示中バッジは44px以上', box.stat >= 44, box.stat);
+  ok('表示中/非表示中スイッチのタップ域は44px以上', box.stat >= 44, box.stat);
 
   const selH = await page.evaluate(() => {
     closeSheet(); sheetMetricEdit('snap', DB.metricsMaster.snap[0], undefined);
