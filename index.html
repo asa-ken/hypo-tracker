@@ -43,6 +43,12 @@
   .back-prev{position:fixed; z-index:0; display:none; overflow:hidden; padding:14px 16px calc(90px + env(safe-area-inset-bottom)); background:var(--app); opacity:.5; pointer-events:none;}
   .back-prev.show{display:block;}
   .xscroll{overflow-x:auto; touch-action:manipulation;}
+  /* 業績推移の表。指標数が多い銘柄だと表だけで画面が伸び、行をタップしても上のグラフが
+     画面外になって見えなくなる(ユーザー指摘、2026-08-15)。ファーストビューは5行までとし、
+     それ以上は表の中だけで縦スクロールさせる。見出し行は position:sticky で追従させ、
+     スクロール中も「指標/年度」の対応が分かるようにする */
+  .trend-scroll{max-height:251px; overflow-y:auto;}
+  .trend-scroll table.trend tr:first-child th{position:sticky; top:0; background:var(--card); z-index:1;}
   /* bottom tab */
   /* sticky ではなく fixed で画面(ビューポート)に直接固定する。
      .phone の横幅指定(max-width:430px + margin:0 auto)を、fixed要素側でも再現する必要がある。
@@ -1399,7 +1405,7 @@ function renderTrend(s){
   // 表。1年分も取り込んでいないときは年度の列を作れないので、見出しだけ「年度」にして行は残す
   const cols=ys.length?ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')
                      :'<th style="text-align:center">年度</th>';
-  h+='<div class="xscroll"><table class="trend" style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
+  h+='<div class="xscroll trend-scroll"><table class="trend" style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
   inds.forEach(t=>{ const o=tr[t.name];
     // 数値が1つも無い指標は、年度のセルを1つにまとめて「データなし」と書く。
     // 年度ごとに「—」を並べるより、行まるごと空だと分かりやすい
