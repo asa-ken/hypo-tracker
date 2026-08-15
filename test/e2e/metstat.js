@@ -97,18 +97,6 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('非表示にしても本体の一覧からは消えていない', kept.inSnap && kept.inTrend);
   ok('非表示の印は名前だけで持つ', kept.ht.every(x => typeof x === 'string'));
 
-  // ---- 6. 非表示中はグラフ指定が効かない / グラフ4件の数え方 ----
-  await openSheetFor(); await p.waitForTimeout(350);
-  const graphState = await p.evaluate(() => {
-    const i = DB.metricsMaster.trend.findIndex(t => t.name === 'EPS');
-    const was = DB.metricsMaster.trend[i].graph;
-    toggleGraph(i);
-    return { was, now: DB.metricsMaster.trend[i].graph, label: document.querySelector('#sheet').innerText.match(/グラフ表示 \((\d)\/4\)/)[1] };
-  });
-  await p.waitForTimeout(300);
-  ok('非表示中の指標はグラフ指定を変えられない', graphState.was === graphState.now);
-  ok('グラフの件数は表示中のものだけ数える', +graphState.label === await p.evaluate(() => trendInds(DB.metricsMaster).filter(t => t.graph).length));
-
   // ---- 7. 市場カードの指標も同じ扱い ----
   await p.evaluate(() => { closeSheet(); backFromDetail(); openStock(DB.stocks.find(s => s.kind === '市場').id); sheetMarketMetricsMaster(); });
   await p.waitForTimeout(400);
@@ -135,7 +123,6 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const mig = await p.evaluate(() => ({
     snapHas: DB.metricsMaster.snap.includes('信用倍率'),
     trendHas: DB.metricsMaster.trend.some(t => t.name === '営業利益'),
-    graphKept: (DB.metricsMaster.trend.find(t => t.name === '営業利益') || {}).graph,
     hs: DB.metricsMaster.hiddenSnap.slice(), ht: DB.metricsMaster.hiddenTrend.slice(),
     visibleSnap: snapKeys(DB.metricsMaster).includes('信用倍率'),
     visibleTrend: trendInds(DB.metricsMaster).some(t => t.name === '営業利益'),
@@ -143,7 +130,6 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('旧データの非表示指標も一覧に戻る', mig.snapHas && mig.trendHas);
   ok('戻したうえで非表示中のまま', mig.hs.includes('信用倍率') && mig.ht.includes('営業利益'));
   ok('旧形式のhiddenTrendは名前だけに揃う', mig.ht.every(x => typeof x === 'string'));
-  ok('グラフ表示の指定も失われない', mig.graphKept === true);
   ok('非表示中なので画面には出ない', !mig.visibleSnap && !mig.visibleTrend);
   // 2回流しても増えない(冪等)
   await p.reload(); await p.waitForTimeout(400);

@@ -194,10 +194,9 @@
      グラフは一面に、表は年度のセルをまとめて1つに(セル結合のような見せ方) */
   .nodata{display:flex; align-items:center; justify-content:center; border:1px dashed var(--line2); border-radius:9px; background:var(--app); color:var(--ink3); font-size:13px;}
   .nodata-cell{text-align:center; color:var(--ink3); background:var(--app);}
-  /* 業績推移の表とグラフの対応づけ。行のどこを押してもその指標のグラフに切り替わる。
-     いまグラフに出ている行は地色を変えて、表とグラフのどちらを見ていても対応が分かるようにする */
-  /* 行がタップ対象になったので、行の高さを44pxまで広げる。
-     押せない行(グラフに出していない指標)だけ低いと表が不揃いになるので、表ごと広げる */
+  /* 業績推移の表とグラフの対応づけ。行のどこを押してもその指標のグラフに切り替わる(単一選択)。
+     いまグラフに出ている行は地色を変えて、表とグラフのどちらを見ていても対応が分かるようにする。
+     行がタップ対象なので、行の高さを44pxまで広げる */
   table.trend td{padding:13px 6px;}
   /* 指標名が長いと1行のまま伸びて、年度の数値列が右へ押し出されて見えなくなる(横スクロールしないと
      数値が見えない)。名前列だけ幅を絞って2行までに収め、数値列を画面内に残す */
@@ -209,8 +208,6 @@
   tr.trend-tap:active td{background:var(--navy-bg);}
   tr.trend-tap.on td{background:var(--navy-bg);}
   tr.trend-tap.on td:first-child{color:var(--navy-tx); font-weight:700;}
-  /* グラフに出していない指標。押すと理由が出るが、押す前から見分けが付くようにしておく */
-  tr.trend-tap.no-chart td:first-child{color:var(--ink2);}
   .empty-row td:first-child{color:var(--ink3); font-weight:400;}
   .val-up{color:var(--green-tx); font-weight:700;}
   .val-dn{color:var(--red-tx); font-weight:700;}
@@ -400,15 +397,9 @@
   /* 見出しの脇に置く小さな説明ボタン。押すと下に説明が開く */
   .helpq{width:44px; min-height:44px; border:none; background:none; color:var(--navy); font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; padding:0;}
   .helpq:active{opacity:.5;}
-  /* 指標行の右端のスイッチ(表示/グラフ)。列を44pxで揃えて、切り替えても左の↑↓がずれないようにする */
+  /* 指標行の右端の表示スイッチ。44pxで揃えて、切り替えても左の↑↓がずれないようにする */
   .met-row .swtap{flex:none; display:flex; align-items:center; justify-content:center; width:44px; min-height:44px; cursor:pointer;}
   .met-row .swtap:active{opacity:.6;}
-  /* グラフスイッチは、指標が非表示中だと押しても効かないことが分かるよう薄くする(押すこと自体はできる。押すと理由が返る) */
-  .met-row .swtap.dis{opacity:.35;}
-  .met-row .swcol{display:flex; gap:8px; flex:none;}
-  /* トグルが2列(グラフ/表示)並ぶ行だけ、上に見出しを1回出す。行ごとに文字を繰り返すとうるさいため */
-  .met-hdr{display:flex; justify-content:flex-end; gap:8px; padding:0 2px 2px; font-size:11px; color:var(--ink3);}
-  .met-hdr span{width:44px; text-align:center;}
   .clip2{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5;}
   .clip3{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45;}
   .clip3.open{-webkit-line-clamp:unset; overflow:visible;}
@@ -476,12 +467,10 @@ function seed(){
   return {
     // ROEは指標(単年)と業績推移(複数年)の両方に登録されると、外部AIへの説明書が
     // 「ROEは指標としても業績推移としても書ける」と伝えてしまい表記ゆれの温床になるため、
-    // 業績推移側だけに置く(ユーザー指摘・確認の上、2026-08-13)。グラフは既定でOFFにする
-    // (graph:trueにすると上限4件のうち最後の1枠を既定で埋めてしまい、既存の「3件が既定」という
-    // 前提を崩すため。表(グラフ無し)には出るので、必要ならユーザーがグラフに切り替えられる)
+    // 業績推移側だけに置く(ユーザー指摘・確認の上、2026-08-13)
     metricsMaster:{
       snap:['PER(予想)','PBR','自己資本比率','配当利回り(予想)'],
-      trend:[{name:'売上高',graph:true},{name:'営業利益',graph:true},{name:'EPS',graph:true},{name:'ROE',graph:false}],
+      trend:[{name:'売上高'},{name:'営業利益'},{name:'EPS'},{name:'ROE'}],
       hiddenSnap:[], hiddenTrend:[]
     },
     // 市場カードは粒度(scope)ごとに語彙が違うので、指標マスターを分けて持つ。
@@ -667,8 +656,7 @@ function migrate(db){
     ht.forEach(x=>{
       const name=(typeof x==='string')?x:(x&&x.name);
       if(!name) return;
-      // 旧データは {name,graph} を丸ごと退避していたので、グラフ表示の指定も一緒に戻す
-      if(!mm.trend.some(t=>t.name===name)) insertByDefault(mm.trend, {name, graph:!!(x&&x.graph)}, s0.metricsMaster.trend.map(t=>t.name), t=>t.name);
+      if(!mm.trend.some(t=>t.name===name)) insertByDefault(mm.trend, {name}, s0.metricsMaster.trend.map(t=>t.name), t=>t.name);
       if(!mm.hiddenTrend.includes(name)) mm.hiddenTrend.push(name);
     });
     [[mm,s0.metricsMaster],[db.marketMetricsMaster,s0.marketMetricsMaster],
@@ -699,10 +687,8 @@ function migrate(db){
     });
     const droppedTrend=['売上','1株当たり当期純利益','1株当たり純利益','自己資本利益率'];
     mm.trend=(mm.trend||[]).filter(t=>!droppedTrend.includes(t.name));
-    // GRAPH_MAXはこの時点で未定義の可能性があるため値(4)をそのまま使う。
-    // ROEは既定でグラフ非表示(seedと同じ理由: 上限4件の最後の1枠を既定で埋めないため)
-    if(!mm.trend.some(t=>t.name==='EPS')) mm.trend.push({name:'EPS', graph:mm.trend.filter(t=>t.graph).length<4});
-    if(!mm.trend.some(t=>t.name==='ROE')) mm.trend.push({name:'ROE', graph:false});
+    if(!mm.trend.some(t=>t.name==='EPS')) mm.trend.push({name:'EPS'});
+    if(!mm.trend.some(t=>t.name==='ROE')) mm.trend.push({name:'ROE'});
     // 指標(単年)は業績推移(複数年)と役割が重なるため一覧からは隠す。
     // 既存の各銘柄のデータ自体は削除しない(非表示中の指標として復元できる、既存の仕組みと同じ扱い。
     // 削除してしまうと、業績推移側にデータが無い銘柄の値まで失われてしまうため)
@@ -879,8 +865,6 @@ function masterFor(s){return isMkt(s)?DB[scopeKeys(s).sec]:DB.sectionMaster;}
 function metricsMasterFor(s){return isMkt(s)?DB[scopeKeys(s).met]:DB.metricsMaster;}
 // 非表示は「一覧から取り除く」のではなく「使わない印を付ける」だけ。
 // 設定画面では並び順のまま残り、画面・質問文には表示中のものだけを使う
-// グラフの上限。増やすと横スワイプで送る枚数が増え、1枚あたりの意味が薄くなる
-const GRAPH_MAX=4;
 function metOn(mm,type,name){ return !((type==='trend'?mm.hiddenTrend:mm.hiddenSnap)||[]).includes(name); }
 function snapKeys(mm){ return ((mm&&mm.snap)||[]).filter(k=>metOn(mm,'snap',k)); }
 function trendInds(mm){ return ((mm&&mm.trend)||[]).filter(t=>metOn(mm,'trend',t.name)); }
@@ -1279,9 +1263,7 @@ function renderStockDetail(v){
   h+=groupBlockWithEdit(detailGroupKey(s,'業績推移'),'業績推移','sheetMetricsMaster()',renderTrend(s)+'<div style="height:10px"></div>');
   h+=blkSections(s)+blkHypos(s,hy)+blkLinks(s);
   v.innerHTML=h;
-  pagerInit('metrics'); pagerInit('trendchart');
-  // グラフが1枚だけのときはページャーが無く pagerInit を通らないので、ここで印を付ける
-  syncTrendRows(0);
+  pagerInit('metrics');
 }
 
 //////////////////// MARKET DETAIL ////////////////////
@@ -1379,101 +1361,70 @@ function delStock(sid){
     save(); STATE.stockId=null; go('analysis'); toast('削除しました');
   }});
 }
+// グラフの見出し(指標名・単位・凡例)。グラフの上・中央に置く。下に小さく置くと、
+// 棒に視線を持っていかれて「何のグラフか」が読み取れないため
+function trendChartCap(name, sub){
+  return `<div style="text-align:center;margin-bottom:6px;font-size:11px;color:var(--ink3)">`
+    +`<span style="font-size:13px;font-weight:700;color:var(--ink)">${esc(name)}</span>${sub?' '+esc(sub):''}</div>`;
+}
+// 表の行をタップすると、その指標がそのままグラフになる(単一選択。複数を並べたり
+// 上限を設けたりはしない。タップした指標=見たい指標、という以外の状態を持たせない)
+function trendChartHtml(s, ind){
+  const tr=s.trend, o=tr[ind.name];
+  const years=new Set(); Object.values(tr).forEach(v=>Object.keys(v).forEach(k=>{if(k!=='unit')years.add(k);}));
+  const ys=[...years];
+  if(!o||!ys.some(y=>o[y])) return trendChartCap(ind.name, '· まだ取り込まれていません')
+    +`<div class="nodata" style="height:118px;margin-bottom:2px">データなし</div>`;
+  const vals=ys.map(y=>+((o[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
+  let ch=trendChartCap(ind.name, `${o.unit?`(${o.unit})`:''} · 点線=予想`);
+  ch+='<div style="display:flex;align-items:flex-end;gap:8px;height:118px;margin-bottom:2px">';
+  ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
+    ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:11px;color:var(--ink3);text-align:center">${esc(y.replace('期','').replace(/[（(]予[）)]/,''))}</div></div>`; });
+  ch+='</div>';
+  return ch;
+}
 function renderTrend(s){
   const tr=s.trend;
-  // グラフ表示に選んだ指標は、数値をまだ持っていなくても枠ごと出す。
-  // 選んだのに何も出てこないと「設定が効いていないのか、データが無いのか」が区別できないため
-  const inds=trendInds(DB.metricsMaster).filter(t=>t.graph);
+  const inds=trendInds(DB.metricsMaster);
   const years=new Set(); Object.values(tr).forEach(o=>Object.keys(o).forEach(k=>{if(k!=='unit')years.add(k);}));
   const ys=[...years];
   const hasData=t=>{ const o=tr[t.name]; return !!(o&&ys.some(y=>o[y])); };
-  let h='<div class="card" style="padding:11px 12px">';
-  // 棒グラフ(グラフ対象指標が複数あれば横スワイプページャーで切り替え)
+  let h='<div class="card" id="trendCard" style="padding:11px 12px">';
   if(inds.length){
-    // 見出しはグラフの上・中央に置く。下に小さく置くと、棒に視線を持っていかれて
-    // 「何のグラフか」が読み取れないため
-    const chartCap=(name, sub)=>`<div style="text-align:center;margin-bottom:6px;font-size:11px;color:var(--ink3)">`
-      +`<span style="font-size:13px;font-weight:700;color:var(--ink)">${esc(name)}</span>${sub?' '+esc(sub):''}</div>`;
-    const chartHtml=(ind)=>{
-      if(!hasData(ind)) return chartCap(ind.name, '· まだ取り込まれていません')
-        +`<div class="nodata" style="height:118px;margin-bottom:2px">データなし</div>`;
-      const first=tr[ind.name]; const vals=ys.map(y=>+((first[y]||'0').replace(/,/g,''))); const max=Math.max(...vals,1);
-      let ch=chartCap(ind.name, `${first.unit?`(${first.unit})`:''} · 点線=予想`);
-      ch+='<div style="display:flex;align-items:flex-end;gap:8px;height:118px;margin-bottom:2px">';
-      ys.forEach((y,i)=>{ const pct=Math.round(vals[i]/max*100); const fc=y.includes('予');
-        ch+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end"><div style="width:60%;height:${pct}%;border-radius:3px 3px 0 0;${fc?'border:1.5px dashed var(--navy);':'background:var(--navy);'}"></div><div style="font-size:11px;color:var(--ink3);text-align:center">${esc(y.replace('期','').replace(/[（(]予[）)]/,''))}</div></div>`; });
-      ch+='</div>';
-      return ch;
-    };
-    if(inds.length<=1){ h+=chartHtml(inds[0]); }
-    else { h+=pagerBlock('trendchart', inds.map(chartHtml), (idx)=>`${idx+1} / ${inds.length}`, 'tight'); }
+    // 前回タップした指標を覚えておき、無ければ(初回・削除された場合)先頭にする
+    if(!STATE._trendSel || !inds.some(x=>x.name===STATE._trendSel)) STATE._trendSel=inds[0].name;
+    h+=`<div id="trendchart_single">${trendChartHtml(s, inds.find(x=>x.name===STATE._trendSel))}</div>`;
   }
   // 表。1年分も取り込んでいないときは年度の列を作れないので、見出しだけ「年度」にして行は残す
   const cols=ys.length?ys.map(y=>`<th style="text-align:right">${esc(y.replace('期',''))}</th>`).join('')
                      :'<th style="text-align:center">年度</th>';
   h+='<div class="xscroll"><table class="trend" style="white-space:nowrap"><tr><th>指標</th>'+cols+'</tr>';
-  trendInds(DB.metricsMaster).forEach(t=>{ const o=tr[t.name];
+  inds.forEach(t=>{ const o=tr[t.name];
     // 数値が1つも無い指標は、年度のセルを1つにまとめて「データなし」と書く。
     // 年度ごとに「—」を並べるより、行まるごと空だと分かりやすい
     const cells=hasData(t)
       ? ys.map(y=>`<td style="text-align:right${y.includes('予')?';color:var(--amber-tx)':''}">${o[y]?esc(fmtNum(o[y])):'—'}</td>`).join('')
       : `<td class="nodata-cell" colspan="${Math.max(ys.length,1)}">データなし</td>`;
-    // 行のどこを押してもその指標のグラフに送れるようにする。
-    // 指標名だけを狙わせると、数値の上を押した人が「反応しない」と受け取ってしまう。
-    // グラフに出していない指標も、押したら理由を返す。無反応の行を作ると
-    // 「壊れている」としか受け取りようがない
-    const gi=inds.findIndex(x=>x.name===t.name);
-    const cls=[hasData(t)?'':'empty-row', 'trend-tap', gi<0?'no-chart':''].filter(Boolean).join(' ');
-    h+=`<tr class="${cls}"${gi>=0?` data-gi="${gi}"`:''} onclick="${gi>=0?`trendChartTo(${gi})`:`trendNoChart('${escArg(t.name)}')`}">`
+    // 行のどこを押してもその指標のグラフに切り替わる。指標名だけを狙わせると、
+    // 数値の上を押した人が「反応しない」と受け取ってしまう
+    h+=`<tr class="trend-tap${hasData(t)?'':' empty-row'}${t.name===STATE._trendSel?' on':''}" data-name="${esc(t.name)}" onclick="trendChartTo('${escArg(t.name)}')">`
       +`<td>${esc(t.name)}</td>${cells}</tr>`; });
-  h+='</table></div><div id="trendNote"></div>';
-  // グラフに出ていない指標があると「なぜ全部グラフにならないのか」が画面から分からないので、
-  // 表のすぐ下で理由と、表なら全部見られることを伝える
-  const offGraph=trendInds(DB.metricsMaster).length-inds.length;
-  const notes=[];
-  if(inds.length>1) notes.push('グラフのある指標は、表の行をタップするとそのグラフに切り替わります。');
-  if(offGraph>0) notes.push(`グラフに出せるのは${GRAPH_MAX}件までです。残り${offGraph}件は表で見られます(どれをグラフに出すかは「編集」で変えられます)。`);
-  if(notes.length) h+=`<div class="muted" style="font-size:11px;margin-top:6px">${notes.map(esc).join('<br>')}</div>`;
+  h+='</table></div>';
+  if(inds.length>1) h+='<div class="muted" style="font-size:11px;margin-top:6px">表の行をタップすると、その指標のグラフに切り替わります。</div>';
   h+='</div>';
   // まだ1年分も無いときだけ、埋め方を1行だけ添える
   if(!ys.length) h+='<div class="hint" style="margin:6px 0 4px">売上高・営業利益などを年度つきで取り込むと、ここにグラフと数字が入ります。</div>';
   return h;
 }
-// 表の行 → グラフ。横スワイプと同じ動きで送る。
-// 同じ要素に「縦に見える位置まで戻す」と「横に送る」を続けて出すと、端末によっては
-// あとから出した横送りのほうが取り消される。縦はページ全体(window)を動かし、
-// 横送りは次のフレームに回して、2つのスクロールがぶつからないようにする
-let _trendLock=null;   // 表の行から送っている最中の行き先
-// グラフに出していない指標の行を押したとき。無言で終わらせず、理由と直し方をその場に出す
-function trendNoChart(name){
-  const el=document.getElementById('trendNote'); if(!el) return;
-  el.innerHTML=`<div class="banner warn" style="margin:8px 0 0">`
-    +`<div>${esc(`「${name}」はグラフに出していません。グラフは${GRAPH_MAX}件までです。`)}</div>`
-    +`<button class="btn sm" style="margin-top:8px" onclick="event.stopPropagation();sheetMetricsMaster()">グラフに出す指標を選ぶ</button></div>`;
-}
-function trendChartTo(gi){
-  const note=document.getElementById('trendNote'); if(note) note.innerHTML='';
-  // 送りは滑らかに動くので、途中で通り過ぎるグラフの分だけ onscroll が走る。
-  // そのまま印を追わせると、行き先の手前の行が一瞬光ってから目的の行に移る。
-  // 送っている間は行き先以外の更新を無視して、印が寄り道しないようにする
-  _trendLock=gi;
-  setTimeout(()=>{ if(_trendLock===gi) _trendLock=null; }, 700);
-  applyTrendRows(gi);
-  const el=document.getElementById('trendchart_pages');
-  if(!el) return;
-  const r=el.getBoundingClientRect();
-  const top=($('.top')?$('.top').getBoundingClientRect().bottom:0)+8;
-  // グラフがほぼ画面の外にあるときだけ動かす(少しでも見えているなら動かさない)
-  if(r.bottom<top+40 || r.top>window.innerHeight-40) window.scrollTo({top:viewScroll()+r.top-top, behavior:'smooth'});
-  requestAnimationFrame(()=>pagerGoto('trendchart', gi));
-}
-// いまグラフに出ている指標を表側にも印す。スワイプで送ったときも追従させる
-function syncTrendRows(idx){
-  if(_trendLock!==null){ if(idx!==_trendLock) return; _trendLock=null; }
-  applyTrendRows(idx);
-}
-function applyTrendRows(idx){
-  document.querySelectorAll('#view tr[data-gi]').forEach(tr=>tr.classList.toggle('on', +tr.dataset.gi===idx));
+// 表の行をタップして、その指標のグラフに切り替える。単一選択なのでスクロール送りは不要で、
+// グラフの中身とタップした行の印(.on)だけを差し替える
+function trendChartTo(name){
+  STATE._trendSel=name;
+  const s=stock(STATE.stockId); if(!s) return;
+  const ind=trendInds(DB.metricsMaster).find(x=>x.name===name); if(!ind) return;
+  const el=document.getElementById('trendchart_single');
+  if(el) el.innerHTML=trendChartHtml(s, ind);
+  document.querySelectorAll('#view table.trend tr[data-name]').forEach(tr=>tr.classList.toggle('on', tr.dataset.name===name));
 }
 
 //////////////////// IMPORT (parser) ////////////////////
@@ -2207,10 +2158,7 @@ function commitImport(){
       if(!mm.snap.includes(r.key)) mm.snap.push(r.key);
     }
     else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
-      if(!DB.metricsMaster.trend.some(t=>t.name===r.key)){
-        // グラフは最大4件までの運用のため、超える分は表(グラフなし)で追加
-        DB.metricsMaster.trend.push({name:r.key, graph:trendInds(DB.metricsMaster).filter(t=>t.graph).length<GRAPH_MAX});
-      }
+      if(!DB.metricsMaster.trend.some(t=>t.name===r.key)) DB.metricsMaster.trend.push({name:r.key});
     }
     else if(/分析/.test(r.block||'')){
       const res=resolveSection(r.key, r.value);
@@ -3068,8 +3016,6 @@ function pagerUpdateNav(id){
   if(er) er.classList.toggle('show', st.activeIdx<st.total-1);
   const cap=document.getElementById(id+'_cap');
   if(cap && _pagerCap[id]) cap.textContent=_pagerCap[id](st.activeIdx, st.total);
-  // 業績推移は表と対応づけているので、送ったら表側の印も動かす
-  if(id==='trendchart') syncTrendRows(st.activeIdx);
 }
 function sheetAnalysisItem(sid,su){
   const s=stock(sid); const val=s.sections[su]; const det=(val&&val.details)||[];
@@ -3475,11 +3421,6 @@ function toggleMetHelp(key){
 function statBadge(on, action){
   return `<span class="swtap" data-role="disp" onclick="${action}"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}" aria-label="${on?'表示中':'非表示中'}"><i></i></span></span>`;
 }
-// グラフに出すかどうかのスイッチ。非表示中の指標に対しては enabled=false になり薄く表示するが、
-// タップ自体は殺さない(押すと「非表示中なので〜」の理由が返る。無反応にはしない)
-function graphSwitch(i, graphOn, enabled){
-  return `<span class="swtap${enabled?'':' dis'}" data-role="graph" onclick="toggleGraph(${i})"><span class="sw${graphOn?' on':''}" role="switch" aria-checked="${graphOn}" aria-label="グラフ表示"><i></i></span></span>`;
-}
 // ===== 指標の整理(まとめる・削除) =====
 // 表記揺れで増えた指標は、あとから畳めないと持ち続けることになる。
 // 一覧の指標名をタップすると、その指標をどうするかを選ぶ画面を開く。
@@ -3584,7 +3525,6 @@ function doDeleteMetric(type, name, src){
 }
 function sheetMetricsMaster(){
   const mm=DB.metricsMaster;
-  const graphOn=trendInds(mm).filter(x=>x.graph).length;
   const snapOn=snapKeys(mm).length, trendOn=trendInds(mm).length;
   let h=`<h3>収容指標・業績分析項目の設定</h3>
     <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のスイッチで表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。指標名を押すと、ほかの指標にまとめたり削除したりできます。</div>`;
@@ -3598,25 +3538,16 @@ function sheetMetricsMaster(){
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('snap',${i},1)" ${i===mm.snap.length-1?'disabled style="opacity:.3;width:auto;padding:3px 7px;font-size:11px"':''}>↓</button>
       ${statBadge(on, `toggleMetric('snap','${escArg(k)}')`)}
     </div>`; });
-  // 業績推移指標
-  h+=metHelpLbl(`業績推移の指標 (表示中 ${trendOn}/${mm.trend.length}) · グラフ表示 (${graphOn}/${GRAPH_MAX})`, 'trend');
-  // グラフに出せなかったときの理由は、押した場所のすぐ上に出す。
-  // 1回だけ出す一時的な文言なので、読み出したらすぐ消す
-  const gm=STATE._graphMsg; STATE._graphMsg=null;
-  if(gm) h+=`<div class="banner warn">${esc(gm.why==='limit'
-      ? `グラフの上限は${GRAPH_MAX}件までです。どれかの指標を非表示に変更してください。`
-      : `「${gm.name}」は非表示中なのでグラフに出せません。右の「表示」スイッチでオンにしてから選んでください。`)}</div>`;
-  else if(graphOn>GRAPH_MAX) h+=`<div class="banner warn">グラフが上限の${GRAPH_MAX}件を超えています(${graphOn}件)。銘柄詳細ではこの${graphOn}件ぶんのグラフが並びます。どれかの指標を非表示に変更してください。</div>`;
-  else if(graphOn===GRAPH_MAX) h+=`<div class="banner">グラフの上限は${GRAPH_MAX}件までです。ほかの指標をグラフに出すには、どれかの指標を非表示に変更してください。</div>`;
-  h+=`<div class="met-hdr"><span>グラフ</span><span>表示</span></div>`;
+  // 業績推移指標。どれをグラフにするかは、銘柄詳細の表の行をタップして選ぶ(単一選択・上限なし)ため、
+  // ここでは表示・非表示だけを扱う
+  h+=metHelpLbl(`業績推移の指標 (表示中 ${trendOn}/${mm.trend.length})`, 'trend');
   mm.trend.forEach((o,i)=>{
     const on=metOn(mm,'trend',o.name);
-    // 非表示中はそもそも画面に出ないので、グラフの指定も効かない。押せないことが分かるよう薄くする
     h+=`<div class="met-row${on?'':' off'}">
       ${metNameBtn('trend',o.name,'stock')}
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},-1)" ${i===0?'disabled':''}>↑</button>
       <button class="btn sm" style="width:auto;padding:3px 7px;font-size:11px" onclick="moveMetric('trend',${i},1)" ${i===mm.trend.length-1?'disabled':''}>↓</button>
-      <span class="swcol">${graphSwitch(i,o.graph,on)}${statBadge(on, `toggleMetric('trend','${escArg(o.name)}')`)}</span>
+      ${statBadge(on, `toggleMetric('trend','${escArg(o.name)}')`)}
     </div>`; });
   h+=`<button class="btn sm" style="margin-top:18px" onclick="resetMetricOrder()">並び順を既定に戻す</button>`;
   // 「非表示の指標」を別リストに分けるのはやめた。分けると、元がスナップショットだったのか
@@ -3669,14 +3600,6 @@ function moveMetric(type,i,dir){
   save(); render(); sheetMetricsMaster();
 }
 // 断られた理由は、数秒で消えるトーストではなく設定画面の中に残す
-function toggleGraph(i){
-  const mm=DB.metricsMaster;
-  const o=mm.trend[i];
-  // 非表示中の指標はそもそも画面に出ないので、グラフの指定だけしても意味がない
-  if(!metOn(mm,'trend',o.name)){ STATE._graphMsg={name:o.name, why:'hidden'}; sheetMetricsMaster(); return; }
-  if(!o.graph && trendInds(mm).filter(x=>x.graph).length>=GRAPH_MAX){ STATE._graphMsg={name:o.name, why:'limit'}; sheetMetricsMaster(); return; }
-  o.graph=!o.graph; save(); render(); sheetMetricsMaster();
-}
 // 旧バージョンでは、非表示から戻した指標が一覧の末尾へ飛んでいた(今は元の位置に戻る)。
 // 末尾に飛ぶと、6件ごとの指標グリッドで2ページ目に押し出され、1ページ目が
 // 「データなし」だけになって数字が見つけられなくなる。
@@ -3707,12 +3630,7 @@ function toggleMetric(type,name){
   mm[key]=mm[key]||[];
   const on=metOn(mm,type,name);
   if(on) mm[key].push(name);
-  else {
-    mm[key]=mm[key].filter(x=>x!==name);
-    // 表示中に戻したときグラフが5件目になってしまう場合は、表だけの扱いにする
-    const o=(type==='trend')?mm.trend.find(x=>x.name===name):null;
-    if(o&&o.graph&&trendInds(mm).filter(x=>x.graph).length>GRAPH_MAX){ o.graph=false; save(); render(); sheetMetricsMaster(); toast(`表示中にしました(グラフは${GRAPH_MAX}件までのため表のみ)`); return; }
-  }
+  else mm[key]=mm[key].filter(x=>x!==name);
   save(); render(); sheetMetricsMaster();
   toast(on?'非表示にしました(データは保持されます)':'表示中にしました');
 }

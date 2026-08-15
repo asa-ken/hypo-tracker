@@ -35,7 +35,6 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
       cellNames: cells.map(c => c.querySelector('.k').textContent),
       cellValues: cells.map(c => c.querySelector('.v').textContent),
       charts: v.querySelectorAll('.nodata').length,
-      graphInds: DB.metricsMaster.trend.filter(t => t.graph).length,
       hasTable: !!table,
       rows: table ? [...table.querySelectorAll('tr')].slice(1).map(r => r.textContent.trim().replace(/\s+/g, ' ')) : [],
       trendInds: DB.metricsMaster.trend.map(t => t.name),
@@ -50,7 +49,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('表の行は業績推移の指標の分だけある', empty.rows.length === empty.trendInds.length);
   ok('空の行はすべて「データなし」', empty.rows.length > 0 && empty.rows.every(r => /データなし$/.test(r)));
   ok('年度が1つも無いときは見出しを「年度」にする', JSON.stringify(empty.headers) === JSON.stringify(['指標', '年度']));
-  ok('グラフ表示に選んだ指標の枚数だけグラフ枠が出る', empty.charts === empty.graphInds && empty.charts > 0);
+  ok('グラフは常に1枚(タップした指標)で、データが無ければ枠が出る', empty.charts === 1);
   ok('埋め方の案内も残る', empty.hint);
 
   // 「データなし」は記号ではなく言葉で書く(—だけだと意味が読み取れない)
@@ -105,13 +104,16 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('まるごと空の行は年度のセルを1つにまとめる(セル結合)', epsRow && epsRow.span === mixed.years && mixed.years > 1);
   ok('まるごと空の行は「データなし」と書く', epsRow && /データなし$/.test(epsRow.text));
   ok('空の指標だけ薄く表示される', epsRow && epsRow.empty && !salesRow.empty);
-  ok('空のグラフも1枚出る(EPS)', mixed.charts === 1);
 
+  // EPSの行をタップして、空の指標のグラフに切り替える
+  await p.evaluate(() => trendChartTo('EPS'));
+  await p.waitForTimeout(200);
   const chartLabel = await p.evaluate(() => {
     const nd = document.querySelector('#view .nodata');
     // 見出しはグラフの上に移ったので、直前の要素を見る
-    return { box: Math.round(nd.getBoundingClientRect().height), label: nd.previousElementSibling.textContent.trim() };
+    return { box: nd ? Math.round(nd.getBoundingClientRect().height) : null, label: nd ? nd.previousElementSibling.textContent.trim() : null };
   });
+  ok('空の指標をタップすると、空のグラフが1枚出る(EPS)', !!chartLabel.box);
   ok('空のグラフも通常のグラフと同じ高さの枠を取る', chartLabel.box >= 100);
   ok('どの指標が空なのか名前で分かる', /^EPS/.test(chartLabel.label));
 
