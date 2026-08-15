@@ -45,6 +45,15 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     [...document.querySelectorAll('#view table.trend tr')].slice(1).every(r => r.getBoundingClientRect().height >= 44)));
   ok('押せることが文章でも案内される', await p.evaluate(() => /表の行をタップすると、その指標のグラフに切り替わります/.test(document.querySelector('#view').innerText)));
   ok('横スワイプのページャーは無い(単一グラフのため)', await p.evaluate(() => !document.querySelector('#trendchart_pages')));
+  // 指標名セルの2行クランプ(.clip2)はtd自体ではなく中の要素に掛ける。tdに直接掛けると
+  // table-cellから外れて行の高さ計算がずれ、区切り線が指標列だけ浮く(ユーザー指摘、2026-08-15)
+  ok('指標列と数値列の区切り線がずれない', await p.evaluate(() =>
+    [...document.querySelectorAll('#view table.trend tr')].every(r => {
+      const bottoms = [...r.children].map(c => Math.round(c.getBoundingClientRect().bottom));
+      return new Set(bottoms).size === 1;
+    })));
+  ok('指標名セルはtable-cellのまま(2行クランプで外れていない)', await p.evaluate(() =>
+    [...document.querySelectorAll('#view table.trend td:first-child')].every(td => getComputedStyle(td).display === 'table-cell')));
 
   // ---- 2. 指標名をタップして切り替わる ----
   await tapCell('営業利益', 0);

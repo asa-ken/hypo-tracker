@@ -199,11 +199,12 @@
      行がタップ対象なので、行の高さを44pxまで広げる */
   table.trend td{padding:13px 6px;}
   /* 指標名が長いと1行のまま伸びて、年度の数値列が右へ押し出されて見えなくなる(横スクロールしないと
-     数値が見えない)。名前列だけ幅を絞って2行までに収め、数値列を画面内に残す */
-  table.trend td:first-child, table.trend th:first-child{
-    white-space:normal; width:125px; overflow:hidden;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.35;
-  }
+     数値が見えない)。名前列だけ幅を絞って2行までに収め、数値列を画面内に残す。
+     display:-webkit-box はtd自体に直接当てると table-cell から外れてしまい、行の高さ計算が
+     ずれて罫線が指標列だけ1〜2px浮く(ユーザー指摘、2026-08-15)。tdはtable-cellのまま幅だけ絞り、
+     2行クランプは中の要素(.clip2)だけに掛ける */
+  table.trend td:first-child, table.trend th:first-child{ width:125px; min-width:125px; }
+  table.trend td:first-child .clip2{ white-space:normal; line-height:1.35; }
   tr.trend-tap{cursor:pointer;}
   tr.trend-tap:active td{background:var(--navy-bg);}
   tr.trend-tap.on td{background:var(--navy-bg);}
@@ -1408,7 +1409,7 @@ function renderTrend(s){
     // 行のどこを押してもその指標のグラフに切り替わる。指標名だけを狙わせると、
     // 数値の上を押した人が「反応しない」と受け取ってしまう
     h+=`<tr class="trend-tap${hasData(t)?'':' empty-row'}${t.name===STATE._trendSel?' on':''}" data-name="${esc(t.name)}" onclick="trendChartTo('${escArg(t.name)}')">`
-      +`<td>${esc(t.name)}</td>${cells}</tr>`; });
+      +`<td><span class="clip2">${esc(t.name)}</span></td>${cells}</tr>`; });
   h+='</table></div>';
   if(inds.length>1) h+='<div class="muted" style="font-size:11px;margin-top:6px">表の行をタップすると、その指標のグラフに切り替わります。</div>';
   h+='</div>';
