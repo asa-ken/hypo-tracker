@@ -29,8 +29,11 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     tappable: [...document.querySelectorAll('#view table.trend tr')].slice(1)
       .map(r => ({ name: r.querySelector('td').textContent.trim(), tap: r.classList.contains('trend-tap') })),
   }));
+  // 表は5行を超えると内側だけスクロールする(.trend-scroll)ので、対象行が隠れていれば先に
+  // 内側だけスクロールして表に出す(ページ全体は動かさない、実際の操作と同じ)
   const tapCell = (name, col) => p.evaluate(([n, c]) => {
     const tr = [...document.querySelectorAll('#view table.trend tr')].find(r => r.dataset.name === n);
+    tr.scrollIntoView({ block: 'nearest' });
     const tds = tr.querySelectorAll('td'); const r = tds[Math.min(c, tds.length - 1)].getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, [name, col]).then(b => p.mouse.click(b.x, b.y)).then(() => p.waitForTimeout(300));
@@ -170,6 +173,39 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('端まで飛ばしても同様', JSON.stringify(seq3.onRows) === JSON.stringify(['FCF']) && /FCF/.test(seq3.chartText));
   ok('印は常に1行だけ', await p.evaluate(() => document.querySelectorAll('#view table.trend tr.trend-tap.on').length === 1));
   ok('グラフは常に1枚だけ', await p.evaluate(() => document.querySelectorAll('#trendchart_single').length === 1));
+
+  // ---- 11. 指標数が多いと表の中だけ縦スクロールし、ページ全体は動かさない ----
+  // (2026-08-15 ユーザー指摘: 表が縦に長いと、行をタップしてもグラフが画面外のままになっていた)
+  await p.evaluate(() => {
+    DB.metricsMaster.trend = ['売上高', '営業利益', 'EPS', 'FCF', '純利益', 'ROE', '自己資本比率', '配当性向']
+      .map(name => ({ name }));
+    const st = stock(STATE.stockId);
+    st.trend['配当性向'] = { unit: '%', '24年3月期': '30.0' };
+    save(); render();
+  });
+  await p.waitForTimeout(400);
+  const scrollBox = await p.evaluate(() => {
+    const el = document.querySelector('.trend-scroll');
+    return { h: Math.round(el.getBoundingClientRect().height), scrollable: el.scrollHeight > el.clientHeight + 1 };
+  });
+  ok('指標が多くても表の枠の高さは一定(ファーストビューは約5行)', scrollBox.h > 0 && scrollBox.h < 300);
+  ok('枠を超えた分は表の中だけでスクロールする', scrollBox.scrollable);
+  const beforeScroll = await p.evaluate(() => ({
+    pageY: window.pageYOffset,
+    chartTop: Math.round(document.querySelector('#trendchart_single').getBoundingClientRect().top),
+  }));
+  // 一番下(表の外に隠れている行)をタップする
+  await tapCell('配当性向', 1);
+  const afterScroll = await p.evaluate(() => ({
+    pageY: window.pageYOffset,
+    chartTop: Math.round(document.querySelector('#trendchart_single').getBoundingClientRect().top),
+    chartText: document.querySelector('#trendchart_single').innerText,
+  }));
+  ok('隠れていた行をタップしてもページ全体はスクロールしない', afterScroll.pageY === beforeScroll.pageY);
+  ok('グラフの位置も動かない(常に画面内のまま)', afterScroll.chartTop === beforeScroll.chartTop);
+  ok('グラフの中身は正しく切り替わる', /配当性向/.test(afterScroll.chartText));
+  ok('見出し行(指標/年度)はスクロールしても追従する(sticky)', await p.evaluate(() =>
+    getComputedStyle(document.querySelector('.trend-scroll table.trend tr:first-child th')).position === 'sticky'));
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
