@@ -91,8 +91,10 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const s5 = await state();
   ok('グラフに出していない指標も表には出る', s5.tappable.some(r => r.name === 'ROE' && r.noChart));
   ok('その行には印は付かない', !s5.onRows.some(n => n.startsWith('ROE')));
-  ok('押す前から「表のみ」と分かる', await p.evaluate(() =>
-    [...document.querySelectorAll('#view table.trend tr')].some(r => /ROE/.test(r.textContent) && /表のみ/.test(r.textContent))));
+  ok('押す前から見分けが付く(文字色を落とす)', await p.evaluate(() => {
+    const r = [...document.querySelectorAll('#view table.trend tr')].find(x => /ROE/.test(x.textContent));
+    return r.classList.contains('no-chart');
+  }));
   // 押しても無反応にはしない。グラフは変えず、理由を返す
   const before = s5.idx;
   await tapCell('ROE', 2);

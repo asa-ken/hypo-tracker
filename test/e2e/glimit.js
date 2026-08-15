@@ -22,7 +22,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const tapGraph = name => p.evaluate(n => {
     const i = DB.metricsMaster.trend.findIndex(t => t.name === n);
     [...document.querySelectorAll('#sheet .met-row')].find(r => r.querySelector('.nm').textContent.trim() === n)
-      .querySelector('button').click();
+      .querySelector('.swtap[data-role="graph"]').click();
     return i;
   }, name);
 
@@ -37,11 +37,11 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   // 右のバッジ(表示中/非表示中)と役割が被って見えるので、左のチェックの記号は置かない。
   // 入/切は塗りつぶしの有無で示す
   ok('チェックボックスの記号は使わない', await p.evaluate(() => !/[☑☐]/.test(document.querySelector('#sheet').innerText)));
-  ok('グラフのボタンは残る', await p.evaluate(() =>
-    [...document.querySelectorAll('#sheet .met-row button')].filter(b => b.textContent.trim() === 'グラフ').length >= 3));
+  ok('グラフのスイッチは残る', await p.evaluate(() =>
+    document.querySelectorAll('#sheet .met-row .swtap[data-role="graph"]').length >= 3));
   ok('入っている指標は塗りつぶしで示す', await p.evaluate(() => {
     const r = [...document.querySelectorAll('#sheet .met-row')].find(x => x.querySelector('.nm').textContent.trim() === '売上高');
-    const c = getComputedStyle(r.querySelector('button')).backgroundColor;
+    const c = getComputedStyle(r.querySelector('.swtap[data-role="graph"] .sw')).backgroundColor;
     return /^rgb\(1[0-9], 5[0-9], 9[0-9]\)$/.test(c);
   }));
 
@@ -64,7 +64,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('押しても見た目がアクティブにならない', await p.evaluate(() => {
     const r = [...document.querySelectorAll('#sheet .met-row')].find(x => x.querySelector('.nm').textContent.trim() === '純利益');
     const on = [...document.querySelectorAll('#sheet .met-row')].find(x => x.querySelector('.nm').textContent.trim() === '売上高');
-    return getComputedStyle(r.querySelector('button')).backgroundColor !== getComputedStyle(on.querySelector('button')).backgroundColor;
+    return getComputedStyle(r.querySelector('.swtap[data-role="graph"] .sw')).backgroundColor !== getComputedStyle(on.querySelector('.swtap[data-role="graph"] .sw')).backgroundColor;
   }));
   ok('指定どおりの文言で出す', s2.warn === 'グラフの上限は4件までです。どれかの指標を非表示に変更してください。');
   ok('注意書きは警告色で出す', await p.evaluate(() => {
@@ -90,7 +90,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const s3 = await sheet();
   ok('非表示中の指標はグラフに出せない', !s3.graphOn.includes('純利益'));
   ok('非表示中である理由を書く', !!s3.warn && /非表示中なのでグラフに出せません/.test(s3.warn));
-  ok('戻し方まで書いてある', /「表示中」にしてから/.test(s3.warn));
+  ok('戻し方まで書いてある', /「表示」スイッチでオンにしてから/.test(s3.warn));
 
   // ---- 5. すでに上限を超えているデータ(旧バージョン由来)にも気づける ----
   await p.evaluate(() => {
