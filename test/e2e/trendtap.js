@@ -1,6 +1,7 @@
-// 業績推移のグラフ切り替えを、横スワイプだけでなく表の行タップでもできるようにする
+// 業績推移のグラフは常に1枚。表の行をタップすると、その指標のグラフに即座に切り替わる
+// (2026-08-15: 設定画面のグラフOn/Offトグル・上限4件は廃止。どの指標でもタップすればグラフになる)
 //  ・判定は指標名だけでなく、実数を含めた行全体
-//  ・いまグラフに出ている行は表側にも印を付け、スワイプで送っても追従する
+//  ・いまグラフに出ている指標は表側にも印を付ける
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -22,167 +23,102 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.waitForTimeout(400);
 
   const state = () => p.evaluate(() => ({
-    cap: (document.querySelector('#trendchart_cap') || {}).textContent,
+    chartCount: document.querySelectorAll('#trendchart_single').length,
+    chartText: (document.querySelector('#trendchart_single') || {}).innerText || '',
     onRows: [...document.querySelectorAll('#view tr.trend-tap.on')].map(r => r.querySelector('td').textContent.trim()),
-    // 内部の状態ではなく、画面のドットの点灯位置で「いま何枚目か」を見る
-    idx: (() => { const d = [...document.querySelectorAll('#trendchart_dots .dot')]; const i = d.findIndex(x => x.classList.contains('on')); return i < 0 ? null : i; })(),
     tappable: [...document.querySelectorAll('#view table.trend tr')].slice(1)
-      .map(r => ({ name: ((r.querySelector('td').firstChild || {}).textContent || '').trim(),
-                   tap: r.classList.contains('trend-tap'), noChart: r.classList.contains('no-chart') })),
+      .map(r => ({ name: r.querySelector('td').textContent.trim(), tap: r.classList.contains('trend-tap') })),
   }));
-  // 行の中の、指定した列のセルの真ん中を実際にクリックする
-  // 指標名のセルには「表のみ」のチップが入ることがあるので、先頭のテキストだけで探す
   const tapCell = (name, col) => p.evaluate(([n, c]) => {
-    const nameOf = r => ((r.querySelector('td').firstChild || {}).textContent || '').trim();
-    const tr = [...document.querySelectorAll('#view table.trend tr')].find(r => r.querySelector('td') && nameOf(r) === n);
+    const tr = [...document.querySelectorAll('#view table.trend tr')].find(r => r.dataset.name === n);
     const tds = tr.querySelectorAll('td'); const r = tds[Math.min(c, tds.length - 1)].getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }, [name, col]).then(b => p.mouse.click(b.x, b.y)).then(() => p.waitForTimeout(700));
+  }, [name, col]).then(b => p.mouse.click(b.x, b.y)).then(() => p.waitForTimeout(300));
 
-  // ---- 1. グラフのある指標の行だけが押せる ----
+  // ---- 1. グラフは常に1枚。どの指標の行も押せる ----
   const s0 = await state();
-  ok('どの行も押せる', s0.tappable.every(r => r.tap));
-  ok('グラフのある3指標は送り先を持つ', s0.tappable.filter(r => !r.noChart).length === 3);
-  ok('最初は1枚目のグラフ', s0.cap === '1 / 3' && s0.idx === 0);
+  ok('どの行も押せる(上限や未選択という概念が無い)', s0.tappable.every(r => r.tap));
+  ok('グラフは1枚だけ', s0.chartCount === 1);
+  ok('最初は先頭の指標(売上高)のグラフ', /売上高/.test(s0.chartText));
   ok('表側にも1行だけ印が付く', JSON.stringify(s0.onRows) === JSON.stringify(['売上高']));
   ok('行の高さは44px以上ある', await p.evaluate(() =>
     [...document.querySelectorAll('#view table.trend tr')].slice(1).every(r => r.getBoundingClientRect().height >= 44)));
-  ok('押せることが文章でも案内される', await p.evaluate(() => /表の行をタップするとそのグラフに切り替わります/.test(document.querySelector('#view').innerText)));
+  ok('押せることが文章でも案内される', await p.evaluate(() => /表の行をタップすると、その指標のグラフに切り替わります/.test(document.querySelector('#view').innerText)));
+  ok('横スワイプのページャーは無い(単一グラフのため)', await p.evaluate(() => !document.querySelector('#trendchart_pages')));
 
   // ---- 2. 指標名をタップして切り替わる ----
   await tapCell('営業利益', 0);
   const s1 = await state();
-  ok('指標名のタップで切り替わる', s1.idx === 1 && s1.cap === '2 / 3');
+  ok('指標名のタップで切り替わる', /営業利益/.test(s1.chartText));
   ok('印も一緒に動く', JSON.stringify(s1.onRows) === JSON.stringify(['営業利益']));
-  ok('グラフの中身も入れ替わる', await p.evaluate(() => {
-    const pg = [...document.querySelectorAll('#trendchart_pages > .page')];
-    return /営業利益/.test(pg[1].innerText);
-  }));
 
   // ---- 3. 実数のセルをタップしても切り替わる(本題) ----
   await tapCell('EPS', 3);
   const s2 = await state();
-  ok('いちばん右の実数セルでも切り替わる', s2.idx === 2 && s2.cap === '3 / 3');
+  ok('いちばん右の実数セルでも切り替わる', /EPS/.test(s2.chartText));
   ok('印はEPSに移る', JSON.stringify(s2.onRows) === JSON.stringify(['EPS']));
   await tapCell('売上高', 2);
   const s3 = await state();
-  ok('真ん中あたりの実数セルでも切り替わる', s3.idx === 0 && JSON.stringify(s3.onRows) === JSON.stringify(['売上高']));
+  ok('真ん中あたりの実数セルでも切り替わる', /売上高/.test(s3.chartText) && JSON.stringify(s3.onRows) === JSON.stringify(['売上高']));
 
   // ---- 4. 印は常に1行だけ ----
   ok('印が付くのは常に1行だけ', s0.onRows.length === 1 && s1.onRows.length === 1 && s2.onRows.length === 1 && s3.onRows.length === 1);
 
-  // ---- 5. スワイプ(送りボタン)で送っても表側の印が追従する ----
-  // 送りボタンは廃止したので、実際に横スクロールさせて確かめる
-  await p.evaluate(() => { const el = document.getElementById('trendchart_pages'); el.scrollLeft = el.clientWidth; });
-  await p.waitForTimeout(700);
+  // ---- 5. 以前「グラフに出していない」扱いだった指標も、同じようにタップで切り替わる ----
+  // ROIC は既定のマスターに無い名前(ROEは既定にすでに含まれるため、新規追加の検証には使えない)
+  await p.evaluate(() => {
+    DB.metricsMaster.trend.push({ name: 'ROIC' });
+    const s = stock(STATE.stockId); s.trend['ROIC'] = { unit: '%', '24年3月期': '11.2', '25年3月期': '12.5', '26年3月期': '13.7', '27年3月期(予)': '14.1' };
+    save(); render();
+  });
+  await p.waitForTimeout(400);
+  ok('新しく増えた指標もタップできる行として出る', await p.evaluate(() =>
+    [...document.querySelectorAll('#view table.trend tr')].some(r => r.dataset && r.dataset.name === 'ROIC')));
+  await tapCell('ROIC', 2);
   const s4 = await state();
-  ok('横に送るとグラフが進む', s4.idx === 1);
-  ok('スワイプ側から送っても表の印が追従する', JSON.stringify(s4.onRows) === JSON.stringify(['営業利益']));
-  ok('丸に矢尻の送りボタンは無い', await p.evaluate(() => !document.querySelector('.navbtn')));
-  ok('位置を示すドットは残る', await p.evaluate(() => document.querySelectorAll('#trendchart_dots .dot').length >= 2));
+  ok('タップすればそのままグラフになる(「グラフに出していません」という分岐は無い)', /ROIC/.test(s4.chartText));
+  ok('印もROICに移る', JSON.stringify(s4.onRows) === JSON.stringify(['ROIC']));
+  ok('無反応・エラーにはならない', errs.length === 0);
 
-  // ---- 6. グラフに出していない指標の行は押せない ----
-  await p.evaluate(() => {
-    DB.metricsMaster.trend.push({ name: 'ROE', graph: false });
-    const s = stock(STATE.stockId); s.trend['ROE'] = { unit: '%', '24年3月期': '11.2', '25年3月期': '12.5', '26年3月期': '13.7', '27年3月期(予)': '14.1' };
-    save(); render();
-  });
+  // ---- 6. 数値の無い指標もタップできる(データなしのグラフになる) ----
+  await p.evaluate(() => { DB.metricsMaster.trend.push({ name: '純利益' }); save(); render(); });
   await p.waitForTimeout(400);
-  const s5 = await state();
-  ok('グラフに出していない指標も表には出る', s5.tappable.some(r => r.name === 'ROE' && r.noChart));
-  ok('その行には印は付かない', !s5.onRows.some(n => n.startsWith('ROE')));
-  ok('押す前から見分けが付く(文字色を落とす)', await p.evaluate(() => {
-    const r = [...document.querySelectorAll('#view table.trend tr')].find(x => /ROE/.test(x.textContent));
-    return r.classList.contains('no-chart');
-  }));
-  // 押しても無反応にはしない。グラフは変えず、理由を返す
-  const before = s5.idx;
-  await tapCell('ROE', 2);
-  const noChart = await p.evaluate(() => (document.querySelector('#trendNote') || {}).innerText || '');
-  ok('押してもグラフは入れ替わらない', (await state()).idx === before);
-  ok('押すと理由が出る(無反応にならない)', /「ROE」はグラフに出していません/.test(noChart));
-  ok('上限の件数も書く', /グラフは4件までです/.test(noChart));
-  ok('設定を開く入口も出す', /グラフに出す指標を選ぶ/.test(noChart));
-  ok('その入口から設定が開く', await p.evaluate(() => {
-    document.querySelector('#trendNote button').click();
-    return document.querySelector('#scrim').classList.contains('show');
-  }));
-  await p.evaluate(() => closeSheet()); await p.waitForTimeout(300);
-  // グラフのある行を押すと理由の表示は消える
-  await tapCell('売上高', 1);
-  ok('グラフのある行を押すと説明は消える', await p.evaluate(() =>
-    !(document.querySelector('#trendNote') || {}).innerText));
-
-  // ---- 7. 数値の無い指標でも、グラフに出していれば行から送れる ----
-  await p.evaluate(() => {
-    DB.metricsMaster.trend.forEach(t => { if (t.name === 'ROE') t.graph = false; });
-    DB.metricsMaster.trend.push({ name: '純利益', graph: true });   // データなし・グラフあり
-    save(); render();
-  });
-  await p.waitForTimeout(400);
-  ok('データなしの行も押せる', await p.evaluate(() =>
+  ok('データなしの行も表に出る', await p.evaluate(() =>
     [...document.querySelectorAll('#view table.trend tr.trend-tap')].some(r => /純利益/.test(r.textContent) && /データなし/.test(r.textContent))));
   await tapCell('純利益', 1);
+  const s5 = await state();
+  ok('データなしの指標もタップでグラフに切り替わる', JSON.stringify(s5.onRows) === JSON.stringify(['純利益']));
+  ok('切り替え先はデータなしのグラフ', /データなし/.test(s5.chartText));
+
+  // ---- 7. 指標が1件しかなくても壊れない ----
+  await p.evaluate(() => { DB.metricsMaster.trend = [{ name: '売上高' }]; save(); render(); });
+  await p.waitForTimeout(400);
   const s6 = await state();
-  ok('データなしのグラフにも送れる', JSON.stringify(s6.onRows) === JSON.stringify(['純利益']));
-  ok('送った先はデータなしのグラフ', await p.evaluate(() => {
-    const pg = [...document.querySelectorAll('#trendchart_pages > .page')];
-    const i = [...document.querySelectorAll('#trendchart_dots .dot')].findIndex(x => x.classList.contains('on'));
-    return /データなし/.test(pg[i].innerText);
-  }));
-
-  // ---- 8. グラフが1枚だけのときも印は付く(ページャーが無い) ----
-  await p.evaluate(() => {
-    DB.metricsMaster.trend.forEach(t => t.graph = (t.name === '売上高'));
-    save(); render();
-  });
-  await p.waitForTimeout(400);
-  const s7 = await state();
-  ok('グラフ1枚のときはページャーを出さない', await p.evaluate(() => !document.querySelector('#trendchart_pages')));
-  ok('1枚のときも表側に印が付く', JSON.stringify(s7.onRows) === JSON.stringify(['売上高']));
-  ok('1枚のときは案内文を出さない', await p.evaluate(() => !/表の行をタップするとそのグラフに切り替わります/.test(document.querySelector('#view').innerText)));
+  ok('1件のときもグラフは1枚出る', s6.chartCount === 1 && /売上高/.test(s6.chartText));
+  ok('1件のときは案内文を出さない(切り替える相手がいないため)', await p.evaluate(() => !/表の行をタップすると/.test(document.querySelector('#view').innerText)));
   await tapCell('売上高', 1);
-  ok('1枚のときに押しても壊れない', errs.length === 0 && (await state()).onRows.length === 1);
+  ok('1件のときに押しても壊れない', errs.length === 0 && (await state()).onRows.length === 1);
 
-  // ---- 9. グラフに出ていない指標があることを、銘柄詳細でも説明する ----
+  // ---- 8. グラフに出ていない指標という概念自体が無くなったので、上限に関する案内は出ない ----
   await p.evaluate(() => {
-    // グラフ4件 + グラフ外2件 の状態を作る
-    DB.metricsMaster.trend = [
-      { name: '売上高', graph: true }, { name: '営業利益', graph: true }, { name: 'EPS', graph: true },
-      { name: 'FCF', graph: true }, { name: '純利益', graph: false }, { name: 'ROE', graph: false },
-    ];
+    DB.metricsMaster.trend = [{ name: '売上高' }, { name: '営業利益' }, { name: 'EPS' }, { name: 'FCF' }, { name: '純利益' }, { name: 'ROE' }];
     save(); render();
   });
   await p.waitForTimeout(400);
-  const note = await p.evaluate(() => {
-    const e = [...document.querySelectorAll('#view .muted')].find(x => /グラフに出せるのは/.test(x.textContent));
-    return e ? e.innerText.replace(/\s+/g, ' ') : null;
-  });
-  ok('グラフに出ていない指標があると理由を書く', !!note);
-  ok('上限が何件かを書く', /グラフに出せるのは4件までです/.test(note || ''));
-  ok('あと何件が表だけなのかを書く', /残り2件は表で見られます/.test(note || ''));
-  ok('入れ替え方の入口も書く', /「編集」で変えられます/.test(note || ''));
+  ok('件数が多くても上限の案内は出ない(上限が無いため)', await p.evaluate(() => !/グラフに出せるのは/.test(document.querySelector('#view').innerText)));
   ok('表には全指標が出ている', await p.evaluate(() =>
     document.querySelectorAll('#view table.trend tr').length - 1 === trendInds(DB.metricsMaster).length));
-  // 全部グラフに出ているときは書かない
-  await p.evaluate(() => {
-    DB.metricsMaster.trend = [{ name: '売上高', graph: true }, { name: '営業利益', graph: true }];
-    save(); render();
-  });
-  await p.waitForTimeout(400);
-  ok('全部グラフに出ているときは書かない', await p.evaluate(() =>
-    !/グラフに出せるのは/.test(document.querySelector('#view').innerText)));
 
-  // ---- 10. グラフの見出しはグラフの上・中央 ----
+  // ---- 9. グラフの見出しはグラフの上・中央 ----
   await p.evaluate(() => {
-    DB.metricsMaster.trend = [{ name: '売上高', graph: true }, { name: '営業利益', graph: true }, { name: 'EPS', graph: true }];
+    DB.metricsMaster.trend = [{ name: '売上高' }, { name: '営業利益' }, { name: 'EPS' }];
     save(); render();
   });
   await p.waitForTimeout(400);
   const cap = await p.evaluate(() => {
-    const page = document.querySelector('#trendchart_pages > .page');
-    const bars = page.querySelector('div[style*="align-items:flex-end"]') || page.children[1];
-    const title = page.firstElementChild;
+    const box = document.querySelector('#trendchart_single');
+    const bars = box.querySelector('div[style*="align-items:flex-end"]');
+    const title = box.firstElementChild;
     const st = getComputedStyle(title);
     const name = title.querySelector('span');
     return {
@@ -193,7 +129,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
       nameWeight: name ? getComputedStyle(name).fontWeight : null,
       subSize: st.fontSize,
       centered: Math.abs((title.getBoundingClientRect().left + title.getBoundingClientRect().right) / 2
-                       - (page.getBoundingClientRect().left + page.getBoundingClientRect().right) / 2) < 2,
+                       - (box.getBoundingClientRect().left + box.getBoundingClientRect().right) / 2) < 2,
     };
   });
   ok('見出しはグラフより上にある', cap.aboveBars);
@@ -202,61 +138,29 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('単位と凡例は小さく添える', cap.subSize === '11px');
   ok('見出しに指標名・単位・凡例が入る', /売上高.*百万円.*点線=予想/.test(cap.text));
   ok('グラフの下に見出しは残っていない', await p.evaluate(() => {
-    const page = document.querySelector('#trendchart_pages > .page');
-    return !/点線=予想/.test(page.lastElementChild.textContent);
+    const box = document.querySelector('#trendchart_single');
+    return !/点線=予想/.test(box.lastElementChild.textContent);
   }));
 
-  // ---- 11. 送っている間、途中の行が一瞬光らない ----
-  // 滑らかに送る途中で通り過ぎるグラフの分だけ onscroll が走るため、
-  // 印を素直に追わせると「押した行 → 手前の行 → 押した行」と寄り道して見える
+  // ---- 10. 連続でタップしても、印は常に1行・グラフは常に1枚のまま ----
   await p.evaluate(() => {
-    DB.metricsMaster.trend = [{ name: '売上高', graph: true }, { name: '営業利益', graph: true },
-                              { name: 'EPS', graph: true }, { name: 'FCF', graph: true }];
+    DB.metricsMaster.trend = [{ name: '売上高' }, { name: '営業利益' }, { name: 'EPS' }, { name: 'FCF' }];
     const st = stock(STATE.stockId);
     st.trend['FCF'] = { unit: '百万円', '24年3月期': '10', '25年3月期': '20', '26年3月期': '30', '27年3月期(予)': '40' };
-    st.trend['EPS'] = st.trend['EPS'] || { unit: '円', '24年3月期': '1', '25年3月期': '2', '26年3月期': '3', '27年3月期(予)': '4' };
     save(); render();
   });
   await p.waitForTimeout(400);
-  // 印が付いている行の移り変わりを1フレームずつ記録する
-  const trackTap = (name) => p.evaluate(n => new Promise(res => {
-    const rows = [...document.querySelectorAll('#view table.trend tr.trend-tap')];
-    const nameOf = r => r.querySelector('td').textContent.trim();
-    const seq = [];
-    let stop = false;
-    const sample = () => {
-      const lit = rows.filter(r => r.classList.contains('on')).map(nameOf).join('+') || '(なし)';
-      if (seq[seq.length - 1] !== lit) seq.push(lit);
-      if (!stop) requestAnimationFrame(sample);
-    };
-    sample();
-    rows.find(r => nameOf(r) === n).click();
-    setTimeout(() => { stop = true; res(seq); }, 1200);
-  }), name);
-
-  // 1枚目(売上高)から3枚目(EPS)へ飛ぶ = 途中に営業利益がある
-  await p.evaluate(() => { const r = [...document.querySelectorAll('#view table.trend tr.trend-tap')]
-    .find(x => /売上高/.test(x.textContent)); r.click(); });
-  await p.waitForTimeout(800);
-  const seq1 = await trackTap('EPS');
-  ok('2つ以上先へ送っても印は寄り道しない', JSON.stringify(seq1) === JSON.stringify(['売上高', 'EPS']));
-  ok('最後は押した行に落ち着く', seq1[seq1.length - 1] === 'EPS');
-
-  // 逆向き(下から上へ)も同じ
-  const seq2 = await trackTap('売上高');
-  ok('上へ戻すときも寄り道しない', JSON.stringify(seq2) === JSON.stringify(['EPS', '売上高']));
-
-  // いちばん端まで飛ばす
-  const seq3 = await trackTap('FCF');
-  ok('端まで飛ばしても寄り道しない', JSON.stringify(seq3) === JSON.stringify(['売上高', 'FCF']));
-
-  // 送りが終わったあとは、スワイプ(送りボタン)にちゃんと追従する
-  await p.evaluate(() => { const el = document.getElementById('trendchart_pages'); el.scrollLeft = el.clientWidth * 2; });
-  await p.waitForTimeout(900);
-  ok('送り終わったあとはスワイプに追従する', await p.evaluate(() =>
-    [...document.querySelectorAll('#view table.trend tr.trend-tap.on')].map(r => r.querySelector('td').textContent.trim())
-      .join() === 'EPS'));
-  ok('印は1行だけのまま', await p.evaluate(() => document.querySelectorAll('#view table.trend tr.trend-tap.on').length === 1));
+  await tapCell('EPS', 1);
+  const seq1 = await state();
+  ok('先頭から3番目へ飛んでも、印・グラフともEPSのまま', JSON.stringify(seq1.onRows) === JSON.stringify(['EPS']) && /EPS/.test(seq1.chartText));
+  await tapCell('売上高', 1);
+  const seq2 = await state();
+  ok('上へ戻しても同様', JSON.stringify(seq2.onRows) === JSON.stringify(['売上高']));
+  await tapCell('FCF', 1);
+  const seq3 = await state();
+  ok('端まで飛ばしても同様', JSON.stringify(seq3.onRows) === JSON.stringify(['FCF']) && /FCF/.test(seq3.chartText));
+  ok('印は常に1行だけ', await p.evaluate(() => document.querySelectorAll('#view table.trend tr.trend-tap.on').length === 1));
+  ok('グラフは常に1枚だけ', await p.evaluate(() => document.querySelectorAll('#trendchart_single').length === 1));
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();

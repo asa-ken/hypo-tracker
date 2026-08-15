@@ -420,9 +420,9 @@ describe('migrate', () => {
       expect(out.metricsMaster.hiddenTrend).toEqual(['営業利益']);
     });
 
-    test('退避されていた業績推移指標のグラフ指定も失わない', () => {
+    test('旧形式(graphを持つオブジェクト)から戻しても名前だけの項目になる(グラフは表の行タップで選ぶ方式のため)', () => {
       const out = migrate(base());
-      expect(out.metricsMaster.trend.find(t => t.name === '営業利益').graph).toBe(true);
+      expect(out.metricsMaster.trend.find(t => t.name === '営業利益')).toEqual({ name: '営業利益' });
     });
 
     test('既定に無い指標(自分で足したもの)は末尾に戻す', () => {
