@@ -1657,9 +1657,11 @@ function parseMd(text){
       let body=line.replace(/^[-•*・‣▪]\s*/,'');
       // key: value | d | src | conf   (labels like 出典: 確信度: tolerated)
       let km=body.match(/^([^:：]+)[:：]\s*(.*)$/);
-      // メモは自由記述なので「キー: 値」の形を強制しない。読めなかった行に落とすと、
-      // 本人の発言が「整形しなおしてください」の対象になってしまう
-      if(!km && block==='メモ'){ rows.push({block, key:'本文', value:body, d:'', src:'', conf:'', unit:'', raw:raw.trim()}); continue; }
+      // メモ・注目ポイントは自由記述なので「キー: 値」の形を強制しない。読めなかった行に
+      // 落とすと、往復が1回増える(整形しなおしプロンプト経由)。以前は注目ポイントだけこの
+      // 救済が無く、メモとの書式指示の非対称(説明書側は「本文:」を求める)によりGPTが
+      // 「本文:」を省いた箇条書きで出すと、まるごと読めなかった行に落ちていた(ユーザー指摘、2026-08-15)
+      if(!km && (block==='メモ'||block==='注目ポイント')){ rows.push({block, key:'本文', value:body, d:'', src:'', conf:'', unit:'', raw:raw.trim()}); continue; }
       if(!km){ failed.push(raw.trim()); continue; }
       let key=km[1].trim(); let rest=km[2].trim();
       let parts=rest.split('|').map(x=>x.trim());
@@ -1927,10 +1929,15 @@ function parseAndPreview(){
   // 設定の切り替えなど、取り込み画面の外から呼ばれることがある。貼り付け欄が無ければ何もしない
   const ta=$('#mdIn'); if(!ta) return;
   const text=ta.value; const out=$('#parseOut');
+  // 貼り付け(または入力)した直後、プレビューが下に生成されても画面はそのままで、
+  // スクロールしないと気づけなかった(ユーザー指摘、2026-08-15)。空→非空に変わった
+  // 瞬間だけ自動スクロールする。手で編集し続けている間(非空→非空)は動かさない
+  const wasEmpty=!out.innerHTML.trim();
+  const scrollToOut=()=>{ if(wasEmpty) requestAnimationFrame(()=>out.scrollIntoView({behavior:'smooth', block:'start'})); };
   if(!text.trim()){ out.innerHTML=''; return; }
   const p=parseMd(text);
   let h='';
-  if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で読み込んでください(このプロトタイプでは企業分析の読み込みのみ実装)。</div>'; return; }
+  if(p.type==='reminder'){ out.innerHTML='<div class="banner" style="background:var(--amber-bg);color:var(--amber-tx)">リマインダー形式を検出しました。<b>リマインダー登録</b>で読み込んでください(このプロトタイプでは企業分析の読み込みのみ実装)。</div>'; scrollToOut(); return; }
   // md内に銘柄行が無ければ、画面で選択中のカードを使う(分割出力の2回目以降を想定)
   let fallback=false;
   if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0){ p.stock={name:sc0.name, code:sc0.id, isMarket:isMkt(sc0)}; fallback=true; } }
@@ -2095,6 +2102,7 @@ function parseAndPreview(){
   window._parsed=p;
   out.innerHTML=h;
   markClip3Truncated(out);
+  scrollToOut();
 }
 // 解析で見つかったメモ候補は「読む・要不要を決める」対象であって、その場で書き換える対象ではない。
 // メモ候補もリマインダー候補と同じ「トグルで選ぶ」形にする(ユーザー指摘、2026-08-11: 「メモも

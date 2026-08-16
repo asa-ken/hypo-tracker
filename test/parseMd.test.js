@@ -138,6 +138,37 @@ describe('parseMd', () => {
     expect(pts[2].eventDate).toBe('2026/9/1');
   });
 
+  // 説明書はメモに「本文の行を繰り返す」、注目ポイントに「見出しごと繰り返す」という異なる
+  // 書式を指示しており、GPTが混同して「本文:」ラベルを省いた箇条書きを出すことがある
+  // (ユーザー指摘、2026-08-15)。メモと同じく、ラベルが無くても読めなかった行に落とさない
+  test('注目ポイント: 「本文:」ラベルが無くても読めなかった行にしない', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 出来高が急増したら要警戒',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.failed).toEqual([]);
+    expect(p.rows.length).toBe(1);
+    expect(p.rows[0].block).toBe('注目ポイント');
+    expect(p.rows[0].value).toBe('出来高が急増したら要警戒');
+  });
+
+  test('注目ポイント: ラベル無しの複数の箇条書きをそれぞれ別行に分離する', () => {
+    const text = [
+      '# 銘柄: フジクラ (5803)',
+      '## 注目ポイント',
+      '- 1つ目の注目ポイント',
+      '- 2つ目の注目ポイント',
+    ].join('\n');
+    const p = parseMd(text, baseCtx);
+    expect(p.failed).toEqual([]);
+    const pts = p.rows.filter(r => r.block === '注目ポイント');
+    expect(pts.length).toBe(2);
+    expect(pts[0].value).toBe('1つ目の注目ポイント');
+    expect(pts[1].value).toBe('2つ目の注目ポイント');
+  });
+
   test('注目ポイントが指標・分析ブロックと混在しても互いに影響しない', () => {
     const text = [
       '# 銘柄: フジクラ (5803)',
