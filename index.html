@@ -1925,6 +1925,22 @@ function parseGroup(label, bodyHtml){
   // 読み込み内容を確認してください)も含め、この画面の開閉記号が＋×に揃った
   return `<div class="sec open" style="margin-top:16px"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>${esc(label)}</span>${plusSvg()}</div><div class="b">${bodyHtml}</div></div>`;
 }
+// 業績推移は「対象項目(指標名)ごと丸ごと置き換え」ではなく「年度ごとの置き換え」という
+// ルールにする。既存の年度マップに、貼り付けにある年度だけを上書きし、無い年度は残す。
+// 以前は貼り付けにある年度だけの塊で丸ごと入れ替えていたため、GPTの回答が一部の年度
+// (例: 今回の予想値だけ)しか含まないと、残りの年度のデータが消えていた
+// (ユーザー報告・実データで確認、2026-08-15。対応方針もユーザー指示によりA案=マージを採用)。
+// プレビュー(parseAndPreview)と実際の取り込み(commitImport)の両方で同じ関数を使い、
+// 「見えている更新後」と「実際に保存される内容」がずれないようにする
+function mergeTrendYear(existing, unit, valueStr){
+  const o=Object.assign({}, existing||{});
+  if(unit) o.unit=unit;
+  valueStr.split('|').forEach(seg=>{ const mm=seg.split('='); if(mm.length===2) o[mm[0].trim()]=mm[1].trim(); });
+  return o;
+}
+function trendObjToStr(o){
+  return Object.keys(o).filter(k=>k!=='unit').map(k=>k+'='+o[k]).join(' | ')+(o.unit?' '+o.unit:'');
+}
 function parseAndPreview(){
   // 設定の切り替えなど、取り込み画面の外から呼ばれることがある。貼り付け欄が無ければ何もしない
   const ta=$('#mdIn'); if(!ta) return;
@@ -2041,14 +2057,16 @@ function parseAndPreview(){
     grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
-      const afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
+      let afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
       const cmp=target; // 差分の比較は取り込み先カード内に限定(他カードの類似文と比較しない)
       if(cmp){ if(r.block&&/指標/.test(r.block)&&cmp.metrics[r.key]){ const mm=cmp.metrics[r.key]; before=mm.v+(mm.unit?' '+mm.unit:''); }
-             // 業績推移は年度ごとの塊を丸ごと入れ替える。取り込むと、回答に無い年度は
-             // 消える。何が消えるのかは更新前を並べて見せないと分からない
-             else if(r.block&&/業績|推移/.test(r.block)&&cmp.trend&&cmp.trend[r.key]){
-               const o=cmp.trend[r.key];
-               before=Object.keys(o).filter(k=>k!=='unit').map(k=>k+'='+o[k]).join(' | ')+(o.unit?' '+o.unit:'');
+             // 業績推移は年度ごとに置き換える(貼り付けに無い年度は既存のまま残る)。
+             // 「更新後」も実際に保存される年度ごとのマージ結果を出さないと、
+             // 消えないはずの年度まで削除対象のように見えてしまう
+             else if(r.block&&/業績|推移/.test(r.block)){
+               const o=cmp.trend&&cmp.trend[r.key];
+               if(o) before=Object.keys(o).filter(k=>k!=='unit').map(k=>k+'='+o[k]).join(' | ')+(o.unit?' '+o.unit:'');
+               afterRaw=trendObjToStr(mergeTrendYear(o, r.unit, r.value));
              }
              else if(r._res&&r._res.sub){
                label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:11px">詳細</span>':'');
@@ -2172,7 +2190,7 @@ function commitImport(){
       const mm=metricsMasterFor(s);
       if(!mm.snap.includes(r.key)) mm.snap.push(r.key);
     }
-    else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ const o={unit:r.unit||''}; r.value.split('|').forEach(seg=>{const mm=seg.split('=');if(mm.length===2)o[mm[0].trim()]=mm[1].trim();}); s.trend[r.key]=o;
+    else if(/業績|推移/.test(r.block||'')){ /* value like 25年3月期=... */ s.trend[r.key]=mergeTrendYear(s.trend[r.key], r.unit, r.value);
       if(!DB.metricsMaster.trend.some(t=>t.name===r.key)) DB.metricsMaster.trend.push({name:r.key});
     }
     else if(/分析/.test(r.block||'')){
