@@ -45,6 +45,10 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('更新後セル: 変わった年度(27年3月期予)はd-addで強調される', /<span class="d-add">27年3月期\(予\)=999999<\/span>/.test(afterCell), afterCell);
   ok('更新後セル: 未変更の24年3月期は強調されない(タグ無し)', !/<span class="d-add">24年3月期/.test(afterCell), afterCell);
 
+  // ---- 1.6. 業績推移の行があるときだけ、凡例に「年度ごとに置き換わる」補足が出る ----
+  const legendWithTrend = await p.evaluate(() => document.querySelector('.difflegend').innerText);
+  ok('業績推移の行があるとき、凡例に年度単位マージの補足が出る', /年度ごとに置き換わ/.test(legendWithTrend), legendWithTrend);
+
   // ---- 2. 実際に取り込むと、貼り付けにない年度のデータは消えず、貼り付けた年度だけ更新される ----
   await p.evaluate(() => commitImport());
   await p.waitForTimeout(400);
@@ -71,6 +75,15 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     return s.trend['受注残高'];
   });
   ok('新規指標は貼り付けた年度のみで作られる', newInd && newInd['26年3月期'] === '8800' && Object.keys(newInd).filter(k => k !== 'unit').length === 1, newInd);
+
+  // ---- 4. 業績推移の行が無いときは、凡例に年度単位マージの補足を出さない(過剰な注記にしない) ----
+  await p.evaluate(() => go('import'));
+  await p.waitForTimeout(250);
+  const MD3 = '# 銘柄: テスト精機 (9001)\n## 指標\n- PBR: 3.5 | 基準日 2026/8/20';
+  await p.evaluate(t => { document.querySelector('#mdIn').value = t; parseAndPreview(); }, MD3);
+  await p.waitForTimeout(300);
+  const legendWithoutTrend = await p.evaluate(() => document.querySelector('.difflegend').innerText);
+  ok('業績推移の行が無いときは、年度単位マージの補足を出さない', !/年度ごとに置き換わ/.test(legendWithoutTrend), legendWithoutTrend);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();

@@ -2079,8 +2079,14 @@ function parseAndPreview(){
     // 簡潔に(ユーザー指摘、2026-08-11)。横一列だと項目の境目が読みにくいため、項目ごとに改行する
     // 2026-08-11: 凡例が実態と不一致だった(青字=修正時の追加文字なのに「新規追加」と表示、
     // 新規行そのものは緑背景のみで凡例に無かった)。新規行の値も緑字にして凡例と一致させた(ユーザー指摘)
+    // 2026-08-20: 「削除対象」は指標・分析セクションでは文字通り消えるが、業績推移では
+    // 年度単位のマージなので、赤字の年度も実際には消えず新しい値に置き換わるだけ(2026-08-17
+    // 年度単位マージ導入)。凡例の文言だけでは業績推移特有のこの意味まで伝わらなかった
+    // (2周目レビューで記録漏れが判明。ユーザー指摘、2026-08-20)。業績推移の行があるときだけ補足する
+    const hasTrendRow=okRows.some(r=>r.block&&/業績|推移/.test(r.block));
     let grp3='<div class="difflegend"><span class="d-new">新規追加</span><span class="d-add">修正</span><span class="d-del">削除対象</span>'
-      +(orphans.length?'<span class="d-orphan">既存指標に該当せず</span>':'')+'</div>';
+      +(orphans.length?'<span class="d-orphan">既存指標に該当せず</span>':'')
+      +(hasTrendRow?'<span>業績推移は年度ごとに置き換わります(取り消し線の年度も消えず、右側の値に変わります)</span>':'')+'</div>';
     grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
