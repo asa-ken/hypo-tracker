@@ -3,6 +3,9 @@
 // s.trend[key] をまるごと入れ替えていたため、GPTの回答が一部の年度(例: 予想値だけ)しか
 // 含まないと、残りの年度のデータが消えていた(実データで確認)。
 // mergeTrendYear() による年度単位マージを、プレビューと実際の取り込みの両方で確認する。
+// また、複数年分を1本の文字列で連結すると変わった年度が目視で探しにくい(情報密度=2、
+// REVIEW_BACKLOG.md Phase 1.5b採用候補)ため、trendYearDiffHtml() が変更のあった年度だけを
+// 強調(更新前=d-del、更新後=d-add)し、未変更の年度は強調しないことも確認する。
 const { chromium } = require('playwright');
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const fs = require('fs');
@@ -32,6 +35,15 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('プレビューの更新後に既存の他年度(25年3月期)が残る', /25年3月期=468300/.test(preview), preview);
   ok('プレビューの更新後に既存の他年度(26年3月期)が残る', /26年3月期=521000/.test(preview), preview);
   ok('プレビューの更新後に新しい値(27年3月期予)が入る', /27年3月期\(予\)=999999/.test(preview), preview);
+
+  // ---- 1.5. 更新前/更新後とも、変わった年度(27年3月期予)だけ強調され、未変更の年度は強調されない ----
+  const cellsHtml = await p.evaluate(() => [...document.querySelectorAll('#parseOut table td')].map(td => td.innerHTML));
+  const beforeCell = cellsHtml.find(h => /24年3月期=412800/.test(h)) || '';
+  const afterCell = cellsHtml.find(h => /999999/.test(h)) || '';
+  ok('更新前セル: 変わった年度(27年3月期予)はd-delで強調される', /<span class="d-del">27年3月期\(予\)=575000<\/span>/.test(beforeCell), beforeCell);
+  ok('更新前セル: 未変更の24年3月期は強調されない(タグ無し)', /(?<!<span class="d-del">)24年3月期=412800(?!<\/span>)/.test(beforeCell) && !/<span class="d-del">24年3月期/.test(beforeCell), beforeCell);
+  ok('更新後セル: 変わった年度(27年3月期予)はd-addで強調される', /<span class="d-add">27年3月期\(予\)=999999<\/span>/.test(afterCell), afterCell);
+  ok('更新後セル: 未変更の24年3月期は強調されない(タグ無し)', !/<span class="d-add">24年3月期/.test(afterCell), afterCell);
 
   // ---- 2. 実際に取り込むと、貼り付けにない年度のデータは消えず、貼り付けた年度だけ更新される ----
   await p.evaluate(() => commitImport());
