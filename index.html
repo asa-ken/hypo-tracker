@@ -1941,6 +1941,26 @@ function mergeTrendYear(existing, unit, valueStr){
 function trendObjToStr(o){
   return Object.keys(o).filter(k=>k!=='unit').map(k=>k+'='+o[k]).join(' | ')+(o.unit?' '+o.unit:'');
 }
+// 業績推移の確認テーブルは5年分などを1本の文字列に連結して見せるため、実際に変わった年度が
+// どこかを文字全体から目視で探す必要があった(実データでの反復操作、REVIEW_BACKLOG.md
+// Phase 1.5b「手作業の残存」で採用候補と判定、2026-08-15)。年度ごとに前後を比較し、
+// 変わった年度だけを既存の差分色(削除=d-del/追加・修正=d-add)で強調する
+function trendYearDiffHtml(beforeObj, afterObj){
+  const bo=beforeObj||{}; const ao=afterObj||{};
+  const years=Object.keys(ao).filter(k=>k!=='unit');
+  const beforeParts=[], afterParts=[];
+  years.forEach(y=>{
+    const bv=bo[y]; const av=ao[y];
+    const changed = bv===undefined || String(bv)!==String(av);
+    if(bv!==undefined) beforeParts.push(changed?`<span class="d-del">${esc(y+'='+bv)}</span>`:esc(y+'='+bv));
+    afterParts.push(changed?`<span class="d-add">${esc(y+'='+av)}</span>`:esc(y+'='+av));
+  });
+  const unit=ao.unit||bo.unit;
+  return {
+    beforeHtml: beforeParts.join(' | ')+(unit&&beforeParts.length?' '+esc(unit):''),
+    afterHtml: afterParts.join(' | ')+(unit&&afterParts.length?' '+esc(unit):''),
+  };
+}
 function parseAndPreview(){
   // 設定の切り替えなど、取り込み画面の外から呼ばれることがある。貼り付け欄が無ければ何もしない
   const ta=$('#mdIn'); if(!ta) return;
@@ -2058,6 +2078,7 @@ function parseAndPreview(){
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
       let afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
+      let trendBeforeObj=null, trendAfterObj=null;
       const cmp=target; // 差分の比較は取り込み先カード内に限定(他カードの類似文と比較しない)
       if(cmp){ if(r.block&&/指標/.test(r.block)&&cmp.metrics[r.key]){ const mm=cmp.metrics[r.key]; before=mm.v+(mm.unit?' '+mm.unit:''); }
              // 業績推移は年度ごとに置き換える(貼り付けに無い年度は既存のまま残る)。
@@ -2066,7 +2087,8 @@ function parseAndPreview(){
              else if(r.block&&/業績|推移/.test(r.block)){
                const o=cmp.trend&&cmp.trend[r.key];
                if(o) before=Object.keys(o).filter(k=>k!=='unit').map(k=>k+'='+o[k]).join(' | ')+(o.unit?' '+o.unit:'');
-               afterRaw=trendObjToStr(mergeTrendYear(o, r.unit, r.value));
+               trendBeforeObj=o; trendAfterObj=mergeTrendYear(o, r.unit, r.value);
+               afterRaw=trendObjToStr(trendAfterObj);
              }
              else if(r._res&&r._res.sub){
                label=esc(r._res.sub)+(r._res.layer==='詳細'?' <span class="chip gray" style="font-size:11px">詳細</span>':'');
@@ -2094,6 +2116,9 @@ function parseAndPreview(){
       if(isSame) r._skip=true;
       if(isNew){ beforeHtml='<span class="muted">—</span>'; afterHtml=`<span class="d-new">${esc(afterRaw)}</span>`+(r.eventDate?`<div class="muted" style="font-size:11px">${bellIcon(11)} リマインド候補: ${esc(r.eventDate)}</div>`:''); }
       else if(isSame){ beforeHtml=esc(before); afterHtml='<span class="muted">変更なし</span>'; }
+      // 業績推移は文字単位の差分だと5年分などの文字列に埋もれて変わった年度が探しにくい。
+      // 年度単位で比較し、変わった年度だけ強調する(REVIEW_BACKLOG.md Phase 1.5b採用候補)
+      else if(trendAfterObj){ const yd=trendYearDiffHtml(trendBeforeObj, trendAfterObj); beforeHtml=yd.beforeHtml; afterHtml=yd.afterHtml; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
       grp3+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:11px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
         <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${beforeHtml}</div></td>
