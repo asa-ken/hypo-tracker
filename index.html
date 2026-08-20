@@ -796,8 +796,11 @@ function tapMarkHtml(){ return `<span class="tapmark">${caretSvg(true)}</span>`;
 // 高さと比較する(隠れていないのに「タップで続きがある」と誤解させないための判定)。
 // 描画直後(必ず畳んだ状態)に1回だけ判定すればよい。開閉自体はCSS(.clip3.open)側で
 // 矢印の向きを変えるだけなので、開いたあとに再判定する必要はない
+// 確認テーブルのセル(#parseOut table)も候補カード(.candbox)と同じ3行クランプ・タップ展開
+// (showCell())を使っているが、タップの目印(.tapmark)は候補カード側にしか付いていなかった。
+// 実際にタップすれば展開できるのに、目印が無いため気づけない(ユーザー指摘、2026-08-20)
 function markClip3Truncated(root){
-  (root||document).querySelectorAll('.candbox .ttl.clip3').forEach(el=>{
+  (root||document).querySelectorAll('.candbox .ttl.clip3, #parseOut table .clip3').forEach(el=>{
     const mark=el.querySelector('.tapmark');
     if(!mark) return;
     const clampedHeight=el.clientHeight;
@@ -2121,8 +2124,8 @@ function parseAndPreview(){
       else if(trendAfterObj){ const yd=trendYearDiffHtml(trendBeforeObj, trendAfterObj); beforeHtml=yd.beforeHtml; afterHtml=yd.afterHtml; }
       else { const df=diffChars(before, afterRaw); beforeHtml=renderDiffBefore(df); afterHtml=renderDiffAfter(df); }
       grp3+=`<tr class="${cls}"><td>${label}${confb}<div class="muted" style="font-size:11px">${esc(r.block||'')}${isSame?' · 変更なし':(isNew?' · 新規':'')}</div></td>
-        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${beforeHtml}</div></td>
-        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${afterHtml}</div></td></tr>`;
+        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3" style="position:relative">${beforeHtml}${tapMarkHtml()}</div></td>
+        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3" style="position:relative">${afterHtml}${tapMarkHtml()}</div></td></tr>`;
     });
     // 該当セクション不明の行も「その他」として取り込んだ状態で、赤地の行として並べる
     // (commitImport側もチェックボックス無しで常に取り込む。上のdifflegendに凡例を出している)
@@ -2130,7 +2133,7 @@ function parseAndPreview(){
       const nm=String(r.key).split(/[:：]/).pop().replace(/[（(](サマリ|要点のみ|詳細)[）)]/,'').trim()||'メモ';
       grp3+=`<tr class="orphanrow"><td>${esc(nm)}<div class="muted" style="font-size:11px">その他 · 新規</div></td>
         <td><span class="muted">—</span></td>
-        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3">${esc(r.value)}</div></td></tr>`;
+        <td style="cursor:pointer" onclick="showCell(this)"><div class="clip3" style="position:relative">${esc(r.value)}${tapMarkHtml()}</div></td></tr>`;
     });
     grp3+='</table></div>';
     window._orphans=orphans;
