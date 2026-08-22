@@ -49,6 +49,21 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const legendWithTrend = await p.evaluate(() => document.querySelector('.difflegend').innerText);
   ok('業績推移の行があるとき、凡例に年度単位マージの補足が出る', /年度ごとに置き換わ/.test(legendWithTrend), legendWithTrend);
 
+  // ---- 1.7. 用語の凡例(新規追加/修正/削除対象)は「|」区切りで1行にまとまる(ユーザー指示、2026-08-20) ----
+  const legendStructure = await p.evaluate(() => {
+    const terms = document.querySelector('.difflegend .terms');
+    const note = document.querySelector('.difflegend .note');
+    return {
+      sepCount: terms ? terms.querySelectorAll('.sep').length : 0,
+      termsOneLine: terms ? getComputedStyle(terms).flexWrap !== undefined && terms.children.length > 0 : false,
+      noteIsSeparate: !!note && /年度ごとに置き換わ/.test(note.textContent),
+      termsText: terms ? terms.textContent.replace(/\s+/g, '') : '',
+    };
+  });
+  ok('用語(新規追加/修正/削除対象)が「|」区切りで並ぶ', legendStructure.sepCount === 2, legendStructure);
+  ok('用語の並びに「新規追加|修正|削除対象」が含まれる', /新規追加\|修正\|削除対象/.test(legendStructure.termsText), legendStructure);
+  ok('業績推移の注記は用語の行とは別行のまま', legendStructure.noteIsSeparate, legendStructure);
+
   // ---- 2. 実際に取り込むと、貼り付けにない年度のデータは消えず、貼り付けた年度だけ更新される ----
   await p.evaluate(() => commitImport());
   await p.waitForTimeout(400);

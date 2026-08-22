@@ -71,10 +71,13 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
       hasOrphanRow: !!tr,
       text: tr ? tr.textContent.replace(/\s+/g, ' ').trim() : '',
       hasLegend: /既存指標に該当せず/.test(body.textContent),
+      // 「既存指標に該当せず」が加わると用語は4つになり、区切り「|」は3つになる(ユーザー指示、2026-08-20)
+      sepCount: body.querySelectorAll('.difflegend .terms .sep').length,
     };
   });
   ok('区分3に該当セクション不明の行が赤地行として入る', orphanRow.hasOrphanRow, orphanRow);
   ok('凡例に「既存指標に該当せず」が出る', orphanRow.hasLegend, orphanRow);
+  ok('該当セクション不明を含む4つの用語が「|」3つで区切られる', orphanRow.sepCount === 3, orphanRow);
 
   // ---- 3. 区分2の中身: リマインダー候補・メモ候補が入っている ----
   const grp2 = await p.evaluate(() => {
