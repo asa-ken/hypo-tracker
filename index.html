@@ -438,8 +438,11 @@
   .d-new{color:var(--green-tx); font-weight:600;}
   .d-orphan{color:var(--red-tx); font-weight:600;}
   .difflegend{font-size:11px; color:var(--ink3); margin:2px 0 6px;}
-  /* 横一列だと項目の境目が読みにくかったため、項目ごとに改行する(ユーザー指摘、2026-08-11) */
-  .difflegend span{display:block; margin:2px 0;}
+  /* 用語(新規追加/修正/削除対象等)は「|」区切りで1行にまとめ、境目を区切り文字で示す
+     (ユーザー指示、2026-08-20)。長文の注記(.note)はここには混ぜず、別行のまま改行して読ませる */
+  .difflegend .terms{display:flex; flex-wrap:wrap; align-items:center;}
+  .difflegend .sep{color:var(--line2); margin:0 6px;}
+  .difflegend .note{margin-top:4px;}
   .swipe{position:relative; overflow:hidden;}
   .swipe .del-btn{position:absolute; right:0; top:0; bottom:0; width:64px; background:var(--red-tx); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; border:none;}
 </style>
@@ -2091,9 +2094,14 @@ function parseAndPreview(){
     // 年度単位マージ導入)。凡例の文言だけでは業績推移特有のこの意味まで伝わらなかった
     // (2周目レビューで記録漏れが判明。ユーザー指摘、2026-08-20)。業績推移の行があるときだけ補足する
     const hasTrendRow=okRows.some(r=>r.block&&/業績|推移/.test(r.block));
-    let grp3='<div class="difflegend"><span class="d-new">新規追加</span><span class="d-add">修正</span><span class="d-del">削除対象</span>'
-      +(orphans.length?'<span class="d-orphan">既存指標に該当せず</span>':'')
-      +(hasTrendRow?'<span>業績推移は年度ごとに置き換わります(取り消し線の年度も消えず、右側の値に変わります)</span>':'')+'</div>';
+    // 用語の凡例(新規追加/修正/削除対象/既存指標に該当せず)は短い単語の並びなので「|」区切りで
+    // 1行にまとめる(ユーザー指示、2026-08-20)。以前は横一列だと項目の境目が読みにくく改行していたが
+    // (2026-08-11)、区切り文字を挟めば1行のままでも境目が分かる。業績推移の注記は長文のため
+    // この列には混ぜず、下に別行として残す
+    const legendTerms=['<span class="d-new">新規追加</span>','<span class="d-add">修正</span>','<span class="d-del">削除対象</span>'];
+    if(orphans.length) legendTerms.push('<span class="d-orphan">既存指標に該当せず</span>');
+    let grp3='<div class="difflegend"><div class="terms">'+legendTerms.join('<span class="sep">|</span>')+'</div>'
+      +(hasTrendRow?'<div class="note">業績推移は年度ごとに置き換わります(取り消し線の年度も消えず、右側の値に変わります)</div>':'')+'</div>';
     grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
