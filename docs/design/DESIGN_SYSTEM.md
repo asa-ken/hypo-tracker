@@ -1,11 +1,24 @@
 # DESIGN_SYSTEM.md
 
 ## この文書の位置付け
-ここがhypo-trackerのデザイントークンの一次定義。実装時は `index.html` の `:root` と `test/e2e/design.js` の契約を一致させる。
+ここがhypo-trackerの**デザイントークンとコンポーネントの一次定義**。実装時は `index.html` の `:root` と `test/e2e/design.js` の契約を一致させる。
 
 各項目に「検査」を明記する。**検査がある項目とない項目を混同しないこと。** 検査がない項目は、テストが通っていることをもって遵守の証拠にできない。
 
-現時点では spacing(gapのみ)・typography・color・タップ領域・escaping が機械検査されている。padding / margin は契約の対象外。
+現時点で機械検査されているのは次の8つ。
+
+| 対象 | 検査 |
+|---|---|
+| spacing(`gap` のみ) | `design.js` 観点F |
+| typography | `design.js` 観点A |
+| color | `colortoken.js` |
+| タップ領域 | `design.js` 観点D / `sheettap.js` |
+| escaping | `escuse.js` |
+| コンポーネント(カード状コンテナの登録) | `component.js` |
+| 線の量(border の本数) | `visualnoise.js` |
+| 面積と高さ(`ink` / `colored` / `scrollHeight`) | `shotmetrics.js` |
+
+padding / margin は契約の対象外。
 
 ## Spacing
 使用する余白は次の4段階だけ。
@@ -145,7 +158,9 @@
 
 | クラス | 用途 | 注意 |
 |---|---|---|
-| `.empty` | ゼロ状態の案内 | `.empty > .big`が主文。空白のまま放置しない |
+| `.empty` | ゼロ状態の案内(画面・一覧が丸ごと空) | `.empty > .big`が主文。空白のまま放置しない |
+| `.nodata` | 個別の枠の中にデータが無いことの表示 | 破線の枠+地色。**画面全体が空のときは`.empty`を使う**(こちらはグラフ枠など、周りに他の情報がある中の一部が空の場合)。表のセルの中では`.nodata-cell` |
+| `.toast` | 数秒で消える完了通知 | 画面下部中央に固定。`toast()`関数から使い、直接マークアップしない。**消えて困る注意書きには使わない**(その場合は`.banner`) |
 | `.clip3` | 3行クランプ(タップで全文) | `display:-webkit-box`。**flexアイテムにしない**(行数が不安定になる)。実際に溢れている場合だけJS(`markClip3Truncated`)が`.tapmark`を付ける |
 | `.metwarn` | `.candbox`の警告バリアント | `class="candbox metwarn"`で使う。**色の上書きだけを担当**し、構造は`.candbox`と完全に共有する。背景色は他のカードと同じ`--bg`で、警告の合図はアイコンと文字色のみ(2026-08-22) |
 
