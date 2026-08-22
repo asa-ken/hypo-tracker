@@ -49,6 +49,9 @@
      スクロール中も「指標/年度」の対応が分かるようにする */
   .trend-scroll{max-height:251px; overflow-y:auto;}
   .trend-scroll table.trend tr:first-child th{position:sticky; top:0; background:var(--card); z-index:1;}
+  /* 左上の角セル(指標名の見出し)は縦固定・横固定の両方を兼ねるため、縦スクロール時に
+     本文側の横固定セル(1列目、z-index:1)の下に埋もれないよう、さらに高いz-indexを重ねる */
+  .trend-scroll table.trend tr:first-child th:first-child{ z-index:2; }
   /* bottom tab */
   /* sticky ではなく fixed で画面(ビューポート)に直接固定する。
      .phone の横幅指定(max-width:430px + margin:0 auto)を、fixed要素側でも再現する必要がある。
@@ -208,8 +211,12 @@
      数値が見えない)。名前列だけ幅を絞って2行までに収め、数値列を画面内に残す。
      display:-webkit-box はtd自体に直接当てると table-cell から外れてしまい、行の高さ計算が
      ずれて罫線が指標列だけ1〜2px浮く(ユーザー指摘、2026-08-15)。tdはtable-cellのまま幅だけ絞り、
-     2行クランプは中の要素(.clip2)だけに掛ける */
-  table.trend td:first-child, table.trend th:first-child{ width:125px; min-width:125px; }
+     2行クランプは中の要素(.clip2)だけに掛ける
+     年度が多いと横スクロールが発生し、指標名列が画面外へ流れると今どの行を見ているか
+     分からなくなる(ユーザー指摘、2026-08-20)。position:stickyで1列目を左端に固定する。
+     背景を明示しないと透過してスクロール中の他セルの文字が透けて見えるため、
+     .card と同じ背景色を敷く(行の選択状態は後続の.on td等が同じtdへ上書きする) */
+  table.trend td:first-child, table.trend th:first-child{ width:125px; min-width:125px; position:sticky; left:0; background:var(--card); z-index:1; }
   table.trend td:first-child .clip2{ white-space:normal; line-height:1.35; }
   tr.trend-tap{cursor:pointer;}
   tr.trend-tap:active td{background:var(--navy-bg);}
