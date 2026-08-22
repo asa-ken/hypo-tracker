@@ -336,6 +336,9 @@
   /* 読ませるために置いている文なので、読めなければ置く意味がない。
      --ink3 だと地色付きカードの上で 2.54:1 まで落ちるため --ink2 にする(赤地4.90 / 紺地5.06) */
   .hint{font-size:11px; color:var(--ink2); margin-top:4px; line-height:1.5;}
+  /* .failboxは「調べる項目を選ぶ」画面の「項目が多すぎます」警告など、取り込み画面の外でも
+     使っているため定義は残す。取り込み画面の「読めなかった行」は2026-08-22から.candbox
+     (metwarn)構造に統一し、このクラスは使わなくなった */
   .failbox{background:var(--amber-bg); border-radius:9px; padding:9px 11px; margin-top:8px;}
   .failbox .t{font-size:12px; color:var(--amber-tx); font-weight:700;}
   .failbox .l{font-family:var(--mono); font-size:11px; color:var(--amber-tx); margin-top:3px; word-break:break-all;}
@@ -343,10 +346,9 @@
      グラフも履歴も分かれてしまう。プレビューの表より上に置き、下りる前に目に入るようにする。
      配色(amber)以外の構造(枠線・角丸・余白・見出し・行・ボタン)は、リマインダー/メモ選択
      セクション(.candbox)と完全に一致させる(ユーザー指摘、2026-08-11)。.candboxを外枠として
-     共有し(マークアップ側で class="candbox metwarn" にする)、.metwarnは色の上書きだけを担当する */
-  .metwarn{background:var(--amber-bg); border-color:var(--amber-tx);}
-  /* 見出し・説明文の文字色はリマインダー登録(.rembox)と同じにする(ユーザー指摘、2026-08-11)。
-     背景・枠線のamberは維持し、地の文字色だけ他の.candbox系と揃える */
+     共有し(マークアップ側で class="candbox metwarn" にする)、.metwarnは色の上書きだけを担当する。
+     2026-08-22: 外枠・行の区切り線を廃止し、見出し(.cbx-head)の背景色もメモ候補と同じ
+     地色(--bg)に統一した(ユーザー指示)。警告であることの合図は文字色とアイコンだけで持たせる */
   .metwarn .d{color:var(--ink3); font-size:11px; margin:4px 0 2px; line-height:1.5;}
   .metwarn .meta{color:var(--amber-tx);}
   .metwarn .lnk{color:var(--amber-tx);}
@@ -356,13 +358,19 @@
      (見た目の重みを揃える、ユーザー指摘、2026-08-10/2026-08-11: 「メモもリマインダーと合わせて
      トグルボタンに変えて」「太字細字の関係性もリマインダーと合わせて」)。
      .rembox単体を「リマインダー候補が無ければ出ない」の判定に使っている既存箇所があるため、
-     外枠のクラス名自体(.rembox/.memobox)は統合しない */
-  .candbox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:11px;}
+     外枠のクラス名自体(.rembox/.memobox)は統合しない。
+     2026-08-22: 取り込み画面全体が枠線・区切り線で「ビジー」に見えるという指摘を受け、外枠
+     (border)と行の区切り線(.rrow/.lnk.footのborder-top)を廃止した(ユーザー指示)。
+     代わりに見出し+説明文のエリア(.cbx-head)と内訳のエリア(.cbx-body)を背景色の切り替え
+     だけで示す(地色--bg→白--card)。情報量は変えず、線の数だけを減らす狙い */
+  .candbox{background:var(--card); border-radius:12px; overflow:hidden; margin-bottom:11px;}
+  .candbox .cbx-head{background:var(--bg); padding:12px 13px;}
+  .candbox .cbx-body{padding:4px 13px 12px;}
   .candbox .rh{display:flex; align-items:center; justify-content:space-between; gap:8px;}
   .candbox .rh .rt{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;}
   .candbox .lnk{border:none; background:none; font-family:inherit; font-size:12px; font-weight:600;
                color:var(--navy); cursor:pointer; padding:8px 2px; min-height:44px;}
-  .candbox .lnk.foot{display:block; width:100%; text-align:center; border-top:1px solid var(--line); margin-top:6px;}
+  .candbox .lnk.foot{display:block; width:100%; text-align:center; margin-top:6px;}
   /* 本文(タップで全文表示)とトグル(タップでON/OFF)は役割が違うタップ領域なので、
      行全体を1つのタップ領域にせず、.tx(本文)と.swtap(トグル)それぞれで受ける。
      .swtapはalign-self:stretchで行の高さいっぱいに広げ、トグルの見た目(44x26px)より
@@ -370,7 +378,7 @@
      .tx自体はdisplay:flexにしない。中の.clip3(3行クランプ、display:-webkit-box)が
      flexアイテムになると、-webkit-line-clampとflexの組み合わせがブラウザによって
      不安定になり、3行に収まらず4行以上表示されることがあるため(ユーザー報告で判明) */
-  .candbox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; border-top:1px solid var(--line); min-height:44px;}
+  .candbox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; min-height:44px;}
   .candbox .tx{flex:1; min-width:0; cursor:pointer;}
   .candbox .tx:active{opacity:.6;}
   .candbox .swtap{flex:none; align-self:stretch; display:flex; align-items:center; cursor:pointer;}
@@ -1874,16 +1882,17 @@ function remPickBox(rows){
   // (ユーザー指摘、2026-08-11)。見出しを区分名と合わせて「リマインダー登録」にし、
   // 元の「日付つきの注目ポイント」が示していた「取り込み元」の情報は説明文の方に移した
   if(autoRemindOn()){
-    return `<div class="candbox rembox"><div class="rh"><span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span></div>
-      <div class="muted" style="font-size:11px;margin-top:4px">日付ありの注目ポイントを、読み込みと同時にすべてリマインダーに登録します。不要な分は後から消せます。</div>
-      <button class="lnk" onclick="setAutoRemind(false)">毎回選ぶように戻す</button></div>`;
+    return `<div class="candbox rembox"><div class="cbx-head"><div class="rh"><span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span></div>
+      <div class="muted" style="font-size:11px;margin-top:4px">日付ありの注目ポイントを、読み込みと同時にすべてリマインダーに登録します。不要な分は後から消せます。</div></div>
+      <div class="cbx-body"><button class="lnk" onclick="setAutoRemind(false)">毎回選ぶように戻す</button></div></div>`;
   }
   const onCnt=dated.filter(remPickOn).length;
-  let h=`<div class="candbox rembox"><div class="rh">
+  let h=`<div class="candbox rembox"><div class="cbx-head"><div class="rh">
       <span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span>
       <button class="lnk" onclick="bulkRemPick(${onCnt===dated.length?'false':'true'})">${onCnt===dated.length?'すべてオフ':'すべてオン'}</button>
     </div>
-    <div class="muted" style="font-size:11px;margin:4px 0 2px">日付ありの注目ポイントを、オンにした分だけリマインダーとして登録します。同じ日は1つにまとまります。</div>`;
+    <div class="muted" style="font-size:11px;margin:4px 0 2px">日付ありの注目ポイントを、オンにした分だけリマインダーとして登録します。同じ日は1つにまとまります。</div></div>
+    <div class="cbx-body">`;
   dated.forEach(r=>{
     const on=remPickOn(r), sig=remSig(r);
     // 以前は行全体(本文込み)がトグルのタップ領域だった。本文を3行クランプ+タップで全文表示に
@@ -1895,7 +1904,7 @@ function remPickBox(rows){
       <span class="swtap" onclick="toggleRemPick('${escArg(sig)}')"><span class="sw${on?' on':''}" role="switch" aria-checked="${on}"><i></i></span></span>
     </div>`;
   });
-  h+=`<button class="lnk foot" onclick="setAutoRemind(true)">次回から確認せず、すべてオンにする</button></div>`;
+  h+=`<button class="lnk foot" onclick="setAutoRemind(true)">次回から確認せず、すべてオンにする</button></div></div>`;
   return h;
 }
 function newMetricsBox(newMets){
@@ -1912,14 +1921,14 @@ function newMetricsBox(newMets){
   if(!near.length) return '';
   // リマインダー/メモ選択セクション(.candbox)と同じ構造(.rh見出し・.rrow行・.lnk.footボタン)にする。
   // 色(amber)だけ.metwarnが上書きする(ユーザー指摘、2026-08-11)
-  let h=`<div class="candbox metwarn"><div class="rh"><span class="rt">${warnIcon()} 似た名前の指標があります (${near.length})</span></div>`;
-  h+=`<div class="d">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div>`;
+  let h=`<div class="candbox metwarn"><div class="cbx-head"><div class="rh"><span class="rt">${warnIcon()} 似た名前の指標があります (${near.length})</span></div>`;
+  h+=`<div class="d">修正する/このまま取り込むかを判断してください。同じものが別名で入ると、グラフも履歴も分かれてしまいます。表記揺れであれば、外部AI側の指示を直してください。</div></div><div class="cbx-body">`;
   near.forEach(x=>{
     h+=`<div class="rrow"><span class="tx"><span class="ttl">${esc(x.name)}<span class="chip gray" style="margin-left:6px">${x.kind==='trend'?'業績推移':'指標'}</span></span>
       <span class="meta">既にある「<b>${esc(x.near.name)}</b>」と似ています</span></span></div>`;
   });
   // 「次回から確認せず、すべてオンにする」と同じ.lnk.foot(枠なし・全幅・中央寄せ)にする
-  h+=`<button class="lnk foot" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div>`;
+  h+=`<button class="lnk foot" onclick="copyMetFix()">${copyIconSvg()}<span class="txt">表記をそろえる指示をコピー</span></button></div></div>`;
   return h;
 }
 function copyMetFix(){
@@ -2055,9 +2064,12 @@ function parseAndPreview(){
   // (ユーザー指示、2026-08-10)。判断の場所を「取り込むかどうかのチェックボックス」から
   // 「取り込んだ結果をプレビューで確認する」に移した
   if(p.failed.length){
-    grp1+=`<div class="failbox"><div class="t">読めなかった行 (${p.failed.length})</div>`;
-    p.failed.forEach(l=>grp1+=`<div class="l">${esc(l)}</div>`);
-    grp1+=`<button class="btn sm" style="margin-top:8px" onclick="copyReformat()">${copyIconSvg()}<span class="txt">整形しなおすプロンプトをコピー</span></button></div>`;
+    // 「似た名前の指標があります」と同じ.candbox(metwarn)構造にする(ユーザー指摘、2026-08-20:
+    // 「読めなかった行のエリアが似た名前の指標とデザインが違う」)
+    grp1+=`<div class="candbox metwarn"><div class="cbx-head"><div class="rh"><span class="rt">${warnIcon()} 読めなかった行 (${p.failed.length})</span></div>
+      <div class="d">形式に沿っていない行です。整形しなおすプロンプトで直せます。</div></div><div class="cbx-body">`;
+    p.failed.forEach(l=>grp1+=`<div class="rrow"><span class="tx"><span class="ttl">${esc(l)}</span></span></div>`);
+    grp1+=`<button class="lnk foot" onclick="copyReformat()">${copyIconSvg()}<span class="txt">整形しなおすプロンプトをコピー</span></button></div></div>`;
     window._failed=p.failed;
   }
   h+=parseGroup('取り込み前に確認してください', grp1);
@@ -2071,13 +2083,16 @@ function parseAndPreview(){
   // 以前はここだけ素の.lbl(枠なし)で、すぐ上のリマインダー候補と視覚的な重みが揃わず
   // 「コンテンツをこの区分にまとめただけ」に見えていた
   const memoOnCnt=p.memoCandidates.filter(memoPickOn).length;
-  grp2+=`<div class="candbox memobox"><div class="rh">
+  grp2+=`<div class="candbox memobox"><div class="cbx-head"><div class="rh">
       <span class="rt">${memoIcon()} メモ候補 ${p.memoCandidates.length}件</span>
       ${p.memoCandidates.length?`<button class="lnk" onclick="bulkMemoPick(${memoOnCnt===p.memoCandidates.length?'false':'true'})">${memoOnCnt===p.memoCandidates.length?'すべてオフ':'すべてオン'}</button>`:''}
     </div>`;
   if(p.memoCandidates.length) grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">フォーマットに当てはまらなかった文章です。オンにした分だけ読み込みと同時にメモになります。</div>';
   else grp2+='<div class="muted" style="font-size:11px;margin:4px 0 2px">今回はありません。</div>';
-  if(p.memoCandidates.length) grp2+='<div id="memoCandList">'+p.memoCandidates.map((t,i,arr)=>memoCandView(t,i,arr)).join('')+'</div>';
+  grp2+='</div>';
+  // メモ候補が0件のときは内訳(.cbx-body)自体を出さない。見出しの背景だけで完結させ、
+  // 空の白い余白がぶら下がらないようにする
+  if(p.memoCandidates.length) grp2+='<div class="cbx-body"><div id="memoCandList">'+p.memoCandidates.map((t,i,arr)=>memoCandView(t,i,arr)).join('')+'</div></div>';
   grp2+='</div>';
   // メモ候補が0件でもカード自体(「今回はありません」)は常に出るので、区分2は常に出る
   h+=parseGroup('取り込むリマインダー/メモを選択してください', grp2);
