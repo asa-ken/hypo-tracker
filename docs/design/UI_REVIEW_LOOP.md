@@ -207,8 +207,14 @@ UI規約**(例: ON/OFFトグルは右側に置くのが一般的、等)との整
 `DESIGN_PRINCIPLES.md` の原則と `DESIGN_SCORECARD.md` の評価次元を使う。
 
 ### 採点で機械的検査に頼ってよい範囲
-`design.js` / `colortoken.js` / `escuse.js` / `sheettap.js` が見ている項目だけ、テスト結果を採点の根拠にできる。
+`design.js` / `colortoken.js` / `escuse.js` / `sheettap.js` / `component.js` / `visualnoise.js` / `shotmetrics.js`
+が見ている項目だけ、テスト結果を採点の根拠にできる。
 どこまで見ているかは `DESIGN_SYSTEM.md` の「検査」欄が一次定義。
+
+後ろの3つは2026-08-22に追加したもので、視覚的ノイズと情報密度の**絶対量**を見る
+(`component.js` はカード状コンテナの登録、`visualnoise.js` は線の本数、`shotmetrics.js` は
+`ink` / `colored` / `scrollHeight`)。これらが通っていることは「その量が記録値から動いていない」
+という意味であって、**その量が適切だという意味ではない**。適切かどうかは実画面で判断する。
 **検査の外にある次元(認知負荷・情報構造・一貫性・実運用摩擦など)を「テストが通ったから3点」と採点しない。**
 これらは実画面・実データ・実操作で確かめる以外に方法がない。
 
