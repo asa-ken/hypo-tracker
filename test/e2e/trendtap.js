@@ -207,6 +207,30 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('見出し行(指標/年度)はスクロールしても追従する(sticky)', await p.evaluate(() =>
     getComputedStyle(document.querySelector('.trend-scroll table.trend tr:first-child th')).position === 'sticky'));
 
+  // ---- 横スクロールでも指標名列(1列目)が画面外へ流れない(ユーザー指摘、2026-08-20) ----
+  const stickyCol = await p.evaluate(() => {
+    const scroller = document.querySelector('.trend-scroll');
+    const bodyCell = scroller.querySelector('table.trend tr:nth-child(2) td:first-child');
+    const headCell = scroller.querySelector('table.trend th:first-child');
+    return {
+      bodyPosition: getComputedStyle(bodyCell).position,
+      headPosition: getComputedStyle(headCell).position,
+      bodyLeft: getComputedStyle(bodyCell).left,
+      headLeft: getComputedStyle(headCell).left,
+    };
+  });
+  ok('指標名セル(本文側)がposition:stickyでleft:0固定されている', stickyCol.bodyPosition === 'sticky' && stickyCol.bodyLeft === '0px');
+  ok('指標名セル(見出し側)もposition:stickyでleft:0固定されている(縦横両方に追従する角セル)', stickyCol.headPosition === 'sticky' && stickyCol.headLeft === '0px');
+  const scrolledStillVisible = await p.evaluate(() => {
+    const scroller = document.querySelector('.trend-scroll');
+    scroller.scrollLeft = 999;
+    const cell = scroller.querySelector('table.trend tr:nth-child(2) td:first-child');
+    const cellRect = cell.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    return { scrolled: scroller.scrollLeft > 0, cellStillAtLeftEdge: Math.abs(cellRect.left - scrollerRect.left) < 1 };
+  });
+  ok('実際に右へ横スクロールさせても、指標名セルは枠の左端に留まる', scrolledStillVisible.scrolled && scrolledStillVisible.cellStillAtLeftEdge);
+
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();
 })();
