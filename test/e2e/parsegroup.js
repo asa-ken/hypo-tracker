@@ -98,7 +98,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
 
   // ---- 5. 取り込むボタンはどの区分にも属さず、最後に独立している ----
   const btnPos = await p.evaluate(() => {
-    const btn = [...document.querySelectorAll('#parseOut button')].find(b => /^✓ 取り込む$/.test(b.textContent.trim()));
+    const btn = [...document.querySelectorAll('#parseOut button')].find(b => /^取り込む$/.test(b.textContent.trim()));
     return { insideSec: !!btn.closest('.sec'), isLast: btn === document.querySelector('#parseOut').lastElementChild };
   });
   ok('取り込むボタンはどの区分の中にも無い(全体に効く操作のため)', !btnPos.insideSec, btnPos);

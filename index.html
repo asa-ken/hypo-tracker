@@ -1522,7 +1522,7 @@ function renderImport(v){
   // ② 会話を貼り付ける。①と同格なので、開閉はしないが見た目の重さは揃える
   h+=`<div class="lbl" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;font-size:13px;font-weight:700;color:var(--ink);border-top:1px solid var(--line);margin-top:18px"><span>② 会話を貼り付ける</span></div>`;
   h+=`<div class="row" style="gap:8px;margin:12px 0 6px">
-    <button class="btn pri" style="flex:1" onclick="pasteFromClipboard()">📋 貼り付ける</button>
+    <button class="btn pri" style="flex:1" onclick="pasteFromClipboard()">貼り付ける</button>
     <button class="btn" style="flex:0 0 88px" onclick="clearPaste()">クリア</button>
   </div>`;
   h+='<textarea id="mdIn" class="mono" placeholder="AIとのやり取りをそのまま貼ってください。認識した内容だけ拾います(分割して届いた場合は続けて貼り付ければ追加されます)" oninput="parseAndPreview()"></textarea>';
@@ -2202,7 +2202,7 @@ function parseAndPreview(){
     window._orphans=[];
   }
 
-  h+=`<button class="btn pri" style="margin-top:16px" onclick="commitImport()">✓ 取り込む</button>`;
+  h+=`<button class="btn pri" style="margin-top:16px" onclick="commitImport()">取り込む</button>`;
   window._parsed=p;
   out.innerHTML=h;
   markClip3Truncated(out);
