@@ -6,8 +6,13 @@
 // 開閉できるのに、①だけ開閉できず一貫していなかった(一貫性=1)。
 //
 // 対応: ①を「困ったときは」と同じ .sec / .sec.open の開閉パターンに揃える(2026-08-10、PR#112)。
-// 初回(まだ説明書をコピーしていない)は展開、コピー済みなら次回訪問時から折りたたむ。
-// 情報は削除しない(いつでもタップで再展開・再コピーできる)。
+// 当初は「初回(まだ説明書をコピーしていない)は展開、コピー済みなら次回訪問時から折りたたむ」
+// だったが、2026-08-22にユーザー指摘で見直した:①は最初の1回使えばよく、②(会話を貼り付ける)
+// ほど使用頻度が高くない。「コピーするまでは開いていた方が見つけやすい」という前提自体を
+// 疑い、初回から畳んだ状態で始めるように変更した。情報は削除しない(いつでもタップで
+// 再展開・再コピーできる)。一度でも自分で開いたことがあれば(DB.uiPrefs.briefEverOpened)、
+// 以降は通常の開閉記憶(closedGroups)に従う。「自分で開いたのに次に見たらまた畳まれていた」
+// という逆向きの驚きを避けるため。
 //
 // ただし toggleGroup() は render() で画面全体を作り直すため、②の貼り付け欄に入力途中の
 // テキストがあると消えてしまう。この画面では既存コードも同じ理由で render() を避け、
@@ -47,36 +52,55 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     };
   });
 
-  // ---- 1. 初回(説明書を未コピー)は展開状態で、②も同一画面に見える ----
+  // ---- 1. 初回(未使用)は畳まれた状態で始まり、②はすぐ見える ----
   await p.evaluate(() => go('import')); await p.waitForTimeout(250);
   const s0 = await briefState();
   ok('①の見出しが「① このアプリの説明書をAIに渡す(最初の1回だけ)」', /① このアプリの説明書をAIに渡す/.test(s0?.headText || ''), s0);
-  ok('初回は展開されている(ヒント・コピーボタンが見える)', s0 && s0.bodyVisible && s0.copyBtnVisible, s0);
-  ok('初回は矢尻が開いた向き', s0 && s0.caretOpen, s0);
+  ok('初回は畳まれている(ヒント・コピーボタンが見えない)', s0 && !s0.bodyVisible && !s0.copyBtnVisible, s0);
+  ok('初回は矢尻が閉じた向き', s0 && !s0.caretOpen, s0);
   const step2Visible = await p.evaluate(() => {
     const l = [...document.querySelectorAll('#view .lbl')].find(x => /② 会話を貼り付ける/.test(x.textContent));
-    return !!l;
+    return !!l && l.getBoundingClientRect().top < 844;
   });
-  ok('②の見出しも同時に存在する(情報は削っていない)', step2Visible);
+  ok('②の見出しがすぐ見える(①を開かなくても中心ワークフローに到達できる)', step2Visible);
 
-  // ---- 2. 見出しをタップすると畳まれる(render()を経由しないDOM操作) ----
+  // ---- 2. 見出しをタップすると展開する(render()を経由しないDOM操作) ----
   await p.evaluate(() => {
     const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     head.click();
   });
   await p.waitForTimeout(150);
   const s1 = await briefState();
-  ok('タップで畳まれる(ヒント・コピーボタンが消える)', s1 && !s1.bodyVisible && !s1.copyBtnVisible, s1);
-  ok('畳むと矢尻が閉じた向きになる', s1 && !s1.caretOpen, s1);
+  ok('タップで展開する(ヒント・コピーボタンが見える)', s1 && s1.bodyVisible && s1.copyBtnVisible, s1);
+  ok('展開すると矢尻が開いた向きになる', s1 && s1.caretOpen, s1);
+  ok('自分で開いたことがDB.uiPrefs.briefEverOpenedに記録される', await p.evaluate(() => !!DB.uiPrefs.briefEverOpened));
 
-  // ---- 3. もう一度タップすれば再展開できる(情報は消えていない、到達経路が残る) ----
+  // ---- 3. もう一度タップすれば畳める(情報は消えていない、到達経路が残る) ----
   await p.evaluate(() => {
     const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
     head.click();
   });
   await p.waitForTimeout(150);
   const s2 = await briefState();
-  ok('再タップで再展開できる', s2 && s2.bodyVisible && s2.copyBtnVisible, s2);
+  ok('再タップで畳める', s2 && !s2.bodyVisible && !s2.copyBtnVisible, s2);
+
+  // ---- 3b. 一度開いたことがあれば、コピーせず再訪問しても畳まれたまま(直前に閉じた状態を記憶) ----
+  await p.evaluate(() => go('home')); await p.waitForTimeout(150);
+  await p.evaluate(() => go('import')); await p.waitForTimeout(250);
+  const s2b = await briefState();
+  ok('直前に自分で畳んだ状態は、再訪問後も引き継がれる', s2b && !s2b.bodyVisible, s2b);
+
+  // ---- 3c. 逆に開いたまま離れれば、再訪問時も開いたまま(強制的に畳み直さない) ----
+  // briefEverOpenedが立っている限り、初回専用の「強制的に畳む」処理は効かなくなることを確認する
+  await p.evaluate(() => {
+    const head = [...document.querySelectorAll('#view .sec > .h')].find(x => /① /.test(x.textContent));
+    head.click();
+  });
+  await p.waitForTimeout(150);
+  await p.evaluate(() => go('home')); await p.waitForTimeout(150);
+  await p.evaluate(() => go('import')); await p.waitForTimeout(250);
+  const s2c = await briefState();
+  ok('自分で開いたまま離れた場合は、再訪問後も開いたまま(逆向きの驚きが無い)', s2c && s2c.bodyVisible, s2c);
 
   // ---- 4. #mdInに入力中でも①の開閉でその内容が消えない(render()を避けているかの検証) ----
   await p.evaluate(() => { document.querySelector('#mdIn').value = '入力途中のテキスト'; });

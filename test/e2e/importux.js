@@ -31,8 +31,11 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     scrollY: window.pageYOffset,
     outVisible: (() => { const r = document.querySelector('#parseOut').getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; })(),
   }));
-  ok('貼り付け後、自動でスクロールする(空→非空の遷移)', afterPaste.scrollY > 0, afterPaste);
-  ok('プレビューが画面内に入る', afterPaste.outVisible);
+  // 2026-08-22: ①(説明書をAIに渡す)が既定で畳まれるようになり(ユーザー指摘、使用頻度が低い)、
+  // 貼り付け前のページがその分短くなった。この短いテキストの貼り付けでは、スクロールしなくても
+  // プレビューが最初から画面内に収まる(scrollIntoViewが実際には動かない)。求めたいのは
+  // 「スクロールしたこと」自体ではなく「プレビューが見えていること」なので、outVisibleを主とする
+  ok('プレビューが画面内に入る(見えていれば、実際にスクロールしたかは問わない)', afterPaste.outVisible, afterPaste);
 
   // ---- 2. 手で編集し続けている間は、そのたびにスクロールし直さない ----
   await p.evaluate(() => window.scrollTo(0, 0));
@@ -53,8 +56,12 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
     parseAndPreview();
   });
   await p.waitForTimeout(500);
-  const afterClearThenPaste = await p.evaluate(() => window.pageYOffset);
-  ok('クリア後の貼り付けでも、再び自動スクロールする', afterClearThenPaste > 0, afterClearThenPaste);
+  const afterClearThenPaste = await p.evaluate(() => ({
+    scrollY: window.pageYOffset,
+    outVisible: (() => { const r = document.querySelector('#parseOut').getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; })(),
+  }));
+  // 上と同じ理由(①が既定で畳まれ、ページが短くなった)でoutVisibleを主とする
+  ok('クリア後の貼り付けでも、プレビューが画面内に入る', afterClearThenPaste.outVisible, afterClearThenPaste);
 
   // ---- 4. 注目ポイント: 「本文:」ラベルが無くても読めなかった行にしない ----
   await p.evaluate(() => { clearPaste(); });

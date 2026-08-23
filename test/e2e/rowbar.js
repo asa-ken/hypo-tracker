@@ -135,9 +135,15 @@ const noBar = st => st.content === 'none' || parseFloat(st.w || 0) === 0;
   // 画面内には .sec が複数ある(①・説明書の中身を見る・調べることが思いつかない時は)。
   // 2026-08-11: 「調べることが思いつかない時は」は①の入れ子に移り、展開記号も矢尻(caret)から
   // 銘柄詳細の大カテゴリと同じ＋×(plusmark)に変わった(ユーザー指摘)。同じplusmarkの回転規約
-  // (閉=0度の＋、開=45度回転した×)に従っているかを検証する対象として引き続き使う
+  // (閉=0度の＋、開=45度回転した×)に従っているかを検証する対象として引き続き使う。
+  // 2026-08-22: ①は既定で畳まれるようになったため(ユーザー指摘、使用頻度が低い)、①の中身
+  // (.sec > .b)がdisplay:noneのままだと、入れ子の要素にopenクラスを付けてもtransformが
+  // 計算されない(祖先がdisplay:noneだとgetComputedStyleのtransformがnoneになる、実測で確認)。
+  // ①を開いてから入れ子を操作する必要がある
   const impBefore = await p.evaluate(() => {
     backFromDetail(); go('import');
+    const outer = [...document.querySelectorAll('#view .sec')].find(s => /① /.test(s.querySelector(':scope > .h').textContent));
+    if (!outer.classList.contains('open')) outer.querySelector(':scope > .h').click();
     const h = [...document.querySelectorAll('#view .sec .sec > .h')].find(x => /調べることが思いつかない時は/.test(x.textContent));
     return getComputedStyle(h.querySelector('svg.plusmark')).transform;
   });
