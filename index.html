@@ -229,6 +229,18 @@
   tr.newrow td{background:var(--green-bg);}
   /* 該当セクションが見つからない行(「その他」として取り込む)を赤地で示す。既存トークンの再利用 */
   tr.orphanrow td{background:var(--red-bg);}
+  /* 取り込みの確認テーブルは3列(項目/更新前/更新後)で560px要るが、表示枠は358pxしかない。
+     実測で全20行の「更新後」列が186pxはみ出し、横スクロールしないと更新後の値が1行も読めず、
+     スクロールすると今度はどの項目の行か分からなくなっていた(2026-08-22の3周目レビュー)。
+     銘柄詳細の業績推移テーブル(2026-08-20(4))と同じ position:sticky で1列目を固定する。
+     背景を明示しないと透過してスクロール中の他セルの文字が透ける。この表は白カードの上ではなく
+     地色の上に直接置かれているため、業績推移の --card ではなく --app を敷く(実測で確認) */
+  table.diffpv td:first-child, table.diffpv th:first-child{position:sticky; left:0; background:var(--app); z-index:1;}
+  /* 新規行・該当セクション不明行の地色は、固定した1列目にも続ける。
+     上の固定セルの背景指定のほうが tr.newrow td より詳細度が高く、そのままでは
+     1列目だけ地色に戻ってしまうため、明示的に上書きする */
+  table.diffpv tr.newrow td:first-child{background:var(--green-bg);}
+  table.diffpv tr.orphanrow td:first-child{background:var(--red-bg);}
   /* 3列だと1セル約95pxしかなく、指標名がほぼ必ず2〜3行に折り返して読めなかったので2列にする */
   .metric{display:grid; grid-template-columns:1fr 1fr; gap:var(--sp2);}
   .metric .m{background:var(--app); border:1px solid var(--line); border-radius:9px; padding:8px 10px;}
@@ -2117,7 +2129,7 @@ function parseAndPreview(){
     if(orphans.length) legendTerms.push('<span class="d-orphan">既存指標に該当せず</span>');
     let grp3='<div class="difflegend"><div class="terms">'+legendTerms.join('<span class="sep">|</span>')+'</div>'
       +(hasTrendRow?'<div class="note">業績推移は年度ごとに置き換わります(取り消し線の年度も消えず、右側の値に変わります)</div>':'')+'</div>';
-    grp3+='<div class="xscroll"><table style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
+    grp3+='<div class="xscroll"><table class="diffpv" style="min-width:560px"><tr><th style="width:110px">項目</th><th style="width:210px">更新前</th><th style="width:210px">更新後</th></tr>';
     okRows.forEach((r,i)=>{
       let before='—'; let label=esc(r.key); let isSame=false;
       let afterRaw=String((r._res?r._res.value:r.value))+(r.unit?' '+r.unit:'');
