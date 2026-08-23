@@ -1496,7 +1496,13 @@ function renderImport(v){
   // この画面は元々それを避けてparseAndPreview()でしか再描画しないので、①の開閉もrender()を経由せず
   // toggleImportBrief()でDOM操作のみ行う。畳むかどうかの記憶自体はHomeと同じdata(uiPrefs.anaClosed)を使う
   const briefKey='import:説明書';
-  const briefClosed=groupClosed(briefKey);
+  // 2026-08-10導入時は「初回(未コピー)は展開、コピー後だけ畳む」だったが、①は最初の1回
+  // 使えばよく、②(会話を貼り付ける)ほど使用頻度が高くない(ユーザー指摘、2026-08-22)。
+  // 前提(コピーするまでは開いていた方が見つけやすい)自体を見直し、初回から畳んだ状態で
+  // 始める。一度でも開いたことがあれば(briefEverOpened)、以降はclosedGroupsの通常の
+  // 開閉記憶に従う(自分で開いたのに次回また畳まれている、という逆の驚きを避けるため)
+  const briefEverOpened=!!(DB.uiPrefs&&DB.uiPrefs.briefEverOpened);
+  const briefClosed=!briefEverOpened||groupClosed(briefKey);
   h+=`<div class="sec${briefClosed?'':' open'}"><div class="h" onclick="toggleImportBrief(this)"><span>① このアプリの説明書をAIに渡す(最初の1回だけ)</span>${caretSvg(briefClosed)}</div><div class="b">`;
   h+='<div class="hint" style="margin:-2px 0 8px">ChatGPTのカスタム指示や、新しい会話・プロジェクトの最初に貼ってください。一度貼れば、あとは普段通り会話するだけで大丈夫です。</div>';
   h+='<button class="btn pri" onclick="copyBriefing()">📋 説明書をコピー</button>';
@@ -1658,7 +1664,7 @@ function toggleImportBrief(el){
   const caret=el.querySelector('svg.caret');
   if(caret) caret.classList.toggle('open', willOpen);
   const a=closedGroups(); const i=a.indexOf(key);
-  if(willOpen){ if(i>=0) a.splice(i,1); } else if(i<0) a.push(key);
+  if(willOpen){ if(i>=0) a.splice(i,1); DB.uiPrefs.briefEverOpened=true; } else if(i<0) a.push(key);
   save();
 }
 // 説明書が使う見出し語。「#」が落ちた行をこれと突き合わせて見出しに戻す
