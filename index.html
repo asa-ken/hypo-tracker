@@ -389,11 +389,19 @@
      実際のタップ領域を大きく保つ(ユーザー指摘、2026-08-11)。
      .tx自体はdisplay:flexにしない。中の.clip3(3行クランプ、display:-webkit-box)が
      flexアイテムになると、-webkit-line-clampとflexの組み合わせがブラウザによって
-     不安定になり、3行に収まらず4行以上表示されることがあるため(ユーザー報告で判明) */
+     不安定になり、3行に収まらず4行以上表示されることがあるため(ユーザー報告で判明)
+     2026-08-22追記(3周目レビューで発見): .rrowの padding:9px 0 は border-box の内側で
+     消費されるため、.swtapのalign-self:stretchは「行の44px」ではなく「行のコンテンツボックス
+     (44px-padding18px=26px)」にしか伸びず、1行だけの短い候補では実測36px/28pxまでしか
+     広がっていなかった。.txはそもそもstretchしておらず、実測18pxまで縮んでいた。
+     指標設定シートの.met-row(.nm/.swtapに直接min-height:44pxを持たせる、既存パターン)に
+     揃え、.txにもmin-height:44pxを追加した。.swtapはalign-self:stretchを維持しつつ
+     min-height:44pxを床として足すことで、短い行では44pxまで広がり、長い行では従来どおり
+     行の高さいっぱいに伸びる(両立する) */
   .candbox .rrow{display:flex; align-items:flex-start; gap:12px; padding:9px 0; min-height:44px;}
-  .candbox .tx{flex:1; min-width:0; cursor:pointer;}
+  .candbox .tx{flex:1; min-width:0; min-height:44px; cursor:pointer;}
   .candbox .tx:active{opacity:.6;}
-  .candbox .swtap{flex:none; align-self:stretch; display:flex; align-items:center; cursor:pointer;}
+  .candbox .swtap{flex:none; align-self:stretch; min-height:44px; display:flex; align-items:center; cursor:pointer;}
   .candbox .swtap:active{opacity:.6;}
   /* 個別銘柄側のリマインダー一覧(list-row .ttl/.meta)と同じ文字サイズ・色に揃える
      (以前は独自の.d/.bで、色・太さの付け方が違った。ユーザー指摘、2026-08-10:「同じ機能は同じデザインにすべき」)。
