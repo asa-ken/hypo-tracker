@@ -60,8 +60,15 @@ const MD = `# 銘柄: テスト精機 (9001)
   ok('プレビューの表より上にある', await p.evaluate(() =>
     document.querySelector('#parseOut .rembox').getBoundingClientRect().top
     < document.querySelector('#parseOut table').getBoundingClientRect().top));
-  ok('つまみのタップ領域は44px以上', await p.evaluate(() =>
-    [...document.querySelectorAll('#parseOut .rembox .rrow')].every(e => e.getBoundingClientRect().height >= 44)));
+  // 2026-08-22(3周目レビューで発見): この検査は.rrow(外側の行)の高さしか見ておらず、
+  // .rrowはCSSのmin-height:44pxで常に44px以上になるため、実際のタップ対象である
+  // .tx(本文)と.swtap(トグル)がその内側で18px/28pxまで縮んでいても検出できなかった
+  // (border-box内のpaddingがalign-self:stretchの計算対象から外れるため)。
+  // .rrowではなく実際にonclickを持つ.tx/.swtapそれぞれの高さを見るよう修正した
+  ok('本文(.tx)のタップ領域は44px以上', await p.evaluate(() =>
+    [...document.querySelectorAll('#parseOut .rembox .rrow .tx')].every(e => e.getBoundingClientRect().height >= 44)));
+  ok('トグル(.swtap)のタップ領域は44px以上', await p.evaluate(() =>
+    [...document.querySelectorAll('#parseOut .rembox .rrow .swtap')].every(e => e.getBoundingClientRect().height >= 44)));
   // 2026-08-10: トグルは左側にあり一般的なON/OFF配置(ラベル左・トグル右)と逆だった(ユーザー指摘)。
   // 本文・日付(.tx)を左、つまみ(.sw)を右に置くよう直したので、位置関係を実測で固定する
   ok('つまみはラベルより右側にある(一般的なトグル配置)', await p.evaluate(() => {
