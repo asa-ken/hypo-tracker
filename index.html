@@ -1884,6 +1884,10 @@ function autoRemindOn(){ return !!((DB.settings||{}).autoRemind); }
 function setAutoRemind(v){ (DB.settings||(DB.settings={})).autoRemind=!!v; save(); parseAndPreview(); }
 // 貼り付け直すたびに行のオブジェクトは作り直されるので、日付と本文の頭で覚える
 function remSig(r){ return (r.eventDate||'')+'|'+String(r.value||'').slice(0,40); }
+// 登録時の日付。年のない「11/12」は2026年として扱う。registerRemindersFor()はこの文字列ごとに
+// 1件へまとめるので、プレビューの件数もこれで数えないと登録件数と食い違う
+function remDay(r){ return r.eventDate ? (/^\d{1,2}\/\d{1,2}$/.test(r.eventDate)?'2026/'+r.eventDate:r.eventDate) : null; }
+function remDayCount(rows){ return new Set(rows.map(remDay)).size; }
 function datedWatchRows(rows){ return (rows||[]).filter(r=>r.block==='注目ポイント' && r.eventDate); }
 // 既定はオン。ここで外すのは1タップで済み、後から登録するより手間が少ない
 function remPickOn(r){
@@ -1907,17 +1911,23 @@ function remPickBox(rows){
   // の「リマインダー」と語が同期しておらず、これがリマインダーの選択欄だと結びつきにくかった
   // (ユーザー指摘、2026-08-11)。見出しを区分名と合わせて「リマインダー登録」にし、
   // 元の「日付つきの注目ポイント」が示していた「取り込み元」の情報は説明文の方に移した
+  // 見出しの件数は「実際に登録されるリマインダーの数」。以前は候補行の数(dated.length)を出しており、
+  // 同じ日の2点が1件にまとまると「3件」と出して2件しか登録されなかった(3周目レビュー、実測で
+  // DB.remindersは+2)。まとまる分があるときだけ、元の注目ポイントの点数を案内文に添える。
+  // 注目ポイントは「点」、リマインダーは「件」と数え分け(「日付ありの注目ポイントを」で始まる文の中なので点数だけ書く)、まとまったリマインダーの題名「(2点)」とも揃える
+  const mergedNote=(pts,n)=>pts>n?`(${pts}点 → ${n}件)`:'';
   if(autoRemindOn()){
-    return `<div class="candbox rembox"><div class="cbx-head"><div class="rh"><span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span></div>
-      <div class="muted" style="font-size:11px;margin-top:4px">日付ありの注目ポイントを、読み込みと同時にすべてリマインダーに登録します。不要な分は後から消せます。</div></div>
+    const n=remDayCount(dated);
+    return `<div class="candbox rembox"><div class="cbx-head"><div class="rh"><span class="rt">${bellIcon()} リマインダー登録 ${n}件</span></div>
+      <div class="muted" style="font-size:11px;margin-top:4px">日付ありの注目ポイントを、読み込みと同時にすべてリマインダーに登録します。同じ日は1つにまとまります${mergedNote(dated.length,n)}。不要な分は後から消せます。</div></div>
       <div class="cbx-body"><button class="lnk" onclick="setAutoRemind(false)">毎回選ぶように戻す</button></div></div>`;
   }
-  const onCnt=dated.filter(remPickOn).length;
+  const onRows=dated.filter(remPickOn), onCnt=onRows.length, n=remDayCount(onRows);
   let h=`<div class="candbox rembox"><div class="cbx-head"><div class="rh">
-      <span class="rt">${bellIcon()} リマインダー登録 ${dated.length}件</span>
+      <span class="rt">${bellIcon()} リマインダー登録 ${n}件</span>
       <button class="lnk" onclick="bulkRemPick(${onCnt===dated.length?'false':'true'})">${onCnt===dated.length?'すべてオフ':'すべてオン'}</button>
     </div>
-    <div class="muted" style="font-size:11px;margin:4px 0 2px">日付ありの注目ポイントを、オンにした分だけリマインダーとして登録します。同じ日は1つにまとまります。</div></div>
+    <div class="muted" style="font-size:11px;margin:4px 0 2px">日付ありの注目ポイントを、オンにした分だけリマインダーとして登録します。同じ日は1つにまとまります${mergedNote(onCnt,n)}。</div></div>
     <div class="cbx-body">`;
   dated.forEach(r=>{
     const on=remPickOn(r), sig=remSig(r);
@@ -2308,7 +2318,7 @@ function commitImport(){
     }
     else if(/注目ポイント/.test(r.block||'')){
       // 取り込まれたイベント日はカードには持たせず、リマインダー登録の候補として保持する
-      const ed = r.eventDate ? (/^\d{1,2}\/\d{1,2}$/.test(r.eventDate)?'2026/'+r.eventDate:r.eventDate) : null;
+      const ed = remDay(r);
       const hid='h'+Date.now()+Math.random().toString(36).slice(2,8);
       DB.hypotheses.push({id:hid, stockId:s.id, kind:'watch', text:r.value, remindHint:ed?{date:ed, note:null}:null});
       // プレビューでオンにした分(自動設定なら全部)だけ、この場でリマインダーにする。
