@@ -47,8 +47,12 @@ const MD = `# 銘柄: テスト精機 (9001)
   // 「日付つきの注目ポイント」→「リマインダー登録」に変更した(ユーザー指摘)。
   // 取り込み元(日付ありの注目ポイント)の説明は下の案内文に移した
   ok('リマインダー欄が出る', await p.evaluate(() => !!document.querySelector('#parseOut .rembox')));
-  ok('件数を出す(区分名と語を合わせた見出し)', await p.evaluate(() =>
-    /リマインダー登録 3件/.test(document.querySelector('#parseOut .rembox').textContent)));
+  // 2026-09-24: 見出しの件数は候補行の数(3)ではなく、実際に登録されるリマインダーの数(2)。
+  // 11/12の2点が1件にまとまるため。以前は「3件」と出して2件しか登録されなかった(3周目レビュー、データ整合性)
+  const head = () => p.evaluate(() => document.querySelector('#parseOut .rembox .rt').textContent.trim());
+  const note = () => p.evaluate(() => document.querySelector('#parseOut .rembox .cbx-head .muted').textContent);
+  ok('件数は登録されるリマインダーの数を出す(同じ日の2点は1件)', /リマインダー登録 2件/.test(await head()));
+  ok('まとまる分があるときは元の点数を添える', /3点 → 2件/.test(await note()));
   ok('取り込み元(注目ポイント)の説明が案内文にある', await p.evaluate(() =>
     /日付ありの注目ポイントを/.test(document.querySelector('#parseOut .rembox').textContent)));
   const r0 = await rows();
@@ -83,6 +87,8 @@ const MD = `# 銘柄: テスト精機 (9001)
   await p.waitForTimeout(300);
   const r1 = await rows();
   ok('押した行だけオフになる', r1[2].on === false && r1[0].on && r1[1].on);
+  ok('オフにすると見出しの件数が減る(残りは11/12の2点で1件)', /リマインダー登録 1件/.test(await head()));
+  ok('オフにすると添え書きの点数も変わる', /2点 → 1件/.test(await note()));
   ok('オフにすると一括の文言が変わる', await p.evaluate(() =>
     /すべてオン/.test(document.querySelector('#parseOut .rembox .lnk').textContent)));
 
@@ -93,11 +99,13 @@ const MD = `# 銘柄: テスト精機 (9001)
   await p.evaluate(() => document.querySelector('#parseOut .rembox .lnk').click());
   await p.waitForTimeout(300);
   ok('「すべてオフ」で全部オフになる', (await rows()).every(x => !x.on));
+  ok('全部オフなら0件と出し、添え書きは出さない', /リマインダー登録 0件/.test(await head()) && !/\d+点 →/.test(await note()));
 
   // ---- 選んだ分だけ登録される(同じ日はまとまる) ----
   await feed();
   await p.evaluate(() => document.querySelectorAll('#parseOut .rembox .rrow')[2].querySelector('.swtap').click());  // 9/18 をオフ
   await p.waitForTimeout(300);
+  const shown = +((await head()).match(/(\d+)件/) || [])[1];
   await p.evaluate(() => commitImport());
   await p.waitForTimeout(600);
   const after = await p.evaluate(() => {
@@ -109,6 +117,7 @@ const MD = `# 銘柄: テスト精機 (9001)
              hints: DB.hypotheses.filter(h => h.stockId === '9001' && h.remindHint).map(h => h.remindHint.date) };
   });
   ok('オンの2件が1つのリマインダーになる', after.made === 1 && after.linked[0] === 2);
+  ok('見出しに出していた件数と実際に登録された件数が一致する', shown === after.made);
   ok('日付が引き継がれる', after.dates[0] === '2026/11/12');
   ok('まとまりのタイトルに件数が入る', /2点/.test(after.titles[0]));
   ok('オフにした分は登録されない', !after.dates.includes('2026/9/18'));
@@ -130,6 +139,8 @@ const MD = `# 銘柄: テスト精機 (9001)
     /すべてリマインダーに登録します/.test(document.querySelector('#parseOut .rembox').textContent)));
   ok('毎回選ぶ設定に戻せる', await p.evaluate(() =>
     /毎回選ぶように戻す/.test(document.querySelector('#parseOut .rembox').textContent)));
+  ok('自動のときも見出しは登録される件数(2件)', /リマインダー登録 2件/.test(await head()));
+  ok('自動のときもまとまる分の点数を添える', /3点 → 2件/.test(await p.evaluate(() => document.querySelector('#parseOut .rembox').textContent)));
   await p.evaluate(() => commitImport());
   await p.waitForTimeout(600);
   ok('自動なら全件が登録される(日付ごとに2つ)', await p.evaluate(() =>
