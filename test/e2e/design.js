@@ -10,6 +10,10 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  // 時刻を固定する(2026-09-24追記)。固定していなかったため、実行日がフィクスチャの日付を過ぎると
+  // 期限切れ・次回通知の判定が変わって落ちるようになった(9/24時点でmainでも失敗、実測)。
+  // visualnoise.js等と同じ日付に合わせる
+  await page.clock.install({ time: new Date('2026-08-22T03:00:00Z') });
   await page.goto('http://127.0.0.1:8731/index.html');
   await page.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await page.reload(); await page.waitForTimeout(400);
