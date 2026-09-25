@@ -9,6 +9,10 @@
 //  ・押せる要素の文字 … 操作できるものが読めないのはアクセシビリティの重大問題
 // 補助情報(.meta / .arrow)は現時点では対象外。REVIEW_BACKLOG.md に残してある。
 const { chromium } = require('playwright');
+// 時刻を固定する(2026-09-25追記)。固定していないと、実行日がフィクスチャの日付から離れるにつれ
+// 期限切れ・今週の予定などの判定が変わって落ちる(9/24に8スイート、9/25にcloseBtnが実際に失敗)。
+// 他のスイートと同じ日付に揃える
+const CLOCK = new Date('2026-08-22T03:00:00Z');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const fs = require('fs');
@@ -25,6 +29,7 @@ const rgb = s => (s.match(/\d+/g) || []).slice(0, 3).map(Number);
   const b = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  await p.clock.install({ time: CLOCK });
   await p.goto('http://127.0.0.1:8731/index.html');
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);
