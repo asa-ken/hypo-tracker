@@ -4,6 +4,10 @@
 // 「無意味なものが常に最上位にある」状態になる。リマインダーを作るかどうかは
 // リマインダー画面で決めることなので、そちらへ移した。
 const { chromium } = require('playwright');
+// 時刻を固定する(2026-09-25追記)。固定していないと、実行日がフィクスチャの日付から離れるにつれ
+// 期限切れ・今週の予定などの判定が変わって落ちる(9/24に8スイート、9/25にcloseBtnが実際に失敗)。
+// 他のスイートと同じ日付に揃える
+const CLOCK = new Date('2026-08-22T03:00:00Z');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const fs = require('fs');
@@ -14,6 +18,7 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const b = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  await p.clock.install({ time: CLOCK });
   await p.goto('http://127.0.0.1:8731/index.html');
   await p.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await p.reload(); await p.waitForTimeout(400);

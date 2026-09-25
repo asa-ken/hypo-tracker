@@ -1,4 +1,8 @@
 const { chromium } = require('playwright');
+// 時刻を固定する(2026-09-25追記)。固定していないと、実行日がフィクスチャの日付から離れるにつれ
+// 期限切れ・今週の予定などの判定が変わって落ちる(9/24に8スイート、9/25にcloseBtnが実際に失敗)。
+// 他のスイートと同じ日付に揃える
+const CLOCK = new Date('2026-08-22T03:00:00Z');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const fs = require('fs');
@@ -30,6 +34,7 @@ async function swipe(page, x1, y1, x2, y2, steps=6) {
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await page.clock.install({ time: CLOCK });
   await page.goto('http://127.0.0.1:8731/index.html');
   await page.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);
   await page.reload();
