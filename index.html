@@ -1086,7 +1086,7 @@ function plusSvg(){
 // 「▾」は環境によって小さく・細く出るので、太さと大きさを指定できるSVGで描く。
 // 素の状態が下向き(閉じている)。開いているときだけ .open を付けて上向きにする
 function caretSvg(closed){
-  return `<svg class="caret${closed?'':' open'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  return `<svg class="caret${closed?'':' open'}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 }
 // コピー操作のアイコン。奥の四角は輪郭のみ、手前の四角はページの地色(var(--app))で塗りつぶし、
 // 奥と同じ色(currentColor)の外枠線を付ける(地色に溶けて見えなくなるのを防ぐため)。
@@ -1094,16 +1094,30 @@ function caretSvg(closed){
 function copyIconSvg(){
   return `<svg class="copy-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1" y="1" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect class="copy-ic-front" x="5" y="5" width="10" height="10" rx="1.5" fill="var(--app)" stroke="currentColor" stroke-width="1.6"/></svg>`;
 }
+// divやspanに role=button を付けた要素は、ネイティブの<button>と違ってEnter/Spaceで押せない。
+// キーボード操作でもタップと同じ onclick が走るよう、ここでクリックに変換する。
+// Spaceの既定動作(ページのスクロール)は止める。入力欄や本物の<button>には手を出さない
+function onRoleButtonKey(e){
+  const t=e.target;
+  if(!(t instanceof HTMLElement) || t.tagName==='BUTTON' || t.getAttribute('role')!=='button') return;
+  if(e.key==='Enter' || e.key===' '){ e.preventDefault(); t.click(); }
+}
+document.addEventListener('keydown', onRoleButtonKey);
 function toggleGroup(key){
   const a=closedGroups(); const i=a.indexOf(key);
   if(i<0) a.push(key); else a.splice(i,1);
   save(); render();
 }
 // 見出し+中身を1組にして返す。畳んでいるときは中身を出さない
+// 見出しの文字部分を開閉ボタン(role=button・aria-expanded)にする。タップで開閉できる範囲は
+// これまでどおり見出し全体(外側のdivのonclick)。見出し全体をボタンにすると、右側に別の操作
+// (編集・一括コピー等)を持つ見出しで操作の中に操作が入れ子になるため、文字部分に意味を持たせる。
+// キーボードのEnter/Spaceは onRoleButtonKey() がクリックに変換し、外側のdivまで伝わって開閉する
+function grpToggleAttr(closed){ return `role="button" tabindex="0" aria-expanded="${!closed}"`; }
 function groupBlock(key, label, contentHtml){
   const closed=groupClosed(key);
   return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
-      <span>${label}</span>${caretSvg(closed)}
+      <span ${grpToggleAttr(closed)}>${label}</span>${caretSvg(closed)}
     </div>`+(closed?'':contentHtml);
 }
 // 設定への「編集」リンクを添えた開閉見出し。指標をあまり見ない銘柄では丸ごと畳めるように、
@@ -1113,8 +1127,8 @@ function groupBlock(key, label, contentHtml){
 function groupBlockWithEdit(key, label, editAction, contentHtml, editLabel, editCls){
   const closed=groupClosed(key);
   return `<div class="lbl grp" onclick="toggleGroup('${escArg(key)}')">
-      <span>${esc(label)}</span>
-      <span class="grp-right"><span class="grp-edit${editCls?' '+editCls:''}" onclick="event.stopPropagation();${editAction}">${editLabel||'編集'}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
+      <span ${grpToggleAttr(closed)}>${esc(label)}</span>
+      <span class="grp-right"><span class="grp-edit${editCls?' '+editCls:''}" role="button" tabindex="0" onclick="event.stopPropagation();${editAction}">${editLabel||'編集'}</span><span class="grp-caret">${caretSvg(closed)}</span></span>
     </div>`+(closed?'':contentHtml);
 }
 function detailGroupKey(s, label){ return 'detail:'+s.id+':'+label; }
@@ -1141,13 +1155,13 @@ function renderAnalysis(v){
   // 名前順のときだけ種別を添える
   const row=(s)=>{ const hy=hyposOf(s.id).length;
     const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
-    return `<div class="list-row${hasContent(s)?' filled':''}" onclick="openStock('${s.id}')">
+    return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div></div>
       ${hy?`<span class="rt"><span class="chip navy">メモ・注目 ${hy}</span></span>`:''}
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
   const mrow=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
-    return `<div class="list-row${hasContent(s)?' filled':''}" onclick="openStock('${s.id}')">
+    return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${th?`<div class="meta">注目: ${esc(th)}</div>`:''}</div>
       <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span></span>
     </div>`; };
