@@ -45,6 +45,23 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
 
   ok('staleCount関数が残っていない', await page.evaluate(() => typeof staleCount === 'undefined'));
 
+  // ---- 注目・メモの件数バッジを出さない(ユーザー指示、2026-09-26) ----
+  // 「この数を強調することに大きな意味はない」。一覧の行の「メモ・注目 N」と、
+  // 銘柄詳細・市場詳細の上部の「注目 N」「メモ N」を出さない。
+  // 件数そのものは詳細の見出し「メモ・注目ポイント (N)」に残る(区分の件数表示であってバッジではない)
+  const badgeIn = () => page.evaluate(() => [...document.querySelectorAll('#view .chip')]
+    .map(c => c.textContent.trim()).filter(t => /^(メモ・注目|注目|メモ) \d+$/.test(t)));
+  ok('詳細の上部に「注目 N」「メモ N」のバッジが出ない(銘柄)', (await badgeIn()).length === 0);
+  ok('詳細の見出しの件数(メモ・注目ポイント (N))は残る', /メモ・注目ポイント \(7\)/.test(detail));
+  await page.evaluate(() => { backFromDetail(); openStock('mkt_test1'); });
+  await page.waitForTimeout(300);
+  ok('詳細の上部に「注目 N」のバッジが出ない(市場)', (await badgeIn()).length === 0);
+  ok('市場詳細の関連銘柄のチップは残る', await page.evaluate(() => [...document.querySelectorAll('#view .pill-row .chip')].some(c => /テスト精機/.test(c.textContent))));
+  await page.evaluate(() => { backFromDetail(); go('analysis'); });
+  await page.waitForTimeout(250);
+  ok('一覧の行に「メモ・注目 N」のバッジが出ない', (await badgeIn()).length === 0);
+  ok('一覧の市場・業界・テーマの種別チップは残る', await page.evaluate(() => [...document.querySelectorAll('#view .list-row .chip.gray')].some(c => /^市場$/.test(c.textContent.trim()))));
+
   console.log('JSエラー:', JSON.stringify(errs));
   await page.screenshot({ path: __dirname + '/nobadge_home.png' });
   await browser.close();

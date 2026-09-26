@@ -1160,12 +1160,13 @@ function renderAnalysis(v){
   if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
   // 1件ずつを独立カードにすると全部が同じ強さで並ぶので、区分ごとに1枚の枠へ行として並べる
   // 保有/ウォッチで見出しを分ける並びでは種別を行に出さない(見出しと重複する)。
-  // 名前順のときだけ種別を添える
-  const row=(s)=>{ const hy=hyposOf(s.id).length;
+  // 名前順のときだけ種別を添える。
+  // 以前は行の右に「メモ・注目 N」の件数バッジを出していたが、この数を強調することに大きな意味は
+  // ないため出さない(ユーザー指示、2026-09-26)。件数は詳細の見出し「メモ・注目ポイント (N)」で分かる
+  const row=(s)=>{
     const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
     return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div></div>
-      ${hy?`<span class="rt"><span class="chip navy">メモ・注目 ${hy}</span></span>`:''}
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
   const mrow=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
@@ -1198,11 +1199,9 @@ function renderAnalysis(v){
 //////////////////// DETAIL の共通ブロック ////////////////////
 // 銘柄・市場の詳細画面は構成が違うので描画関数を分けている。
 // ただしテーマ・分析・メモ・リンクは共通なので、ここに部品として切り出す。
-function blkChips(hy){
-  const wCnt=hy.filter(x=>x.kind==='watch').length, mCnt=hy.length-wCnt;
-  if(!wCnt&&!mCnt) return '';
-  return `<div class="pill-row" style="margin-bottom:11px">${wCnt?`<span class="chip amber">注目 ${wCnt}</span>`:''}${mCnt?`<span class="chip gray">メモ ${mCnt}</span>`:''}</div>`;
-}
+// 詳細の上部に出していた「注目 N」「メモ N」の件数バッジ(blkChips)は廃止した。
+// この数を強調することに大きな意味はない(ユーザー指示、2026-09-26)。
+// 件数はメモ・注目ポイントの見出し「メモ・注目ポイント (N)」に残る
 function blkTheme(s){
   const theme=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
   // 市場・業界・テーマは「どの指数・ETFを指しているか」で数値の意味が変わるので、
@@ -1332,7 +1331,7 @@ function renderStockDetail(v){
   const s=stock(STATE.stockId); if(!s){go('analysis');return;}
   detailHeader(s, s.code+' · '+s.kind);
   const hy=hyposOf(s.id);
-  let h=blkChips(hy)+blkTheme(s);
+  let h=blkTheme(s);
   h+=blkMetrics(s,'主要指標',snapKeys(DB.metricsMaster),'sheetMetricsMaster()','metrics');
   h+=groupBlockWithEdit(detailGroupKey(s,'業績推移'),'業績推移','sheetMetricsMaster()',renderTrend(s)+'<div style="height:10px"></div>');
   h+=blkSections(s)+blkHypos(s,hy)+blkLinks(s);
@@ -1348,7 +1347,7 @@ function renderMarketDetail(v){
   const sc=scopeOf(s);
   detailHeader(s, sc);
   const hy=hyposOf(s.id);
-  let h=blkChips(hy)+blkTheme(s);
+  let h=blkTheme(s);
   const METLBL={'市場':'市場の水準','業界':'業界の水準','テーマ':'テーマの指標'};
   const keys=snapKeys(metricsMasterFor(s));
   const lvlHint=`<div class="hint" style="margin:2px 0 0">当日の値動きではなく、数か月単位で見直す水準を記録します。${s.benchmark?`基準: ${esc(s.benchmark)}`:''}</div>`;
