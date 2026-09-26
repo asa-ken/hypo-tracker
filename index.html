@@ -1142,12 +1142,20 @@ function hasContent(s){
     || Object.keys(s.trend||{}).length>0
     || hyposOf(s.id).length>0;
 }
-let anaSort='保有優先';
+// 並び替えは DB.uiPrefs.anaSort に保存し、再読込しても覚える。以前は画面内の変数だけに持っており、
+// 区分の開閉(uiPrefs.anaClosed)は覚えているのに並び替えだけ毎回「保有優先」に戻っていた
+// (2026-09-25のレビューで発見、ユーザー確認のうえ保存する)。値が無い・知らない値なら保有優先
+const ANA_SORTS=['保有優先','名前順'];
+function anaSortNow(){ const v=(DB.uiPrefs||{}).anaSort; return ANA_SORTS.includes(v)?v:'保有優先'; }
+function setAnaSort(k){
+  if(!ANA_SORTS.includes(k)) return;
+  (DB.uiPrefs||(DB.uiPrefs={anaClosed:[]})).anaSort=k; save(); render();
+}
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
   const act=$('#topAct'); act.style.display='inline-flex'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
-  const sorts=['保有優先','名前順'];
-  let h=`<div class="seg">${sorts.map(k=>`<button class="${anaSort===k?'on':''}" onclick="anaSort='${k}';render()">${k}</button>`).join('')}</div>`;
+  const anaSort=anaSortNow();
+  let h=`<div class="seg">${ANA_SORTS.map(k=>`<button class="${anaSort===k?'on':''}" onclick="setAnaSort('${k}')">${k}</button>`).join('')}</div>`;
 
   if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
   // 1件ずつを独立カードにすると全部が同じ強さで並ぶので、区分ごとに1枚の枠へ行として並べる
