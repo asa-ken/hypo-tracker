@@ -74,7 +74,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('リロードしても畳んだ状態が残る', s4.closed.length === 2 && s4.lists === 1);
 
   // ---- 名前順に切り替えても壊れない ----
-  await p.evaluate(() => { anaSort = '名前順'; render(); }); await p.waitForTimeout(250);
+  await p.evaluate(() => setAnaSort('名前順')); await p.waitForTimeout(250);
   const s5 = await state();
   ok('名前順では市場と銘柄の2区分になる', s5.heads.length === 2 && /銘柄 \(/.test(s5.heads[1]));
   ok('名前順の市場は畳んだままを引き継ぐ', s5.lists === 1);
