@@ -113,8 +113,10 @@ const isTransparent = c => c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
     ![...document.querySelectorAll('#view .list.flat .list-row')].some(r => /›/.test(r.textContent))));
   ok('区分見出しの開閉の矢尻は残る', await p.evaluate(() =>
     document.querySelectorAll('#view .lbl.grp svg.caret').length >= 2));
-  ok('メモ・注目の件数バッジは残る', await p.evaluate(() =>
-    [...document.querySelectorAll('#view .list.flat .list-row')].some(r => /メモ・注目 \d+/.test(r.textContent))));
+  // 2026-09-26: メモ・注目の件数バッジは廃止した(ユーザー指示「この数を強調することに大きな意味はない」)。
+  // 検査の向きを反転し、出ないことを確かめる(詳細は nobadge.js)
+  ok('メモ・注目の件数バッジは出さない', await p.evaluate(() =>
+    ![...document.querySelectorAll('#view .list.flat .list-row')].some(r => /メモ・注目 \d+/.test(r.textContent))));
   ok('市場・業界・テーマの種別チップも残る', await p.evaluate(() =>
     [...document.querySelectorAll('#view .list.flat .list-row')].some(r => r.querySelector('.chip.gray'))));
   ok('行はこれまでどおり押せる', await p.evaluate(() => {
