@@ -1163,15 +1163,20 @@ function renderAnalysis(v){
   // 名前順のときだけ種別を添える。
   // 以前は行の右に「メモ・注目 N」の件数バッジを出していたが、この数を強調することに大きな意味は
   // ないため出さない(ユーザー指示、2026-09-26)。件数は詳細の見出し「メモ・注目ポイント (N)」で分かる
+  // 注目テーマは市場の行だけでなく銘柄の行にも同じ書き方で出す(ユーザー指示、2026-09-26)。
+  // 以前は市場の行にだけ出しており、テーマを持つ銘柄の行には出ていなかった(一貫性=1の②)。
+  // テーマが無ければ何も足さない(「未設定」を並べると義務感を生む)
+  const themeLine=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+    return th?`<div class="meta">注目: ${esc(th)}</div>`:''; };
   const row=(s)=>{
     const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
     return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
-      <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div></div>
+      <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div>${themeLine(s)}</div>
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
-  const mrow=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
+  const mrow=(s)=>{
     return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
-      <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${th?`<div class="meta">注目: ${esc(th)}</div>`:''}</div>
+      <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${themeLine(s)}</div>
       <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span></span>
     </div>`; };
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
