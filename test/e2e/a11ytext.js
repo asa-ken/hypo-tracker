@@ -59,6 +59,7 @@ const rgb = s => (s.match(/\d+/g) || []).slice(0, 3).map(Number);
       // 押せる行の中にある補助情報(.meta など)は含めない。
       // .meta は読まなくても操作できる添え物で、こちらは --ink3 の定義そのものの話になるため
       // このスイートの対象から外し、REVIEW_BACKLOG.md に残してある
+      // (2026-09-30: --ink3 を --ink2 と同じ色にしたので、補助文字のコントラストは ink3aa.js で検査する)
       const isLabel = !!e.closest('button,.copylink,.grp-edit');
       if (!isHint && !isLabel) return;
       const st = getComputedStyle(e);
