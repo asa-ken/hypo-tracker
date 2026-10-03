@@ -47,7 +47,11 @@ const isTransparent = c => c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
     return [...document.querySelectorAll('#view .list.flat .list-row .ttl')].map(t => Math.round(t.getBoundingClientRect().left - lbl));
   });
   ok('区分見出しが複数ある', heads.length >= 2);
-  ok('区分の変わり目に細い線が入る', heads.every(w => w === 1));
+  // 2026-10-03: 並び替えの切り替えを廃止し、最初の区分見出しが画面の一番上に来るようになった。
+  // 一番上の見出しは線を引かない(ヘッダーの線と二重にしない。ホームと同じ決まり、rowbar.js参照)ので、
+  // 2つ目以降の「区分の変わり目」にだけ線が入ることを確かめる
+  ok('画面の一番上の見出しには線を引かない', heads[0] === 0);
+  ok('区分の変わり目に細い線が入る', heads.slice(1).every(w => w === 1));
   ok('中身は見出しより字下げされている', indents.length > 0 && indents.every(i => i >= 16));
   const align = await p.evaluate(() => {
     const lbl = document.querySelector('#view .lbl.grp');
@@ -94,7 +98,8 @@ const isTransparent = c => c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
     const secIndent = Math.round(document.querySelector('#view .sec.open .sub-row .name').getBoundingClientRect().left
                                - document.querySelector('#view .sec.open .h').getBoundingClientRect().left);
     backFromDetail(); go('analysis');
-    const grpEl = [...document.querySelectorAll('#view .lbl.grp')].find(g => g.nextElementSibling && g.nextElementSibling.querySelector('.list-row'));
+    // 画面の一番上の見出し(線を引かない)ではなく、区分の変わり目の見出しと比べる
+    const grpEl = [...document.querySelectorAll('#view .lbl.grp')].find(g => !g.matches(':first-child') && g.nextElementSibling && g.nextElementSibling.querySelector('.list-row'));
     const grp = getComputedStyle(grpEl);
     const grpIndent = Math.round(grpEl.nextElementSibling.querySelector('.ttl').getBoundingClientRect().left - grpEl.getBoundingClientRect().left);
     return { size: sec.fontSize === grp.fontSize, weight: sec.fontWeight === grp.fontWeight,

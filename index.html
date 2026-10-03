@@ -1146,25 +1146,19 @@ function hasContent(s){
     || Object.keys(s.trend||{}).length>0
     || hyposOf(s.id).length>0;
 }
-// 並び替えは DB.uiPrefs.anaSort に保存し、再読込しても覚える。以前は画面内の変数だけに持っており、
-// 区分の開閉(uiPrefs.anaClosed)は覚えているのに並び替えだけ毎回「保有優先」に戻っていた
-// (2026-09-25のレビューで発見、ユーザー確認のうえ保存する)。値が無い・知らない値なら保有優先
-const ANA_SORTS=['保有優先','名前順'];
-function anaSortNow(){ const v=(DB.uiPrefs||{}).anaSort; return ANA_SORTS.includes(v)?v:'保有優先'; }
-function setAnaSort(k){
-  if(!ANA_SORTS.includes(k)) return;
-  (DB.uiPrefs||(DB.uiPrefs={anaClosed:[]})).anaSort=k; save(); render();
-}
+// 並び替えの切り替え(保有優先/名前順)は置かない。常に 市場・業界・テーマ → 保有 → ウォッチ の区分ごとに並べる。
+// 以前は切り替えがあったが、名前順は漢字名を読みの順に並べられず(データに読みがない)、「保有優先」でも
+// 先頭は市場の区分で、選択中のボタンが画面で最も重い要素だった(2026-10-01のレビュー)。
+// ユーザー判断「そもそもタブ自体がいらないかも。保有優先の構造でいい」(2026-10-03)で廃止した。
+// 以前に保存された DB.uiPrefs.anaSort はデータに残るが、読まない
 function renderAnalysis(v){
   $('#topTitle').textContent='市場・銘柄分析';
   const act=$('#topAct'); act.style.display='inline-flex'; act.textContent='＋ 追加'; act.onclick=sheetAddStock;
-  const anaSort=anaSortNow();
-  let h=`<div class="seg">${ANA_SORTS.map(k=>`<button class="${anaSort===k?'on':''}" onclick="setAnaSort('${k}')">${k}</button>`).join('')}</div>`;
+  let h='';
 
   if(!DB.stocks.length){ v.innerHTML=h+`<div class="empty"><div class="big">銘柄がありません</div><div>右上の「＋ 追加」から登録できます。</div></div>`; return; }
   // 1件ずつを独立カードにすると全部が同じ強さで並ぶので、区分ごとに1枚の枠へ行として並べる
-  // 保有/ウォッチで見出しを分ける並びでは種別を行に出さない(見出しと重複する)。
-  // 名前順のときだけ種別を添える。
+  // 保有/ウォッチは見出しで分けているので、種別を行に出さない(見出しと重複する)。
   // 以前は行の右に「メモ・注目 N」の件数バッジを出していたが、この数を強調することに大きな意味は
   // ないため出さない(ユーザー指示、2026-09-26)。件数は詳細の見出し「メモ・注目ポイント (N)」で分かる
   // 注目テーマは市場の行だけでなく銘柄の行にも同じ書き方で出す(ユーザー指示、2026-09-26)。
@@ -1173,7 +1167,7 @@ function renderAnalysis(v){
   const themeLine=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
     return th?`<div class="meta">注目: ${esc(th)}</div>`:''; };
   const row=(s)=>{
-    const meta=esc(s.code)+(anaSort==='名前順'?' · '+esc(s.kind):'');
+    const meta=esc(s.code);
     return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
       <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div>${themeLine(s)}</div>
     </div>`; };
@@ -1192,16 +1186,10 @@ function renderAnalysis(v){
     const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
     h+=group('市場', `市場・業界・テーマ (${mkts.length})`, rows);
   }
-  if(anaSort==='保有優先'){
-    [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
-      const list=DB.stocks.filter(s=>s.kind===k);
-      h+=group(k, `${label} (${list.length})`, list.map(row));
-    });
-  } else {
-    let list=DB.stocks.filter(s=>!isMkt(s));
-    list.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
-    h+=group('銘柄', `銘柄 (${list.length})`, list.map(row));
-  }
+  [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
+    const list=DB.stocks.filter(s=>s.kind===k);
+    h+=group(k, `${label} (${list.length})`, list.map(row));
+  });
   v.innerHTML=h;
 }
 

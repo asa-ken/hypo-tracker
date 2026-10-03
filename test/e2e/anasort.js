@@ -1,10 +1,11 @@
-// 市場・銘柄分析の並び替え(保有優先/名前順)を、再読込しても覚えていること
+// 市場・銘柄分析には並び替えの切り替え(保有優先/名前順)を置かず、常に区分ごとの並びで出すこと
 //
-// 2026-09-25(市場・銘柄分析の初回レビュー)で発見: 並び替えは画面内の変数(anaSort)にだけ持っており、
-// 再読込のたびに「保有優先」へ戻っていた。一方、同じ画面の区分の開閉は DB.uiPrefs に保存されていて
-// 再読込後も覚えている(実測)。ユーザー確認のうえ(2026-09-26「覚える、でお願い」)、
-// 並び替えも DB.uiPrefs.anaSort に保存する。
-// 値が無い・知らない値のときは「保有優先」として扱う(既存データの変換は要らない)
+// 経緯: 2026-09-26に並び替えの選択を DB.uiPrefs.anaSort に保存するようにした(このスイートの旧版はその検査)。
+// その後のレビュー(2026-10-01)で、名前順は漢字名を読みの順に並べられない(データに読みがない)、
+// 「保有優先」でも先頭は市場の区分、選択中のボタンが画面で最も重い、等が見つかり、
+// ユーザー判断で「そもそもタブ自体がいらないかも。保有優先の構造でいい」(2026-10-03)となった。
+// 切り替えを外し、市場・業界・テーマ → 保有 → ウォッチ の区分ごとの並びに固定する。
+// 以前に名前順を保存していたデータ(uiPrefs.anaSort='名前順')でも、区分ごとの並びで出す
 const { chromium } = require('playwright');
 // 実行環境ごとに違うので環境変数で差し替えられるようにする
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -22,52 +23,34 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   await p.reload(); await p.waitForTimeout(400);
 
   const state = () => p.evaluate(() => ({
-    on: (document.querySelector('#view .seg button.on') || {}).textContent,
+    seg: document.querySelectorAll('#view .seg').length,
+    sortWords: /保有優先|名前順/.test(document.querySelector('#view').innerText),
     heads: [...document.querySelectorAll('#view .lbl.grp')].map(h => h.textContent.trim().replace(/\s+/g, ' ')),
-    saved: (JSON.parse(localStorage.getItem('hypo_tracker_proto_v1')).uiPrefs || {}).anaSort,
+    firstIsHead: !!document.querySelector('#view > .lbl.grp:first-child'),
+    metas: [...document.querySelectorAll('#view .list-row .meta')].map(m => m.textContent.trim()),
   }));
-  const clickSort = label => p.evaluate(l => [...document.querySelectorAll('#view .seg button')].find(b => b.textContent.trim() === l).click(), label);
-  const reloadToAnalysis = async () => { await p.reload(); await p.waitForTimeout(400); await p.evaluate(() => go('analysis')); await p.waitForTimeout(250); };
 
-  // ---- 1. 保存された値が無いときは保有優先 ----
+  // ---- 1. 切り替えが無く、区分ごとの並びで出る ----
   await p.evaluate(() => go('analysis')); await p.waitForTimeout(250);
   const s0 = await state();
-  ok('保存された値が無いときは「保有優先」', s0.on === '保有優先' && s0.heads.some(h => /^保有 \(/.test(h)), s0);
+  ok('並び替えの切り替え(.seg)が無い', s0.seg === 0, s0);
+  ok('「保有優先」「名前順」の文字が画面に無い', !s0.sortWords, s0);
+  ok('区分は 市場・業界・テーマ → 保有 → ウォッチ の順', JSON.stringify(s0.heads.map(h => h.replace(/ \(\d+\)$/, ''))) === JSON.stringify(['市場・業界・テーマ', '保有', 'ウォッチ']), s0.heads);
+  ok('画面の一番上が最初の区分見出し(上の線を引かない見出しになる)', s0.firstIsHead, s0);
+  ok('銘柄の行の補足は証券コードだけ(区分と重なる「· 保有」等を添えない)', s0.metas.filter(m => /^\w+$/.test(m)).length >= 4 && !s0.metas.some(m => / · (保有|ウォッチ)$/.test(m)), s0.metas);
 
-  // ---- 2. 名前順を選ぶと保存され、再読込しても名前順のまま ----
-  await clickSort('名前順'); await p.waitForTimeout(250);
-  const s1 = await state();
-  ok('名前順を選ぶと保存される', s1.on === '名前順' && s1.saved === '名前順', s1);
-  await reloadToAnalysis();
-  const s2 = await state();
-  ok('再読込しても名前順のまま', s2.on === '名前順' && s2.heads.some(h => /^銘柄 \(/.test(h)), s2);
-
-  // ---- 3. 詳細を開いて戻っても、タブを切り替えて戻っても名前順のまま ----
-  await p.evaluate(() => document.querySelectorAll('#view .list-row')[1].click()); await p.waitForTimeout(300);
-  await p.evaluate(() => backFromDetail()); await p.waitForTimeout(250);
-  ok('詳細から戻っても名前順のまま', (await state()).on === '名前順');
-  await p.evaluate(() => go('home')); await p.waitForTimeout(200);
+  // ---- 2. 以前に名前順を保存していたデータでも、区分ごとの並びで出る ----
+  await p.evaluate(() => { DB.uiPrefs = DB.uiPrefs || { anaClosed: [] }; DB.uiPrefs.anaSort = '名前順'; save(); });
+  await p.reload(); await p.waitForTimeout(400);
   await p.evaluate(() => go('analysis')); await p.waitForTimeout(250);
-  ok('タブを切り替えて戻っても名前順のまま', (await state()).on === '名前順');
+  const s1 = await state();
+  ok('名前順を保存していたデータでも区分ごとの並び', s1.seg === 0 && s1.heads.length === 3 && /^保有 \(/.test(s1.heads[1]), s1.heads);
+  ok('保存されていた値はデータから消さない(読まないだけ)', await p.evaluate(() => DB.uiPrefs.anaSort === '名前順'));
 
-  // ---- 4. 保有優先に戻すと、それも覚える ----
-  await clickSort('保有優先'); await p.waitForTimeout(250);
-  await reloadToAnalysis();
-  const s3 = await state();
-  ok('保有優先に戻すと、再読込後も保有優先', s3.on === '保有優先' && s3.saved === '保有優先', s3);
-
-  // ---- 5. 区分の開閉の記憶とは独立している(並び替えで開閉の記録を消さない) ----
-  await p.evaluate(() => toggleGroup('ウォッチ')); await p.waitForTimeout(200);
-  await clickSort('名前順'); await p.waitForTimeout(200);
-  await clickSort('保有優先'); await p.waitForTimeout(200);
-  ok('並び替えを切り替えても区分の開閉の記録は残る', await p.evaluate(() => closedGroups().includes('ウォッチ')));
-  await p.evaluate(() => toggleGroup('ウォッチ')); await p.waitForTimeout(200);
-
-  // ---- 6. 知らない値が保存されていても壊れず、保有優先として出す ----
-  await p.evaluate(() => { DB.uiPrefs.anaSort = '存在しない並び'; save(); });
-  await reloadToAnalysis();
-  const s4 = await state();
-  ok('知らない値のときは保有優先として出す', s4.on === '保有優先' && s4.heads.some(h => /^保有 \(/.test(h)), s4);
+  // ---- 3. 銘柄が0件のときも切り替えは出ない ----
+  await p.evaluate(() => { DB.stocks = []; save(); go('analysis'); }); await p.waitForTimeout(250);
+  const s2 = await state();
+  ok('銘柄0件のときも切り替えは出ず、案内だけ出る', s2.seg === 0 && await p.evaluate(() => /銘柄がありません/.test(document.querySelector('#view').innerText)), s2);
 
   console.log('JSエラー:', JSON.stringify(errs));
   await b.close();

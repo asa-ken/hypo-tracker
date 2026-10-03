@@ -56,13 +56,8 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   ok('どの行も横にはみ出さない', r0.every(r => !r.overflow), r0.filter(r => r.overflow));
   ok('どの行もタップ領域は44px以上', r0.every(r => r.h >= 44), r0.map(r => r.h));
 
-  // ---- 5. 名前順でも同じように出る ----
-  await p.evaluate(() => setAnaSort('名前順')); await p.waitForTimeout(250);
-  const r1 = await rows();
-  const s1 = r1.find(r => r.name.includes('テスト精機'));
-  ok('名前順でも注目テーマが出る', s1.theme === '注目: 省人化投資と受注残の推移', s1);
-  ok('名前順では証券コードの行に種別が添えられたまま', s1.metas[0] === '9001 · 保有', s1.metas);
-  await p.evaluate(() => setAnaSort('保有優先')); await p.waitForTimeout(200);
+  // ---- 5. (2026-10-03に廃止)名前順の検査 ----
+  // 並び替えの切り替え(保有優先/名前順)を廃止したため外した(ユーザー判断。anasort.js 参照)
 
   // ---- 6. テーマを変えると一覧にも反映され、消すと行から消える(2回目) ----
   await p.evaluate(() => { DB.askPrefs.themes['9002'] = '新工場の立ち上がり'; save(); render(); }); await p.waitForTimeout(200);
