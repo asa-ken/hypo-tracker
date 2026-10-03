@@ -73,13 +73,9 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   const s4 = await state();
   ok('リロードしても畳んだ状態が残る', s4.closed.length === 2 && s4.lists === 1);
 
-  // ---- 名前順に切り替えても壊れない ----
-  await p.evaluate(() => setAnaSort('名前順')); await p.waitForTimeout(250);
-  const s5 = await state();
-  ok('名前順では市場と銘柄の2区分になる', s5.heads.length === 2 && /銘柄 \(/.test(s5.heads[1]));
-  ok('名前順の市場は畳んだままを引き継ぐ', s5.lists === 1);
-  await p.evaluate(() => toggleGroup('銘柄')); await p.waitForTimeout(250);
-  ok('名前順の銘柄も畳める', await p.evaluate(() => document.querySelectorAll('#view .list').length === 0));
+  // 2026-10-03: 並び替え(保有優先/名前順)の切り替えは廃止した(ユーザー判断)。
+  // 以前ここにあった「名前順に切り替えても壊れない」の検査は、切り替えが無くなったため外した。
+  // 切り替えが無いこと自体は anasort.js で検査する
 
   // ---- 移行: 既存データにも uiPrefs が入る ----
   const mig = await p.evaluate(() => {
