@@ -3090,7 +3090,10 @@ function sheetAddStock2(){
     <label class="fld"><span class="t">ティッカー / 証券コード</span><input id="as_code" placeholder="例: 5801 / PLTR"></label>
     <label class="fld"><span class="t">区分</span><div class="seg"><button class="on" id="as_hold" onclick="this.classList.add('on');this.nextElementSibling.classList.remove('on')">保有</button><button id="as_watch" onclick="this.classList.add('on');this.previousElementSibling.classList.remove('on')">ウォッチ</button></div></label>
     <button class="btn pri" onclick="doAddStock(true)">追加して項目を選ぶ</button>
-    <button class="btn" style="margin-top:8px" onclick="doAddStock(false)">追加のみ</button>`);
+    <button class="btn" style="margin-top:8px" onclick="doAddStock(false)">追加のみ</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="sheetAddStock()">← 戻る</button>`);
+  // 「市場・業界・テーマを追加」と同じく、1つ前(銘柄か市場かを選ぶ画面)へ戻れるようにする。
+  // 以前は銘柄側にだけ無く、戻るには ✕ で閉じて「＋ 追加」からやり直していた(ユーザー指示、2026-10-04)
 }
 function doAddStock(order){
   const name=$('#as_name').value.trim(), code=$('#as_code').value.trim();
