@@ -1172,9 +1172,12 @@ function renderAnalysis(v){
       <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div>${themeLine(s)}</div>
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
+  // 市場の行の名前の頭に付けていた「◆」は外した(ユーザー指示、2026-10-04)。区分見出し「市場・業界・テーマ」と
+  // 右の種別チップで市場だと分かり、記号は同じことの繰り返しだった。取り込み画面の銘柄の選択欄のように
+  // 区分の無い一覧で市場と銘柄を見分ける用途の「◆」はそのまま
   const mrow=(s)=>{
     return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
-      <div class="lt"><div class="ttl">◆ ${esc(s.name)}</div>${themeLine(s)}</div>
+      <div class="lt"><div class="ttl">${esc(s.name)}</div>${themeLine(s)}</div>
       <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span></span>
     </div>`; };
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
