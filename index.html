@@ -141,6 +141,12 @@
   .list-row .meta{font-size:11px; color:var(--ink3); margin-top:1px;}
   .list-row .rt{display:flex; align-items:center; gap:var(--sp2); font-size:12px; color:var(--ink2); white-space:nowrap; flex:none;}
   .list-row .arrow{color:var(--ink3); font-size:15px;}
+  /* 並べ替えのつまみ(≡)。行の右端に44pxの領域で置き、縦スクロールを奪わないよう touch-action:none はつまみだけに付ける */
+  .list-row .drag{display:inline-flex; align-items:center; justify-content:center; width:44px; min-height:44px; flex:none; color:var(--ink2); cursor:grab; touch-action:none;}
+  .list-row .drag svg{width:20px; height:20px;}
+  .list-row.reorder{cursor:default;}
+  .list-row.reorder:active{background:none;}
+  .list-row.dragging{position:relative; z-index:2; background:var(--card); box-shadow:0 2px 10px rgba(20,30,40,.16); border-radius:8px;} /* 影の色はスワイプバック中の影と同じ(動かしている最中の表現として共有) */
   /* メモ・注目ポイントの行を右→左スワイプで削除できるようにする帯。
      .list-row 自体はそのまま使い、区切り線(border-top)だけをこの帯側に付け替える
      (行を .swipe で包むと .list-row:first-child がすべての行にマッチしてしまうため) */
@@ -937,7 +943,7 @@ function go(tab){
   if(tab==='reminder' && !STATE._remFromStock) STATE.remStockId=null;
   // 画面を移ると貼り付け欄ごと作り直されるので、取り込み先の選択も持ち越さない
   STATE._askFromStock=false; STATE._remFromStock=false; STATE._importPick=null;
-  STATE.tab=tab; STATE.stockId=null;
+  STATE.tab=tab; STATE.stockId=null; STATE.anaReorder=null; // 並べ替えの状態はタブを移ると終える
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   render(); $('#view').scrollTop=0;
 }
@@ -1146,6 +1152,57 @@ function hasContent(s){
     || Object.keys(s.trend||{}).length>0
     || hyposOf(s.id).length>0;
 }
+// 区分ごとの並び順。既定は登録順(DB.stocks の順)で、「並べ替え」で変えた順を DB.uiPrefs.anaOrder に
+// 区分ごとのidの並びとして保存する(ユーザー指示、2026-10-04)。DB.stocks の順(他の画面の並び)は変えない。
+// 保存した並びに無いもの(後から追加した銘柄・区分を移った銘柄)は、その区分の末尾に登録順で並べる
+function anaOrderOf(key){ const o=(DB.uiPrefs||{}).anaOrder; return (o&&Array.isArray(o[key]))?o[key]:[]; }
+function anaOrdered(key, list){
+  const ord=anaOrderOf(key);
+  return list.map((s,i)=>({s,i,k:ord.indexOf(s.id)})).sort((a,b)=>((a.k<0?1e9+a.i:a.k)-(b.k<0?1e9+b.i:b.k))).map(x=>x.s);
+}
+function setAnaOrder(key, ids){
+  const u=DB.uiPrefs||(DB.uiPrefs={anaClosed:[]});
+  (u.anaOrder||(u.anaOrder={}))[key]=ids; save();
+}
+// 並べ替えの状態は1度に1区分だけ。画面の一時的な状態なので保存しない
+function toggleAnaReorder(key){
+  STATE.anaReorder = STATE.anaReorder===key ? null : key;
+  if(STATE.anaReorder && groupClosed(key)){ const a=closedGroups(); a.splice(a.indexOf(key),1); save(); }
+  render();
+}
+// キーボード: つまみにフォーカスして ↑↓ で1つずつ動かす
+function anaMoveBy(key, id, d){
+  const ids=[...document.querySelectorAll(`#view .list[data-grp="${key}"] .list-row`)].map(r=>r.dataset.id);
+  const i=ids.indexOf(id), j=i+d; if(i<0||j<0||j>=ids.length) return;
+  ids.splice(i,1); ids.splice(j,0,id); setAnaOrder(key, ids); render();
+  const h=document.querySelector(`#view .list[data-grp="${key}"] .list-row[data-id="${CSS.escape(id)}"] .drag`); if(h) h.focus();
+}
+function anaDragKey(e, key, id){
+  if(e.key==='ArrowUp'){ e.preventDefault(); anaMoveBy(key,id,-1); }
+  else if(e.key==='ArrowDown'){ e.preventDefault(); anaMoveBy(key,id,1); }
+}
+// ドラッグ: つまみを押したまま上下に動かすと、隣の行の中央を越えたところで入れ替える。
+// 指を離したら画面上の並びをそのまま保存する
+function anaDragStart(e, key){
+  const handle=e.currentTarget, row=handle.closest('.list-row'), list=row.parentElement;
+  e.preventDefault(); handle.setPointerCapture && handle.setPointerCapture(e.pointerId);
+  let base=e.clientY;
+  row.classList.add('dragging');
+  const move=ev=>{
+    let dy=ev.clientY-base;
+    const prev=row.previousElementSibling, next=row.nextElementSibling;
+    if(prev && dy < -prev.offsetHeight/2){ list.insertBefore(row, prev); base-=prev.offsetHeight; dy=ev.clientY-base; }
+    else if(next && dy > next.offsetHeight/2){ list.insertBefore(next, row); base+=next.offsetHeight; dy=ev.clientY-base; }
+    row.style.transform=`translateY(${dy}px)`;
+  };
+  const up=()=>{
+    handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up);
+    row.style.transform=''; row.classList.remove('dragging');
+    setAnaOrder(key, [...list.querySelectorAll('.list-row')].map(r=>r.dataset.id));
+  };
+  handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
+}
+const dragSvg='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
 // 並び替えの切り替え(保有優先/名前順)は置かない。常に 市場・業界・テーマ → 保有 → ウォッチ の区分ごとに並べる。
 // 以前は切り替えがあったが、名前順は漢字名を読みの順に並べられず(データに読みがない)、「保有優先」でも
 // 先頭は市場の区分で、選択中のボタンが画面で最も重い要素だった(2026-10-01のレビュー)。
@@ -1166,32 +1223,43 @@ function renderAnalysis(v){
   // テーマが無ければ何も足さない(「未設定」を並べると義務感を生む)
   const themeLine=(s)=>{ const th=((DB.askPrefs&&DB.askPrefs.themes)||{})[s.id]||'';
     return th?`<div class="meta">注目: ${esc(th)}</div>`:''; };
-  const row=(s)=>{
+  // 並べ替えの状態の区分では、行を押しても詳細を開かず(つまみの操作と取り違えないため)、右端につまみを出す
+  const rowOpen=(s,key)=>STATE.anaReorder===key
+    ? `<div class="list-row reorder${hasContent(s)?' filled':''}" data-id="${esc(s.id)}">`
+    : `<div class="list-row${hasContent(s)?' filled':''}" data-id="${esc(s.id)}" role="button" tabindex="0" onclick="openStock('${s.id}')">`;
+  const dragHandle=(s,key)=>STATE.anaReorder===key
+    ? `<span class="drag" role="button" tabindex="0" aria-label="${esc(s.name)}を移動(↑↓キーでも動かせます)" onpointerdown="anaDragStart(event,'${escArg(key)}')" onkeydown="anaDragKey(event,'${escArg(key)}','${escArg(s.id)}')">${dragSvg}</span>` : '';
+  const row=(s,key)=>{
     const meta=esc(s.code);
-    return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
-      <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div>${themeLine(s)}</div>
+    return `${rowOpen(s,key)}
+      <div class="lt"><div class="ttl">${esc(s.name)}</div><div class="meta">${meta}</div>${themeLine(s)}</div>${dragHandle(s,key)}
     </div>`; };
   const mkts=DB.stocks.filter(s=>isMkt(s));
   // 市場の行の名前の頭に付けていた「◆」は外した(ユーザー指示、2026-10-04)。区分見出し「市場・業界・テーマ」と
   // 右の種別チップで市場だと分かり、記号は同じことの繰り返しだった。取り込み画面の銘柄の選択欄のように
   // 区分の無い一覧で市場と銘柄を見分ける用途の「◆」はそのまま
-  const mrow=(s)=>{
-    return `<div class="list-row${hasContent(s)?' filled':''}" role="button" tabindex="0" onclick="openStock('${s.id}')">
+  const mrow=(s,key)=>{
+    return `${rowOpen(s,key)}
       <div class="lt"><div class="ttl">${esc(s.name)}</div>${themeLine(s)}</div>
-      <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span></span>
+      <span class="rt"><span class="chip gray">${esc(scopeOf(s))}</span></span>${dragHandle(s,key)}
     </div>`; };
   // 区分ごとに畳めるようにする。件数が増えると一覧が縦に長くなり、
   // 下の区分にたどり着くまで延々スクロールすることになるため
-  const group=(key,label,rows)=>groupBlock(key, label,
-    rows.length?`<div class="list flat">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>');
+  // 2件以上ある区分にだけ、見出しの右に「並べ替え」(並べ替え中は「完了」)を置く
+  const group=(key,label,rows)=>{
+    const body=rows.length?`<div class="list flat" data-grp="${esc(key)}">${rows.join('')}</div>`:'<div class="muted" style="padding:2px 2px 8px">なし</div>';
+    return rows.length>=2
+      ? groupBlockWithEdit(key, label, `toggleAnaReorder('${escArg(key)}')`, body, STATE.anaReorder===key?'完了':'並べ替え')
+      : groupBlock(key, label, body);
+  };
   if(mkts.length){
-    // 粒度ごとにまとめる(市場→業界→テーマ)。混ざっていると何のカードか分かりにくい
-    const rows=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>rows.push(mrow(s))));
-    h+=group('市場', `市場・業界・テーマ (${mkts.length})`, rows);
+    // 既定は粒度ごと(市場→業界→テーマ)、その中は登録順。並べ替えた後は保存した順
+    const byScope=[]; SCOPES.forEach(sc=>mkts.filter(s=>scopeOf(s)===sc).forEach(s=>byScope.push(s)));
+    h+=group('市場', `市場・業界・テーマ (${mkts.length})`, anaOrdered('市場', byScope).map(s=>mrow(s,'市場')));
   }
   [['保有','保有'],['ウォッチ','ウォッチ']].forEach(([k,label])=>{
-    const list=DB.stocks.filter(s=>s.kind===k);
-    h+=group(k, `${label} (${list.length})`, list.map(row));
+    const list=anaOrdered(k, DB.stocks.filter(s=>s.kind===k));
+    h+=group(k, `${label} (${list.length})`, list.map(s=>row(s,k)));
   });
   v.innerHTML=h;
 }

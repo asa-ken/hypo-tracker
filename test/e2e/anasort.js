@@ -25,7 +25,8 @@ const ok = (l, v, d) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JS
   const state = () => p.evaluate(() => ({
     seg: document.querySelectorAll('#view .seg').length,
     sortWords: /保有優先|名前順/.test(document.querySelector('#view').innerText),
-    heads: [...document.querySelectorAll('#view .lbl.grp')].map(h => h.textContent.trim().replace(/\s+/g, ' ')),
+    // 見出しの文字だけを見る(2件以上の区分には右に「並べ替え」が付くため。2026-10-04)
+    heads: [...document.querySelectorAll('#view .lbl.grp')].map(h => h.querySelector('span').textContent.trim().replace(/\s+/g, ' ')),
     firstIsHead: !!document.querySelector('#view > .lbl.grp:first-child'),
     metas: [...document.querySelectorAll('#view .list-row .meta')].map(m => m.textContent.trim()),
   }));
