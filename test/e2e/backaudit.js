@@ -33,6 +33,29 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
   const afterBack = await page.evaluate(() => STATE.stockId);
   ok('戻るを押すと銘柄詳細を抜ける', afterBack === null);
 
+  // ---- 1b. 「＋ 追加」から進む2つのシートは、どちらも1つ前(銘柄か市場かを選ぶ画面)へ戻れる ----
+  // 2026-10-04: 「市場・業界・テーマを追加」には「← 戻る」があったが、「銘柄を追加」には無かった
+  // (2026-10-01に提示した課題G、ユーザー指示で追加)。同じ見た目・同じ位置(最下部)にそろえる
+  const backOf = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('#sheet button')].find(x => x.textContent.trim() === '← 戻る');
+    const all = [...document.querySelectorAll('#sheet button')];
+    return b ? { cls: b.className, last: all[all.length - 1] === b, mt: b.style.marginTop } : null;
+  });
+  await page.evaluate(() => { closeSheet(); sheetAddMarket(); }); await page.waitForTimeout(150);
+  const mBack = await backOf();
+  await page.evaluate(() => { closeSheet(); sheetAddStock2(); }); await page.waitForTimeout(150);
+  const sBack = await backOf();
+  ok('銘柄を追加シートに「← 戻る」がある', !!sBack);
+  ok('「← 戻る」は最下部にある', !!sBack && sBack.last);
+  ok('市場を追加シートの「← 戻る」と同じ見た目', !!sBack && !!mBack && sBack.cls === mBack.cls && sBack.mt === mBack.mt);
+  if (sBack) {
+    await page.evaluate(() => [...document.querySelectorAll('#sheet button')].find(x => x.textContent.trim() === '← 戻る').click());
+    await page.waitForTimeout(150);
+  }
+  ok('押すと「追加」(銘柄か市場かを選ぶ画面)に戻る', await page.evaluate(() =>
+    document.querySelector('#scrim').classList.contains('show') && (document.querySelector('#sheet h3') || {}).textContent === '追加'));
+  await page.evaluate(() => closeSheet());
+
   // ---- 2. 各シートを開いて、scrim(背景)タップで閉じるか確認 ----
   const sheetTests = [
     { name: 'sheetStockMenu', code: "sheetStockMenu('9001')" },
