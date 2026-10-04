@@ -3111,10 +3111,12 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
   view.addEventListener('touchend', endSwipe, {passive:true});
   view.addEventListener('touchcancel', endSwipe, {passive:true});
 })();
+// 見出しの頭の「●」「◆」は外した(ユーザー指示、2026-10-04)。一覧の市場の行から「◆」を外したのに合わせ、
+// 記号でなく見出しの言葉と説明文で銘柄と市場を区別する
 function sheetAddStock(){
   openSheet(`<h3>追加</h3>
-    <div class="card tap" onclick="sheetAddStock2()"><div style="font-size:15px;font-weight:700">● 銘柄を追加</div><div class="muted" style="margin-top:3px">個別企業の分析ノート(指標・業績推移つき)</div></div>
-    <div class="card tap" onclick="sheetAddMarket()"><div style="font-size:15px;font-weight:700">◆ 市場・業界・テーマを追加</div><div class="muted" style="margin-top:3px">市場全体 / 業界 / テーマの分析ノート(例: 日本株市場 / データセンター / AI)</div></div>`);
+    <div class="card tap" onclick="sheetAddStock2()"><div style="font-size:15px;font-weight:700">銘柄を追加</div><div class="muted" style="margin-top:3px">個別企業の分析ノート(指標・業績推移つき)</div></div>
+    <div class="card tap" onclick="sheetAddMarket()"><div style="font-size:15px;font-weight:700">市場・業界・テーマを追加</div><div class="muted" style="margin-top:3px">市場全体 / 業界 / テーマの分析ノート(例: 日本株市場 / データセンター / AI)</div></div>`);
 }
 const SCOPE_INFO={
   '市場':{ex:'例: 日本株市場 / 米国株市場', desc:'国や市場全体。金利・需給・割高割安の水準を見ます。'},

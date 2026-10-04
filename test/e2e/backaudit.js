@@ -54,6 +54,11 @@ const ok = (label, v) => console.log((v ? '✅' : '❌') + ' ' + label + ' → '
   }
   ok('押すと「追加」(銘柄か市場かを選ぶ画面)に戻る', await page.evaluate(() =>
     document.querySelector('#scrim').classList.contains('show') && (document.querySelector('#sheet h3') || {}).textContent === '追加'));
+  // 2026-10-04: 「追加」の選択画面の見出しの頭の「●」「◆」は外した(ユーザー指示)。
+  // 一覧の市場の行から「◆」を外したのに合わせ、記号でなく見出しの言葉と説明文で区別する
+  const choice = await page.evaluate(() => [...document.querySelectorAll('#sheet .card.tap')].map(c => c.firstElementChild.textContent.trim()));
+  ok('「追加」の選択画面の見出しに「●」「◆」を付けない', choice.length === 2 && choice.every(t => !/[●◆]/.test(t)), choice);
+  ok('見出しの言葉はそのまま(銘柄を追加 / 市場・業界・テーマを追加)', choice[0] === '銘柄を追加' && choice[1] === '市場・業界・テーマを追加', choice);
   await page.evaluate(() => closeSheet());
 
   // ---- 2. 各シートを開いて、scrim(背景)タップで閉じるか確認 ----
