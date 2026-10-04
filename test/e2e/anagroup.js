@@ -38,6 +38,12 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('件数が多いと一画面に収まらない', s0.h > 844);
   ok('3区分すべてに開閉見出しがある', s0.heads.length === 3);
   ok('区分は市場・保有・ウォッチ', /市場・業界・テーマ/.test(s0.heads[0]) && /保有/.test(s0.heads[1]) && /ウォッチ/.test(s0.heads[2]));
+  // 2026-10-04: 市場の行の名前の頭の「◆」は外した(ユーザー指示)。区分見出し「市場・業界・テーマ」と
+  // 右の種別チップで市場だと分かり、記号は同じことの繰り返しだったため。種別チップは残す
+  const mk = await p.evaluate(() => { const h = document.querySelector('#view .lbl.grp'); const row = h.nextElementSibling.querySelector('.list-row');
+    return { name: row.querySelector('.ttl').textContent.trim(), chip: (row.querySelector('.chip') || {}).textContent }; });
+  ok('市場の行の名前に「◆」を付けない', !/◆/.test(mk.name) && mk.name === 'テスト市場・AIサイクル', mk);
+  ok('市場の行の種別チップは残る', mk.chip === '市場', mk);
   ok('既定は全部開いている', s0.closed.length === 0 && s0.lists === 3);
 
   // ---- 見出しのタップ領域 ----
