@@ -41,6 +41,28 @@ const NOHEAD = `## 指標
   ok('銘柄を特定できないと出る', await p.evaluate(() =>
     /銘柄を特定できません/.test(document.querySelector('#parseOut').textContent)));
   ok('プルダウンが出る', await p.evaluate(() => !!document.querySelector('#importStockPick')));
+  // 2026-10-07(ユーザー指示): 見出しを「対象を選択してください」にし、選択肢を「銘柄」「市場・業界・テーマ」の
+  // 区分(optgroup)で分ける。iPhoneでは選択リストを端末側が描くため色・太字は効かないが、optgroupの名前は
+  // 区切りの見出しとして出る。市場側は「◆ 名前」をやめ「名前(粒度)」にする(一覧の種別チップと同じ言葉)
+  const pick = await p.evaluate(() => {
+    const s = document.querySelector('#importStockPick');
+    return {
+      label: s.closest('.fld').querySelector('.t').textContent.trim(),
+      first: s.options[0].textContent.trim(), firstVal: s.options[0].value,
+      groups: [...s.querySelectorAll('optgroup')].map(g => ({ label: g.label, items: [...g.querySelectorAll('option')].map(o => ({ v: o.value, t: o.textContent.trim() })) })),
+      diamond: [...s.options].some(o => /◆/.test(o.textContent)),
+      total: s.options.length,
+    };
+  });
+  ok('見出しは「対象を選択してください」', pick.label === '対象を選択してください', pick.label);
+  ok('先頭は未選択の「— 選択 —」', pick.first === '— 選択 —' && pick.firstVal === '', pick);
+  ok('区分は「銘柄」「市場・業界・テーマ」の順', JSON.stringify(pick.groups.map(g => g.label)) === JSON.stringify(['銘柄', '市場・業界・テーマ']), pick.groups.map(g => g.label));
+  ok('銘柄は「名前 (コード)」', pick.groups[0].items.every(i => / \([^)]+\)$/.test(i.t)) && pick.groups[0].items.some(i => i.t === 'テスト精機 (9001)'), pick.groups[0]);
+  ok('市場・業界・テーマは「名前(粒度)」', pick.groups[1].items.some(i => i.t === 'テスト市場・AIサイクル(市場)'), pick.groups[1]);
+  ok('「◆」は使わない', !pick.diamond, pick);
+  // 選んだ後の表示も「銘柄」と決めつけない(市場・業界・テーマも選べるため)
+  ok('取り込むを押して未選択なら「対象を選択してください」と知らせる', await p.evaluate(() => { commitImport(); return document.querySelector('#toast').textContent === '対象を選択してください'; }));
+  ok('選択肢の数は全カード+未選択(漏れ・重複なし)', await p.evaluate(n => n === DB.stocks.length + 1, pick.total), pick.total);
   ok('選ぶ前は「更新前」を出せない旨を案内する', await p.evaluate(() =>
     /選ぶまでは比較相手が決まらない/.test(document.querySelector('#parseOut').textContent)));
   const pre = await rowsOf();
@@ -59,9 +81,9 @@ const NOHEAD = `## 指標
   // ---- 選んだ状態が画面に残る ----
   ok('プルダウンの選択が保たれる', await p.evaluate(() => document.querySelector('#importStockPick').value === '9001'));
   ok('チップが取り込み先を示す', await p.evaluate(() =>
-    /対象の銘柄: テスト精機 に取り込みます/.test(document.querySelector('#parseOut').textContent)));
+    /対象: テスト精機 に取り込みます/.test(document.querySelector('#parseOut').textContent)));
   ok('チップが緑になる', await p.evaluate(() => {
-    const c = [...document.querySelectorAll('#parseOut .pill-row .chip')].find(x => /対象の銘柄/.test(x.textContent));
+    const c = [...document.querySelectorAll('#parseOut .pill-row .chip')].find(x => /対象: /.test(x.textContent));
     return !!c && c.classList.contains('green');
   }));
   // 2026-08-11: 「読取N行」チップは、それ単体を見ても取り込み判断の材料にならないため削除した(ユーザー指摘)
@@ -74,7 +96,7 @@ const NOHEAD = `## 指標
   await p.waitForTimeout(350);
   const p2 = await rowsOf();
   ok('別の銘柄に切り替わる', await p.evaluate(() =>
-    /対象の銘柄: サンプル半導体/.test(document.querySelector('#parseOut').textContent)));
+    /対象: サンプル半導体/.test(document.querySelector('#parseOut').textContent)));
   ok('切替先が持つ値に入れ替わる', /31\.6/.test(p2.find(r => r.name === 'PER(予想)').before));
   ok('切替先が持つ指標は更新前が出る', /298000|352000/.test((p2.find(r => r.name === '売上高') || {}).before || ''));
 
