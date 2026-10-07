@@ -1237,7 +1237,7 @@ function renderAnalysis(v){
   const mkts=DB.stocks.filter(s=>isMkt(s));
   // 市場の行の名前の頭に付けていた「◆」は外した(ユーザー指示、2026-10-04)。区分見出し「市場・業界・テーマ」と
   // 右の種別チップで市場だと分かり、記号は同じことの繰り返しだった。取り込み画面の銘柄の選択欄のように
-  // 区分の無い一覧で市場と銘柄を見分ける用途の「◆」はそのまま
+  // (2026-10-07: 取り込み画面の選択欄も「◆」をやめ、区分の見出しと「名前(粒度)」で見分ける形にした)
   const mrow=(s,key)=>{
     return `${rowOpen(s,key)}
       <div class="lt"><div class="ttl">${esc(s.name)}</div>${themeLine(s)}</div>
@@ -2157,18 +2157,24 @@ function parseAndPreview(){
   // 判断が要る場合は「取り込み前に確認してください」の似た指標ボックスで具体的に示される
   const newMets=target?newMetricsIn(okRows, target):[];
   if(p.stock){
-    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象の銘柄: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span></div>`;
+    h+=`<div class="pill-row" style="margin:4px 0 8px"><span class="chip ${known?'green':'red'}">${known?(fallback?'対象: ':'銘柄: ')+esc(p.stock.name)+(fallback?' に取り込みます':' を検出'):'未登録: '+esc(p.stock.name)}</span></div>`;
     if(fallback) h+='<div class="muted" style="margin:-4px 0 8px;font-size:11px">回答に銘柄名がないため、この銘柄に取り込みます。別の銘柄に入れる場合は、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けてください。</div>';
     // 2026-08-13: 「新規銘柄として登録」ボタンを別途押させると、取り込みが2手順になる。
     // 「取り込む」を押した時点でまとめて新規登録するよう変更した(ユーザー指示)
     if(!known) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">「取り込む」を押すと、${p.stock.isMarket?'新規テーマ':'新規銘柄'}として登録されます。</div>`;
     if(p.dups&&p.dups.length) h+=`<div class="muted" style="margin:-4px 0 8px;font-size:11px">同一内容の重複 ${p.dups.length}件を除外しました</div>`;
   } else {
-    h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象の銘柄: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span></div>`;
-    h+=`<label class="fld"><span class="t">対象の銘柄を選んでください</span><select id="importStockPick" onchange="pickImportStock(this.value)">
+    h+=`<div class="pill-row" style="margin:4px 0 6px"><span class="chip ${picked?'green':'red'}">${picked?'対象: '+esc(picked.name)+' に取り込みます':'銘柄を特定できません'}</span></div>`;
+    // 選択肢は「銘柄」「市場・業界・テーマ」の区分(optgroup)で分ける(ユーザー指示、2026-10-07)。
+    // iPhoneでは選択リストを端末側が描くため色・太字は効かないが、optgroupの名前は区切りの見出しとして出る。
+    // 市場側は以前の「◆ 名前」をやめ「名前(粒度)」にする(一覧の種別チップと同じ言葉)。区分の中は登録順
+    const pickOpt=x=>`<option value="${x.id}"${STATE._importPick===x.id?' selected':''}>${isMkt(x)?esc(x.name)+'('+esc(scopeOf(x))+')':esc(x.name)+' ('+esc(x.code)+')'}</option>`;
+    const pickStocks=DB.stocks.filter(x=>!isMkt(x)), pickMkts=DB.stocks.filter(isMkt);
+    h+=`<label class="fld"><span class="t">対象を選択してください</span><select id="importStockPick" onchange="pickImportStock(this.value)">
       <option value="">— 選択 —</option>
-      ${DB.stocks.map(x=>`<option value="${x.id}"${STATE._importPick===x.id?' selected':''}>${isMkt(x)?'◆ '+esc(x.name):esc(x.name)+' ('+esc(x.code)+')'}</option>`).join('')}</select>
-      <div class="hint">${picked?'選び直すと、読み込みプレビューの「更新前」も選んだ銘柄のものに切り替わります。':'選ぶまでは比較相手が決まらないため、「更新前」は表示できません。'}次からは、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けるようAIに伝えておくと選ばずに済みます。</div></label>`;
+      ${pickStocks.length?`<optgroup label="銘柄">${pickStocks.map(pickOpt).join('')}</optgroup>`:''}
+      ${pickMkts.length?`<optgroup label="市場・業界・テーマ">${pickMkts.map(pickOpt).join('')}</optgroup>`:''}</select>
+      <div class="hint">${picked?'選び直すと、読み込みプレビューの「更新前」も選んだ対象のものに切り替わります。':'選ぶまでは比較相手が決まらないため、「更新前」は表示できません。'}次からは、貼り付け文の先頭に「# 銘柄: 名称 (コード)」を付けるようAIに伝えておくと選ばずに済みます。</div></label>`;
   }
   // 結果は「何をすればいいか」の順に3区分へまとめる(ユーザー指摘、2026-08-10)。
   // 以前は 似た指標→リマインダー候補→該当セクション不明→プレビュー→メモ候補 の順で並んでおり、
@@ -2352,7 +2358,7 @@ function commitImport(){
   const p=window._parsed; if(!p){toast('読み込む内容がありません');return;}
   if(!p.stock && STATE.askStockId){ const sc0=stock(STATE.askStockId); if(sc0) p.stock={name:sc0.name, code:sc0.code}; }
   if(!p.stock){ const pickEl=$('#importStockPick'); const picked=stock((pickEl&&pickEl.value)||STATE._importPick); if(picked) p.stock={name:picked.name, code:picked.id}; }
-  if(!p.stock){toast('対象の銘柄を選んでください');return;}
+  if(!p.stock){toast('対象を選択してください');return;}
   // 未登録の銘柄・テーマは、以前は別ボタン(「新規銘柄として登録」)で先に登録させていたが、
   // 取り込みが2手順になっていた。「取り込む」を押した時点でまとめて登録する(ユーザー指示、2026-08-13)
   const s=stock(p.stock.code) || registerStockFromImport(p.stock);
