@@ -82,7 +82,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('まとめ先が無いカードには新しく作る', after.t9002['売上高'] && after.t9002['売上高']['24年12月期'] === '250000');
   ok('単位も引き継ぐ', after.t9002['売上高'].unit === '百万円');
   ok('件数を添えて知らせる', await p.evaluate(() => /まとめました/.test(document.querySelector('#toast').textContent)));
-  ok('一覧に戻る', await p.evaluate(() => /収容指標/.test(document.querySelector('#sheet h3').textContent)));
+  ok('一覧に戻る', await p.evaluate(() => /主要指標・業績推移の設定/.test(document.querySelector('#sheet h3').textContent)));
 
   // ---- 再読み込みしても復活しない(migrate が戻さない) ----
   await p.reload(); await p.waitForTimeout(400);

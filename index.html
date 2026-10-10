@@ -1444,8 +1444,8 @@ function sheetStockMenu(sid){
     ${mkt?`<label class="fld"><span class="t">種別</span>
       <div class="seg">${SCOPES.map(k=>`<button class="${k===scopeOf(s)?'on':''}" onclick="setScope('${sid}','${k}')">${k}</button>`).join('')}</div>
       <div class="hint">${esc(SCOPE_INFO[scopeOf(s)].desc)} 切り替えると指標・分析項目の既定が変わります(入力済みの内容は残ります)。</div></label>
-      <button class="btn" onclick="closeSheet();sheetMarketMetricsMaster()">⚙ 指標・分析項目の設定(${esc(scopeOf(s))}用)</button>`
-         :`<button class="btn" onclick="closeSheet();sheetMetricsMaster()">⚙ 収容指標・業績分析項目の設定</button>`}
+      <button class="btn" onclick="closeSheet();sheetMarketMetricsMaster()">⚙ ${esc(scopeOf(s))}の指標の設定</button>`
+         :`<button class="btn" onclick="closeSheet();sheetMetricsMaster()">⚙ 主要指標・業績推移の設定</button>`}
     <button class="btn" style="margin-top:8px" onclick="closeSheet();sheetTheme('${sid}')">${mkt?'注目テーマ・代表指数を編集':'注目テーマを編集'}</button>
     <button class="btn danger" style="margin-top:16px" onclick="delStock('${sid}')">${mkt?'このカードを削除':'この銘柄を削除'}</button>
     <button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">閉じる</button>`);
@@ -3680,7 +3680,7 @@ function sheetMetricEdit(type, name, src){
   const mm=masterBySrc(src);
   const others = type==='trend' ? mm.trend.map(t=>t.name).filter(n=>n!==name) : mm.snap.filter(n=>n!==name);
   const n=metDataCount(type,name,mm);
-  const where = type==='trend' ? '業績推移' : (src==='mkt' ? esc(curScopeName())+'の指標' : 'スナップショット指標');
+  const where = type==='trend' ? '業績推移' : (src==='mkt' ? esc(curScopeName())+'の指標' : '主要指標');
   let h=`<h3>${esc(name)}</h3>
     <div class="muted" style="margin-bottom:12px">${where}の指標です。${n?`いま ${n}件のカードにデータがあります。`:'まだどのカードにもデータがありません。'}</div>`;
   if(others.length){
@@ -3764,10 +3764,13 @@ function doDeleteMetric(type, name, src){
 function sheetMetricsMaster(){
   const mm=DB.metricsMaster;
   const snapOn=snapKeys(mm).length, trendOn=trendInds(mm).length;
-  let h=`<h3>収容指標・業績分析項目の設定</h3>
+  // 入口(☰メニュー)・見出し・銘柄詳細の区分名を同じ言葉にそろえる。以前は「収容指標・業績分析項目の設定」で、
+  // 「収容」は「主要」の誤り、「分析項目」はこのシートに無い(別シート)。区分名も「スナップショット指標」で
+  // 銘柄詳細の「主要指標」と食い違っていた(2026-10-10、銘柄詳細の初回レビュー)
+  let h=`<h3>主要指標・業績推移の設定</h3>
     <div class="muted" style="margin-bottom:12px">全銘柄に共通の設定です。ここで選んだ指標が質問文作成(「聞くことが思いつかない時は」)と、銘柄詳細の表示に使われます。右端のスイッチで表示・非表示を切り替えられます(非表示にしても指標はこの一覧に残り、取り込み済みのデータも保持されます)。指標名を押すと、ほかの指標にまとめたり削除したりできます。</div>`;
-  // スナップショット指標
-  h+=metHelpLbl(`スナップショット指標 (表示中 ${snapOn}/${mm.snap.length})`, 'snap', 'margin-top:0');
+  // 主要指標(データ上は snap)
+  h+=metHelpLbl(`主要指標 (表示中 ${snapOn}/${mm.snap.length})`, 'snap', 'margin-top:0');
   mm.snap.forEach((k,i)=>{
     const on=metOn(mm,'snap',k);
     h+=`<div class="met-row${on?'':' off'}">

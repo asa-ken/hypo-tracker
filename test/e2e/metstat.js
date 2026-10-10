@@ -62,7 +62,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('その指標だけ追加で「非表示中」になる', r1[idx].badge === '非表示中' && r1.filter(x => x.badge === '非表示中').length === hiddenBase + 1);
   ok('非表示中の行は薄く表示される', r1[idx].off && r1[idx].on === false);
   ok('別リストへは移らない(非表示の指標セクションが無い)', await p.evaluate(() => !/非表示の指標/.test(document.querySelector('#sheet').innerText)));
-  ok('見出しに表示中の件数が出る', await p.evaluate(() => /スナップショット指標 \(表示中 \d+\/\d+\)/.test(document.querySelector('#sheet').innerText)));
+  ok('見出しに表示中の件数が出る', await p.evaluate(() => /主要指標 \(表示中 \d+\/\d+\)/.test(document.querySelector('#sheet').innerText)));
   const w2 = await p.evaluate(() => Math.round([...document.querySelectorAll('#sheet .swtap[data-role="disp"]')].find(s => s.querySelector('.sw').getAttribute('aria-label') === '非表示中').getBoundingClientRect().width));
   ok('「表示中」と「非表示中」で幅が変わらない', w2 === badgeBox.w);
 
