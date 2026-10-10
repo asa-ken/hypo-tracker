@@ -145,7 +145,11 @@ async function swipeRelease(page) {
   await p.waitForTimeout(250);
   ok('一覧画面でスワイプしても画面が変わらない', await p.evaluate(() => STATE.tab === 'home' && !document.querySelector('#view').style.transform));
 
-  // ---- 12. スワイプ中の見え方: 枠は動かず、下に戻り先が見える ----
+  // ---- 12. スワイプ中の見え方(2026-10-10 変更: Chrome風) ----
+  // 以前は本文が指に合わせて右へずれ、下に戻り先の一覧(半透明の下敷き)が見えていた。
+  // ユーザー指示「coolではないので chromeのようなUXにしてほしい」で、ページは動かさず、
+  // 画面の左端から丸い「←」(#backArrow)が指の高さに出てくる形にした。しきい値を越えると
+  // 「←」が紺に変わり(離せば戻る合図)、離すと戻る。しきい値の手前で離すと「←」は引っ込む
   await p.evaluate(() => {
     for (let i = 0; i < 20; i++) DB.stocks.push({ id: 'z' + i, name: '増量銘柄' + i, code: '' + (7000 + i), kind: '保有', metrics: {}, trend: {}, sections: {}, links: [] });
     save(); backFromDetail(); go('analysis'); setViewScroll(60);
@@ -155,53 +159,41 @@ async function swipeRelease(page) {
   ok('詳細に入ると先頭から始まる', await p.evaluate(() => { openStock(DB.stocks.find(s => s.name === 'テスト精機').id); return viewScroll() === 0; }));
   await p.evaluate(() => openStock(DB.stocks.find(s => s.name === 'テスト精機').id));
   await p.waitForTimeout(300);
+  const arrow = () => p.evaluate(() => { const a = document.querySelector('#backArrow'); const r = a.getBoundingClientRect(); const cs = getComputedStyle(a);
+    return { op: +cs.opacity, armed: a.classList.contains('armed'), cx: r.left + r.width / 2, cy: r.top + r.height / 2, left: r.left, w: Math.round(r.width), h: Math.round(r.height) }; });
   const y = await safeY();
   await swipeHold(p, 60, y, 200, y);
   await p.waitForTimeout(80);
   const mid = await p.evaluate(() => ({
     phone: document.querySelector('.phone').style.transform,
     view: document.querySelector('#view').style.transform,
-    prevShown: document.querySelector('#backPrev').classList.contains('show'),
-    prevHtml: document.querySelector('#backPrevInner').innerHTML.length,
-    prevIsList: /市場・銘柄分析|保有|ウォッチ/.test(document.querySelector('#backPrevInner').textContent),
-    // 下敷きは #view の箱ではなく、ヘッダーとタブバーの内側(本文が見えている範囲)を覆う
-    prevBox: (() => { const b = document.querySelector('#backPrev').getBoundingClientRect();
-      const head = document.querySelector('.top').getBoundingClientRect().bottom;
-      const tab = document.querySelector('.tabbar').getBoundingClientRect().top;
-      const phone = document.querySelector('.phone').getBoundingClientRect();
-      return Math.abs(b.top - head) < 2 && Math.abs(b.bottom - tab) < 2
-          && Math.abs(b.left - phone.left) < 2 && Math.abs(b.width - phone.width) < 2; })(),
-    prevOpacity: getComputedStyle(document.querySelector('#backPrev')).opacity,
+    prevShown: !!document.querySelector('#backPrev'), // 下敷きの部品ごと廃止した
     topFixed: document.querySelector('.top').getBoundingClientRect().left === 0,
     tabFixed: document.querySelector('.tabbar').getBoundingClientRect().left === 0,
-    shadow: !!document.querySelector('#view').style.boxShadow,
   }));
-  ok('スワイプ中も枠(.phone)は動かない', mid.phone === '');
-  ok('本文だけが右に動く', /translateX\(1?\d+px\)/.test(mid.view));
+  const a1 = await arrow();
+  ok('スワイプ中もページ(本文・枠)は動かない', mid.phone === '' && mid.view === '');
   ok('ヘッダーとタブバーは固定されたまま', mid.topFixed && mid.tabFixed);
-  ok('下敷きに戻り先の画面が出る', mid.prevShown && mid.prevHtml > 0 && mid.prevIsList);
-  ok('下敷きが画面いっぱい(ヘッダー〜タブバーの内側)を覆う', mid.prevBox);
-  ok('下敷きは半透明', parseFloat(mid.prevOpacity) > 0 && parseFloat(mid.prevOpacity) < 1);
-  ok('送り出される本文に影がつく', mid.shadow);
+  ok('戻り先の下敷きは出さない', !mid.prevShown);
+  ok('左端から丸い「←」が出る', a1.op > 0.9 && a1.left >= 0 && a1.left < 60, a1);
+  ok('「←」は指の高さに出る', Math.abs(a1.cy - y) <= 3, { y, cy: a1.cy });
+  ok('「←」は44px以上の丸', a1.w >= 44 && a1.h >= 44, a1);
+  ok('しきい値を越えると「←」が紺になる(離せば戻る合図)', a1.armed);
 
   await swipeRelease(p);
   await p.waitForTimeout(350);
   const after = await p.evaluate(() => ({
     back: !STATE.stockId,
-    prevShown: document.querySelector('#backPrev').classList.contains('show'),
-    prevHtml: document.querySelector('#backPrevInner').innerHTML.length,
     view: document.querySelector('#view').style.transform,
-    shadow: document.querySelector('#view').style.boxShadow,
     scroll: viewScroll(),
+    arrowOp: +getComputedStyle(document.querySelector('#backArrow')).opacity,
   }));
   ok('離すと一覧に戻る', after.back);
-  ok('下敷きは片付けられる', !after.prevShown && after.prevHtml === 0);
-  ok('本文のtransformと影が残らない', !after.view && !after.shadow);
+  ok('戻った後は「←」が消える', after.arrowOp === 0, after.arrowOp);
+  ok('本文のtransformが残らない', !after.view);
   ok('一覧のスクロール位置が復元される', after.scroll === 60);
 
-  // ---- 12b. 詳細を下までスクロールした状態でも、下敷きは画面いっぱいのまま ----
-  // 以前は下敷きを #view(中身の高さまで伸びる箱)に合わせていたため、
-  // 詳細が長い・スクロールしていると画面からずれて上下に余白が出ていた
+  // ---- 12b. 詳細をスクロールしていても「←」は指の高さに出る(画面に固定) ----
   await p.evaluate(() => openStock(DB.stocks.find(s => s.name === 'テスト精機').id));
   await p.waitForTimeout(300);
   await p.evaluate(() => setViewScroll(600));
@@ -212,27 +204,9 @@ async function swipeRelease(page) {
   });
   await swipeHold(p, 60, scrolledY, 200, scrolledY);
   await p.waitForTimeout(100);
-  const midScrolled = await p.evaluate(() => {
-    const b = document.querySelector('#backPrev').getBoundingClientRect();
-    const head = document.querySelector('.top').getBoundingClientRect().bottom;
-    const tab = document.querySelector('.tabbar').getBoundingClientRect().top;
-    const inner = document.querySelector('#backPrevInner');
-    const first = inner.firstElementChild;
-    return {
-      covers: Math.abs(b.top - head) < 2 && Math.abs(b.bottom - tab) < 2,
-      detailScroll: viewScroll(),
-      prevScroll: STATE._prevScroll || 0,
-      // 中身のずれは「戻り先のスクロール量」だけで決まり、詳細側のスクロール量には引きずられない
-      firstGap: first ? Math.round(first.getBoundingClientRect().top - b.top) : null,
-    };
-  });
-  ok('詳細をスクロールしていても下敷きは画面いっぱい', midScrolled.covers);
-  ok('その状態で実際に詳細はスクロールしている(前提の確認)', midScrolled.detailScroll > 0);
-  // 期待値 = 上padding(14px) - 戻り先のスクロール量。詳細のスクロール量(600)は影響しない
-  // 期待値 = 上padding(14px) + 先頭要素自身のmargin - 戻り先のスクロール量。
-  // 詳細のスクロール量(600)が混ざっていれば桁違いにずれるので、許容10pxで十分に判別できる
-  ok('下敷きの中身が詳細のスクロール量にずらされない',
-     midScrolled.firstGap !== null && Math.abs(midScrolled.firstGap - (14 - midScrolled.prevScroll)) < 10);
+  const a2 = await arrow();
+  ok('その状態で実際に詳細はスクロールしている(前提の確認)', await p.evaluate(() => viewScroll() > 0));
+  ok('詳細をスクロールしていても「←」は指の高さ', Math.abs(a2.cy - scrolledY) <= 3, { scrolledY, cy: a2.cy });
   await swipeRelease(p);
   await p.waitForTimeout(350);
 
@@ -242,11 +216,14 @@ async function swipeRelease(page) {
   const y2 = await safeY();
   await swipeHold(p, 40, y2, 85, y2);
   await p.waitForTimeout(60);
-  ok('途中でも下敷きは出る', await p.evaluate(() => document.querySelector('#backPrev').classList.contains('show')));
+  const a3 = await arrow();
+  ok('途中でも「←」は出る', a3.op > 0, a3);
+  ok('しきい値の手前では「←」は紺にならない', !a3.armed);
+  ok('引いた量が少ないほど「←」は左端寄り(指に合わせて出てくる)', a3.cx < a1.cx, { short: a3.cx, long: a1.cx });
   await swipeRelease(p);
   await p.waitForTimeout(350);
   ok('しきい値未満なら詳細のまま', await p.evaluate(() => !!STATE.stockId));
-  ok('やめたら下敷きも片付く', await p.evaluate(() => !document.querySelector('#backPrev').classList.contains('show') && !document.querySelector('#view').style.transform));
+  ok('やめたら「←」は引っ込み、本文も動いていない', await p.evaluate(() => +getComputedStyle(document.querySelector('#backArrow')).opacity === 0 && !document.querySelector('#view').style.transform));
 
   // ---- 14. 開閉の矢印 ----
   const caret = await p.evaluate(() => { backFromDetail(); go('analysis');
