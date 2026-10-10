@@ -44,13 +44,9 @@
   /* 位置と大きさ(left/width/top/height)はJSでビューポートに合わせる。
      以前は #view(＝中身の高さまで伸びる箱)に合わせていたため、詳細が長い・スクロール
      している状態だと下敷きが画面からずれ、上下に余白が出て全画面に広がらなかった */
-  /* 詳細→一覧の戻るスワイプ中に左端から出てくる丸い「←」(Chrome風)。ページ自体は動かさない。
-     位置(横・縦)と不透明度はスワイプ中にJSで直接動かし、離したときだけ transition で戻す。
-     影の色はスワイプバック中の影と同じ(動かしている最中の表現として共有) */
-  .back-arrow{position:fixed; left:0; top:0; z-index:40; width:44px; height:44px; border-radius:50%; background:var(--card); color:var(--navy); box-shadow:0 2px 10px rgba(20,30,40,.16); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transform:translate(-56px,-50%); transition:background-color .12s, color .12s;}
-  .back-arrow svg{width:22px; height:22px;}
-  .back-arrow.armed{background:var(--navy); color:var(--card);}
-  .back-arrow.settle{transition:transform .18s ease-out, opacity .18s ease-out, background-color .12s, color .12s;}
+  /* 詳細→一覧の戻るスワイプ中(Chrome風)。ヘッダーと本文が指に合わせて右へずれ、空いた左側は
+     枠(.phone)の地色を薄いグレー(--bg)にして見せる。戻り先の画面や矢印は出さない。タブバーは動かさない */
+  .phone.swiping-back{background:var(--bg);}
   .xscroll{overflow-x:auto; touch-action:manipulation;}
   /* 業績推移の表。指標数が多い銘柄だと表だけで画面が伸び、行をタップしても上のグラフが
      画面外になって見えなくなる(ユーザー指摘、2026-08-15)。ファーストビューは5行までとし、
@@ -500,7 +496,6 @@
     </div>
   </div>
   <!-- 戻るスワイプ中に、送り出される本文の下から見える「戻り先の画面」。表示専用 -->
-  <div class="back-arrow" id="backArrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></div>
   <div class="body" id="view"></div>
   <div class="tabbar">
     <button data-tab="home" class="on" onclick="go('home')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>ホーム</button>
@@ -3012,31 +3007,24 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
 // シートのエッジスワイプ(#edgeSwipeZone)と違い、こちらは帯を重ねず #view 上で直接判定する。
 // 帯を重ねると、その下にあるメモ行・分析項目のタップや指標ページャーの横スワイプを奪ってしまうため
 //
-// 見え方はChrome風(2026-10-10、ユーザー指示「coolではないので chromeのようなUXにしてほしい」):
-// ページは動かさず、左端から丸い「←」(#backArrow)を指の高さに引き出す。引いた量に合わせて出てきて、
-// しきい値(THRESH)を越えると紺に変わる(離せば戻る合図)。離すと戻り、手前で離すと「←」は引っ込む。
-// 以前は本文が指に合わせて右へずれ、下に戻り先の一覧(半透明の下敷き #backPrev)を見せていた
+// 見え方はChrome(iPhone)の戻るスワイプに合わせる(2026-10-10、ユーザーが実画面のキャプチャで指定):
+// ヘッダーと本文が指に合わせて右へずれ、空いた左側は無地の薄いグレー。戻り先の画面も矢印も出さない。
+// 離すとしきい値を越えていれば右へ送り出してから一覧に戻り、手前なら元の位置に戻る。タブバーは動かさない。
+// 経緯: 当初は下に戻り先の一覧を半透明で敷いていた → 同日、左端から丸い「←」を出す形にした →
+// ユーザーが Chrome の実画面を示し「左半分が薄いグレー、矢印はいらない」として、この形になった
 (function(){
-  const THRESH=70, DECIDE=10, START_RATIO=.4, HIDE_X=-56, SHOW_X=14;
-  const view=$('#view'), arrow=$('#backArrow');
+  const THRESH=70, DECIDE=10, START_RATIO=.4;
+  const view=$('#view'), top=$('.top'), phone=$('.phone');
   let sx=0, sy=0, state='idle', dx=0; // idle|pending|swipe
-  // 縦は指の高さ。ヘッダーとタブバーにかからないよう本文の見えている範囲に収める
-  function arrowY(y){
-    const top=$('.top').getBoundingClientRect().bottom+28, bot=$('.tabbar').getBoundingClientRect().top-28;
-    return Math.min(Math.max(y,top),bot);
+  const SHADOW='-6px 0 18px rgba(20,30,40,.16)';
+  function moveTo(x, anim){
+    [top, view].forEach(el=>{
+      el.style.transition=anim?'transform .15s ease-out':'';
+      el.style.transform=x?`translateX(${x}px)`:'';
+      el.style.boxShadow=x?SHADOW:'';
+    });
   }
-  function place(d, y){
-    const p=Math.min(Math.max(d,0)/THRESH,1);
-    arrow.style.top=arrowY(y)+'px';
-    arrow.style.transform=`translate(${HIDE_X+(SHOW_X-HIDE_X)*p}px,-50%)`;
-    arrow.style.opacity=String(Math.min(1,p*1.6));
-    arrow.classList.toggle('armed', d>THRESH);
-  }
-  function settle(){ // 引っ込める(離したとき・戻ったとき)
-    arrow.classList.add('settle');
-    arrow.style.transform=`translate(${HIDE_X}px,-50%)`; arrow.style.opacity='0';
-    setTimeout(()=>{ arrow.classList.remove('settle','armed'); }, 200);
-  }
+  function cleanup(){ [top, view].forEach(el=>{ el.style.transition=''; el.style.transform=''; el.style.boxShadow=''; }); phone.classList.remove('swiping-back'); }
   view.addEventListener('touchstart', e=>{
     state='idle';
     if(!STATE.stockId) return;                                    // 詳細画面以外では効かせない
@@ -3056,15 +3044,17 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
       if(Math.abs(dx)<DECIDE && Math.abs(dy)<DECIDE) return;       // タップか縦スクロールかまだ様子見
       if(!(dx>0 && Math.abs(dx)>Math.abs(dy))){ state='idle'; return; } // 縦スクロールと左方向は邪魔しない
       state='swipe';
-      arrow.classList.remove('settle');
+      phone.classList.add('swiping-back');
     }
-    place(dx, t.clientY);
+    moveTo(Math.max(0,dx), false);
     if(e.cancelable) e.preventDefault();
   }, {passive:false});
   function endSwipe(){
     if(state==='swipe'){
-      if(dx>THRESH) backFromDetail();
-      settle();
+      const back=dx>THRESH;
+      // 戻るときは画面の外まで送り出してから差し替える。途中で止めたときだけ元の位置に戻す
+      moveTo(back?view.offsetWidth:0, true);
+      setTimeout(()=>{ cleanup(); if(back) backFromDetail(); }, 150);
     }
     state='idle';
   }

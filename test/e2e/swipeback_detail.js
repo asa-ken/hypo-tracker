@@ -145,11 +145,10 @@ async function swipeRelease(page) {
   await p.waitForTimeout(250);
   ok('一覧画面でスワイプしても画面が変わらない', await p.evaluate(() => STATE.tab === 'home' && !document.querySelector('#view').style.transform));
 
-  // ---- 12. スワイプ中の見え方(2026-10-10 変更: Chrome風) ----
-  // 以前は本文が指に合わせて右へずれ、下に戻り先の一覧(半透明の下敷き)が見えていた。
-  // ユーザー指示「coolではないので chromeのようなUXにしてほしい」で、ページは動かさず、
-  // 画面の左端から丸い「←」(#backArrow)が指の高さに出てくる形にした。しきい値を越えると
-  // 「←」が紺に変わり(離せば戻る合図)、離すと戻る。しきい値の手前で離すと「←」は引っ込む
+  // ---- 12. スワイプ中の見え方(2026-10-10: Chrome の実画面に合わせる) ----
+  // ヘッダーと本文が指に合わせて右へずれ、空いた左側は無地の薄いグレー(--bg)。戻り先の画面も矢印も出さない。
+  // タブバーは動かさない。経緯: 下敷きに一覧を半透明で敷く → 丸い「←」→ ユーザーがChromeの実画面を示して
+  // 「左半分が薄いグレー、矢印はいらない」としたこの形
   await p.evaluate(() => {
     for (let i = 0; i < 20; i++) DB.stocks.push({ id: 'z' + i, name: '増量銘柄' + i, code: '' + (7000 + i), kind: '保有', metrics: {}, trend: {}, sections: {}, links: [] });
     save(); backFromDetail(); go('analysis'); setViewScroll(60);
@@ -159,41 +158,51 @@ async function swipeRelease(page) {
   ok('詳細に入ると先頭から始まる', await p.evaluate(() => { openStock(DB.stocks.find(s => s.name === 'テスト精機').id); return viewScroll() === 0; }));
   await p.evaluate(() => openStock(DB.stocks.find(s => s.name === 'テスト精機').id));
   await p.waitForTimeout(300);
-  const arrow = () => p.evaluate(() => { const a = document.querySelector('#backArrow'); const r = a.getBoundingClientRect(); const cs = getComputedStyle(a);
-    return { op: +cs.opacity, armed: a.classList.contains('armed'), cx: r.left + r.width / 2, cy: r.top + r.height / 2, left: r.left, w: Math.round(r.width), h: Math.round(r.height) }; });
+  const midState = yy => p.evaluate(yy => {
+    const ph = document.querySelector('.phone');
+    const left = document.elementFromPoint(20, yy);
+    return {
+      phone: ph.style.transform,
+      view: document.querySelector('#view').style.transform,
+      top: document.querySelector('.top').style.transform,
+      tabLeft: Math.round(document.querySelector('.tabbar').getBoundingClientRect().left),
+      gray: getComputedStyle(ph).backgroundColor,
+      bg: getComputedStyle(document.body).backgroundColor,
+      leftIsFrame: left === ph,
+      shadow: !!document.querySelector('#view').style.boxShadow,
+      noArrow: !document.querySelector('#backArrow'),
+      noUnder: !document.querySelector('#backPrev'),
+    };
+  }, yy);
+  const tab0 = await p.evaluate(() => Math.round(document.querySelector('.tabbar').getBoundingClientRect().left));
   const y = await safeY();
   await swipeHold(p, 60, y, 200, y);
   await p.waitForTimeout(80);
-  const mid = await p.evaluate(() => ({
-    phone: document.querySelector('.phone').style.transform,
-    view: document.querySelector('#view').style.transform,
-    prevShown: !!document.querySelector('#backPrev'), // 下敷きの部品ごと廃止した
-    topFixed: document.querySelector('.top').getBoundingClientRect().left === 0,
-    tabFixed: document.querySelector('.tabbar').getBoundingClientRect().left === 0,
-  }));
-  const a1 = await arrow();
-  ok('スワイプ中もページ(本文・枠)は動かない', mid.phone === '' && mid.view === '');
-  ok('ヘッダーとタブバーは固定されたまま', mid.topFixed && mid.tabFixed);
-  ok('戻り先の下敷きは出さない', !mid.prevShown);
-  ok('左端から丸い「←」が出る', a1.op > 0.9 && a1.left >= 0 && a1.left < 60, a1);
-  ok('「←」は指の高さに出る', Math.abs(a1.cy - y) <= 3, { y, cy: a1.cy });
-  ok('「←」は44px以上の丸', a1.w >= 44 && a1.h >= 44, a1);
-  ok('しきい値を越えると「←」が紺になる(離せば戻る合図)', a1.armed);
+  const mid = await midState(y);
+  ok('スワイプ中も枠(.phone)は動かない', mid.phone === '');
+  ok('本文が指に合わせて右へずれる', /translateX\(1[34]\d(\.\d+)?px\)/.test(mid.view), mid.view);
+  ok('ヘッダーも本文と一緒にずれる', mid.top === mid.view, { top: mid.top, view: mid.view });
+  ok('タブバーは動かない', mid.tabLeft === tab0, { before: tab0, mid: mid.tabLeft });
+  ok('空いた左側は無地の薄いグレー(--bg)', mid.leftIsFrame && mid.gray === mid.bg && mid.gray === 'rgb(238, 240, 242)', mid);
+  ok('戻り先の画面(下敷き)も矢印も出さない', mid.noArrow && mid.noUnder);
+  ok('ずれた本文の端に影がつく', mid.shadow);
 
   await swipeRelease(p);
   await p.waitForTimeout(350);
   const after = await p.evaluate(() => ({
     back: !STATE.stockId,
     view: document.querySelector('#view').style.transform,
+    top: document.querySelector('.top').style.transform,
+    shadow: document.querySelector('#view').style.boxShadow,
+    gray: document.querySelector('.phone').classList.contains('swiping-back'),
     scroll: viewScroll(),
-    arrowOp: +getComputedStyle(document.querySelector('#backArrow')).opacity,
   }));
   ok('離すと一覧に戻る', after.back);
-  ok('戻った後は「←」が消える', after.arrowOp === 0, after.arrowOp);
-  ok('本文のtransformが残らない', !after.view);
+  ok('ヘッダー・本文のtransformと影が残らない', !after.view && !after.top && !after.shadow);
+  ok('枠のグレーも元に戻る', !after.gray);
   ok('一覧のスクロール位置が復元される', after.scroll === 60);
 
-  // ---- 12b. 詳細をスクロールしていても「←」は指の高さに出る(画面に固定) ----
+  // ---- 12b. 詳細をスクロールしていても、左側はグレーのまま(本文の続きが見えない) ----
   await p.evaluate(() => openStock(DB.stocks.find(s => s.name === 'テスト精機').id));
   await p.waitForTimeout(300);
   await p.evaluate(() => setViewScroll(600));
@@ -204,9 +213,9 @@ async function swipeRelease(page) {
   });
   await swipeHold(p, 60, scrolledY, 200, scrolledY);
   await p.waitForTimeout(100);
-  const a2 = await arrow();
+  const midS = await midState(scrolledY);
   ok('その状態で実際に詳細はスクロールしている(前提の確認)', await p.evaluate(() => viewScroll() > 0));
-  ok('詳細をスクロールしていても「←」は指の高さ', Math.abs(a2.cy - scrolledY) <= 3, { scrolledY, cy: a2.cy });
+  ok('詳細をスクロールしていても左側はグレー', midS.leftIsFrame && midS.gray === 'rgb(238, 240, 242)', midS);
   await swipeRelease(p);
   await p.waitForTimeout(350);
 
@@ -216,14 +225,11 @@ async function swipeRelease(page) {
   const y2 = await safeY();
   await swipeHold(p, 40, y2, 85, y2);
   await p.waitForTimeout(60);
-  const a3 = await arrow();
-  ok('途中でも「←」は出る', a3.op > 0, a3);
-  ok('しきい値の手前では「←」は紺にならない', !a3.armed);
-  ok('引いた量が少ないほど「←」は左端寄り(指に合わせて出てくる)', a3.cx < a1.cx, { short: a3.cx, long: a1.cx });
+  ok('途中でもヘッダーと本文はずれて、左側がグレーになる', await p.evaluate(() => !!document.querySelector('#view').style.transform && document.querySelector('.phone').classList.contains('swiping-back')));
   await swipeRelease(p);
   await p.waitForTimeout(350);
   ok('しきい値未満なら詳細のまま', await p.evaluate(() => !!STATE.stockId));
-  ok('やめたら「←」は引っ込み、本文も動いていない', await p.evaluate(() => +getComputedStyle(document.querySelector('#backArrow')).opacity === 0 && !document.querySelector('#view').style.transform));
+  ok('やめたら元の位置に戻り、グレーも消える', await p.evaluate(() => !document.querySelector('#view').style.transform && !document.querySelector('.top').style.transform && !document.querySelector('.phone').classList.contains('swiping-back')));
 
   // ---- 14. 開閉の矢印 ----
   const caret = await p.evaluate(() => { backFromDetail(); go('analysis');
