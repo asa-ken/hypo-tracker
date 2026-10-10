@@ -39,7 +39,6 @@ const DOCUMENTED = [
 // 選択肢が無いものに書いても文書が長くなるだけで、守るべきことは増えない。
 // 増減の検査自体は下の REGISTERED に入るのでこちらにも効いている。
 const UNDOCUMENTED_OK = [
-  '.back-arrow',        // 詳細→一覧の戻るスワイプ中に左端から出る「←」(2026-10-10、Chrome風)
   '.btn',               // ボタン
   '.dot',               // ページャの点
   '.exit-confirm-card', // 離脱確認ダイアログ
