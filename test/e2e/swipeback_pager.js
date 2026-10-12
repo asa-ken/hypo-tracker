@@ -34,6 +34,8 @@ async function swipe(page, x1, y1, x2, y2, steps=6) {
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  // アプリ独自の戻るスワイプはホーム画面に追加したアプリ表示のときだけ動く(2026-10-11、historyback.js)。その状態で検査する
+  await page.addInitScript(() => { Object.defineProperty(navigator, 'standalone', { get: () => true }); });
   await page.clock.install({ time: CLOCK });
   await page.goto('http://127.0.0.1:8731/index.html');
   await page.evaluate(t => localStorage.setItem('hypo_tracker_proto_v1', t), td);

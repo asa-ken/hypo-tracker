@@ -943,14 +943,39 @@ function go(tab){
   if(tab==='reminder' && !STATE._remFromStock) STATE.remStockId=null;
   // 画面を移ると貼り付け欄ごと作り直されるので、取り込み先の選択も持ち越さない
   STATE._askFromStock=false; STATE._remFromStock=false; STATE._importPick=null;
+  if(STATE.stockId) leaveDetailHistory(); // 詳細から別画面へ移るときは、履歴に積んだ詳細も降ろす
   STATE.tab=tab; STATE.stockId=null; STATE.anaReorder=null; // 並べ替えの状態はタブを移ると終える
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   render(); $('#view').scrollTop=0;
 }
 function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
 function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
+// 詳細画面とブラウザの履歴を結びつける(2026-10-11、iPhone の Chrome での実画面報告から):
+// 詳細を開くと履歴に1つ積み、ブラウザの「戻る」(戻るスワイプ・戻るボタン)で一覧に戻す。
+// 積まないと、ブラウザの戻るでアプリの前に開いていたページへ出てしまう。
+// 詳細から詳細へ渡るときは積み増さず差し替える(「戻る」1回で最初の一覧へ)
+function inDetailHistory(){ return !!(history.state && history.state.detail); }
+// アプリ側(ヘッダーの「← 戻る」・タブ・スワイプ)で詳細を出るとき、積んだ詳細の履歴も1つ戻しておく。
+// それで起きる popstate は自分で起こしたものなので1回だけ読み飛ばす
+function leaveDetailHistory(){ if(inDetailHistory()){ STATE._popIgnore=true; history.back(); } }
+window.addEventListener('popstate', e=>{
+  if(STATE._popIgnore){ STATE._popIgnore=false; return; }
+  const d=e.state && e.state.detail;
+  if($('#scrim').classList.contains('show')){
+    // シートが開いているときの「戻る」は、まずシートを閉じる(入力中なら閉じる確認を出す)。詳細の履歴は積み直す
+    if(STATE.stockId && !d) history.pushState({detail:STATE.stockId},'');
+    requestCloseSheet(); return;
+  }
+  if(d){ // 「進む」で詳細に戻ってきた。履歴はもう積んであるので積まない
+    if(!stock(d)){ history.replaceState(null,''); return; }
+    if(!STATE.stockId) STATE._prevScroll=viewScroll();
+    STATE.stockId=d; render(); setViewScroll(0); return;
+  }
+  if(STATE.stockId) closeDetail();
+});
 // 詳細画面から一覧へ戻る。ヘッダーの「← 戻る」と画面端スワイプで同じ動きにする
-function backFromDetail(){
+function backFromDetail(){ leaveDetailHistory(); closeDetail(); }
+function closeDetail(){
   STATE.stockId=null; render();
   // 一覧のどこを見ていたかに戻す。先頭に飛ばされると、長い一覧では探し直しになる
   setViewScroll(STATE._prevScroll||0);
@@ -961,7 +986,8 @@ function viewScroll(){ const e=document.scrollingElement; return e?e.scrollTop:(
 function setViewScroll(y){ const e=document.scrollingElement; if(e) e.scrollTop=y; $('#view').scrollTop=y; }
 function openStock(id){
   // 一覧から詳細に入るときだけ、直前の画面を控える(詳細から詳細へ渡り歩いても最初の一覧を保つ)
-  if(!STATE.stockId){ STATE._prevScroll=viewScroll(); }
+  if(!STATE.stockId){ STATE._prevScroll=viewScroll(); history.pushState({detail:id},''); }
+  else if(inDetailHistory()) history.replaceState({detail:id},'');
   STATE.stockId=id; render(); setViewScroll(0);
 }
 
@@ -3010,8 +3036,11 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
 // 見え方はChrome(iPhone)の戻るスワイプに合わせる(2026-10-10、ユーザーが実画面のキャプチャで指定):
 // ヘッダーと本文が指に合わせて右へずれ、空いた左側は無地の薄いグレー。戻り先の画面も矢印も出さない。
 // 離すとしきい値を越えていれば右へ送り出してから一覧に戻り、手前なら元の位置に戻る。タブバーは動かさない。
+// ブラウザで開いているときは効かせない(2026-10-11): ブラウザ自身の戻るスワイプと同時に動いて二重になる。
+// ブラウザ側は履歴(上の popstate)で一覧に戻る。ホーム画面に追加したアプリ表示のときだけこちらを使う
 // 経緯: 当初は下に戻り先の一覧を半透明で敷いていた → 同日、左端から丸い「←」を出す形にした →
 // ユーザーが Chrome の実画面を示し「左半分が薄いグレー、矢印はいらない」として、この形になった
+function isStandalone(){ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }
 (function(){
   const THRESH=70, DECIDE=10, START_RATIO=.4;
   const view=$('#view'), top=$('.top'), phone=$('.phone');
@@ -3028,6 +3057,7 @@ function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeS
   view.addEventListener('touchstart', e=>{
     state='idle';
     if(!STATE.stockId) return;                                    // 詳細画面以外では効かせない
+    if(!isStandalone()) return;                                   // ブラウザ表示ではブラウザの戻るスワイプに任せる
     if($('#scrim').classList.contains('show')) return;             // シートが開いている間はシート側の担当
     if(e.touches.length!==1) return;
     const t=e.touches[0];
@@ -3876,6 +3906,10 @@ function sheetBackup(){
     <div class="hint" style="margin-top:10px">書き出したファイルはダウンロードフォルダに保存されます。復元すると現在のデータは上書きされます。</div>`);
 }
 
+// 再読み込みは一覧から始まる。前に積んだ詳細の履歴が現在地に残っていると、次の「戻る」が空振りするので消す
+if(inDetailHistory()) history.replaceState(null,'');
+// スクロール位置はアプリ側で戻す(backFromDetail)。ブラウザにも戻させると、シートを閉じただけの詳細に一覧の位置が当たる
+if('scrollRestoration' in history) history.scrollRestoration='manual';
 render();
 </script>
 </body>

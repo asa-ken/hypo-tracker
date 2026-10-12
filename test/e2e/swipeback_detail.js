@@ -50,6 +50,8 @@ async function swipeRelease(page) {
 (async () => {
   const b = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  // アプリ独自の戻るスワイプはホーム画面に追加したアプリ表示のときだけ動く(2026-10-11、historyback.js)。その状態で検査する
+  await p.addInitScript(() => { Object.defineProperty(navigator, 'standalone', { get: () => true }); });
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.clock.install({ time: CLOCK });
   await p.goto('http://127.0.0.1:8731/index.html');
