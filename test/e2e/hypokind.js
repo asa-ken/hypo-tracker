@@ -32,11 +32,12 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   ok('追加は見出しの文字ボタン1つだけ', heads.length === 1 && heads[0].trim() === '追加');
 
   // ---- 2. タップすると種別セグメント付きの作成画面が開く ----
-  await p.evaluate(() => { const b = [...document.querySelectorAll('#view button')].find(x => x.textContent.trim() === '＋'); b.click(); });
+  // 追加の入口は「メモ・注目ポイント」見出しの「追加」(画面内の「＋」ボタンは廃止済み。2026-10-15、旧版はここで止まっていた)
+  await p.evaluate(() => { const h = [...document.querySelectorAll('#view .lbl.grp')].find(e => e.textContent.includes('メモ・注目ポイント')); h.querySelector('.grp-edit').click(); });
   await p.waitForTimeout(200);
   const sheetInfo = await p.evaluate(() => {
     const segBtns = [...document.querySelectorAll('#sheet .seg button')].map(b => ({ t: b.textContent.trim(), on: b.classList.contains('on') }));
-    return { title: document.querySelector('#sheet h3').textContent, segBtns };
+    return { title: document.querySelector('#sheet .headbar .t').textContent, segBtns };
   });
   // 種別の既定・セグメントの並びは注目ポイント優位に変更済み(watchdefault.jsで詳しく検証)。
   // ここでは「1ボタンに統合され、作成画面のセグメントで種別を選ぶ・切り替えても入力が保たれる」
@@ -50,7 +51,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(() => { const b = [...document.querySelectorAll('#sheet .seg button')].find(x => x.textContent.trim() === 'メモ'); b.click(); });
   await p.waitForTimeout(200);
   const afterSwitch = await p.evaluate(() => ({
-    title: document.querySelector('#sheet h3').textContent,
+    title: document.querySelector('#sheet .headbar .t').textContent,
     text: document.querySelector('#hy_text').value,
     segOn: [...document.querySelectorAll('#sheet .seg button')].map(b => b.classList.contains('on')),
   }));
@@ -69,15 +70,15 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.evaluate(hid => sheetEditHypo(hid), memoId);
   await p.waitForTimeout(200);
   const editSheet1 = await p.evaluate(() => ({
-    title: document.querySelector('#sheet h3').textContent,
+    title: document.querySelector('#sheet .headbar .t').textContent,
     segOn: [...document.querySelectorAll('#sheet .seg button')].map(b => b.classList.contains('on')),
   }));
   // セグメントの並びは 注目ポイント→メモ なので、メモが選択されているのは segOn[1]
-  ok('既存メモの編集画面はメモが選択されている(全体の既定に引きずられない)', editSheet1.title === 'メモを編集' && !editSheet1.segOn[0] && editSheet1.segOn[1]);
+  ok('既存メモの編集画面はメモが選択されている(全体の既定に引きずられない)', editSheet1.title === 'メモ' && !editSheet1.segOn[0] && editSheet1.segOn[1]);
   await p.evaluate(() => { const b = [...document.querySelectorAll('#sheet .seg button')].find(x => x.textContent.trim() === '注目ポイント'); b.click(); });
   await p.waitForTimeout(200);
-  ok('編集中でも注目ポイントに切り替わる', await p.evaluate(() => document.querySelector('#sheet h3').textContent) === '注目ポイントを編集');
-  await p.evaluate(() => { document.querySelector('#sheet .btn.pri').click(); });
+  ok('編集中でも注目ポイントに切り替わる', await p.evaluate(() => document.querySelector('#sheet .headbar .t').textContent) === '注目ポイント');
+  await p.evaluate(() => { document.querySelector('#sheet .headbar .act').click(); });
   await p.waitForTimeout(300);
   const afterKindSave = await p.evaluate(id => DB.hypotheses.find(h => h.id === id).kind, memoId);
   ok('保存すると実際に種別(kind)が変わる', afterKindSave === 'watch');
@@ -89,7 +90,7 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
   await p.waitForTimeout(200);
   await p.evaluate(() => { const b = [...document.querySelectorAll('#sheet .seg button')].find(x => x.textContent.trim() === 'メモ'); b.click(); });
   await p.waitForTimeout(200);
-  await p.evaluate(() => { document.querySelector('#sheet .btn.pri').click(); });
+  await p.evaluate(() => { document.querySelector('#sheet .headbar .act').click(); });
   await p.waitForTimeout(300);
   const afterKindSave2 = await p.evaluate(id => DB.hypotheses.find(h => h.id === id).kind, watchId);
   ok('注目→メモへの変更も保存される', afterKindSave2 === 'memo');

@@ -35,15 +35,18 @@ trap cleanup EXIT
 
 fail=0
 for s in $SUITES; do
-  out=$(node "$s.js" 2>&1)
+  out=$(node "$s.js" 2>&1); rc=$?
   n=$(grep -c '❌' <<<"$out")
   # JSエラーは画面が壊れた印なので、アサーションが全部通っていても失敗として扱う
   err=$(grep -o 'JSエラー: \[.*\]' <<<"$out" | grep -v '\[\]')
-  if [ "$n" != "0" ] || [ -n "$err" ]; then
+  # 途中で例外を出して止まったスイートも失敗として扱う。止まる前の ✅ だけを数えて ok と出すと、
+  # 後半を検査できていないことに気づけない(2026-10-15、3スイートが main で止まったまま ok と出ていた)
+  if [ "$n" != "0" ] || [ -n "$err" ] || [ "$rc" != "0" ]; then
     fail=$((fail+1))
     echo "=== $s: NG ($n) ==="
     grep '❌' <<<"$out"
     [ -n "$err" ] && echo "$err"
+    [ "$rc" != "0" ] && { echo "途中で止まった(終了コード $rc):"; grep -m1 -E 'Error|error' <<<"$out"; }
   else
     echo "--- $s: ok ($(grep -c '✅' <<<"$out"))"
   fi

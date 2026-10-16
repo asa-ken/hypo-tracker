@@ -76,14 +76,16 @@ const ok = (l, v) => console.log((v ? '✅' : '❌') + ' ' + l + ' → ' + JSON.
     const secs = [...document.querySelectorAll('#view .sec')];
     return {
       count: secs.length,
-      allHaveCaret: secs.every(s => !!s.querySelector('.h svg.caret')),
-      ds: secs.map(s => s.querySelector('.h svg.caret path').getAttribute('d')),
+      // ①②の見出しは矢尻、①の中の入れ子(「説明書の中身を見る」等)は＋×(2026-08-10 #115 以降の形。
+      // 旧版はすべてに矢尻を求めていて、入れ子の＋×で止まっていた。2026-10-15)
+      allHaveCaret: secs.every(s => !!s.querySelector(':scope > .h svg.caret, :scope > .h svg.plusmark')),
+      ds: secs.map(s => s.querySelector(':scope > .h svg.caret path')).filter(Boolean).map(e => e.getAttribute('d')),
       text: document.querySelector('#view').innerText,
     };
   });
   ok('取り込み画面に展開エリアが複数ある', importSecs.count >= 2);
-  ok('すべてに矢尻が付く', importSecs.allHaveCaret);
-  ok('取り込み画面の矢尻も同じ形', importSecs.ds.every(d => d === grpCaret.d));
+  ok('すべてに開閉の印(見出しは矢尻、入れ子は＋×)が付く', importSecs.allHaveCaret);
+  ok('取り込み画面の矢尻も同じ形', importSecs.ds.length >= 1 && importSecs.ds.every(d => d === grpCaret.d));
   ok('「開閉」というテキスト表記は無くなった', !/開閉/.test(importSecs.text));
 
   // ---- 3. 分析カテゴリの「n/m 項目」は出さない(バッジで足りる) ----
