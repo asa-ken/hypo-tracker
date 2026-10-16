@@ -99,6 +99,47 @@ async function swipe(page, x1, y, x2) {
   await p.reload(); await p.waitForTimeout(400);
   ok('再読み込み直後は一覧/ホームで、履歴の現在地も詳細ではない', await p.evaluate(() => STATE.stockId === null && !(history.state && history.state.detail)));
 
+  // ---- 10. シートも履歴に1つ積み、どの画面でもブラウザの「戻る」でシートが閉じる(アプリの外へ出ない) ----
+  // 2026-10-15 追加(ユーザー確認「A'で進めてください」)。以前は詳細画面以外でシートを開いて「戻る」すると、
+  // 履歴が無いのでアプリの前のページへ出てしまっていた
+  await p.evaluate(() => { go('home'); }); await p.waitForTimeout(300);
+  const h0 = await st();
+  await p.evaluate(() => openReminder(DB.reminders[0].id)); await p.waitForTimeout(200);
+  const h1 = await st();
+  ok('ホームでシートを開くと履歴に1つ積む', h1.len === h0.len + 1 && h1.hs && h1.hs.sheet === true, { before: h0.len, after: h1.len, hs: h1.hs });
+  await p.goBack(); await p.waitForTimeout(300);
+  ok('ホームのシートでブラウザの「戻る」→ シートだけ閉じ、ホームのまま(アプリの外へ出ない)', await p.evaluate(() => typeof STATE !== 'undefined' && STATE.tab === 'home' && !document.querySelector('#scrim').classList.contains('show')));
+  // ✕で閉じると、積んだ履歴も降りる(次の「戻る」が空振りしない)
+  await p.evaluate(() => openReminder(DB.reminders[0].id)); await p.waitForTimeout(200);
+  await p.evaluate(() => document.querySelector('.sheet-close').click()); await p.waitForTimeout(300);
+  ok('✕で閉じると、履歴の現在地もシートではない', await p.evaluate(() => !(history.state && history.state.sheet)));
+  // シートからシートへ(☰ → 注目テーマを編集)渡っても、「戻る」1回で閉じて詳細に残る
+  await p.evaluate(() => { go('analysis'); openStock('9001'); }); await p.waitForTimeout(200);
+  const d0 = await st();
+  await p.evaluate(() => sheetStockMenu('9001')); await p.waitForTimeout(150);
+  await p.evaluate(() => [...document.querySelectorAll('#sheet button')].find(b => /注目テーマを編集/.test(b.textContent)).click()); await p.waitForTimeout(250);
+  ok('シート→シートと渡っても積むのは1つ', (await st()).len === d0.len + 1, { len: (await st()).len, expected: d0.len + 1 });
+  await p.goBack(); await p.waitForTimeout(300);
+  const d1 = await st();
+  ok('「戻る」1回でシートが閉じ、詳細に残る', d1.sid === '9001' && !(await p.evaluate(() => document.querySelector('#scrim').classList.contains('show'))) && d1.hs && d1.hs.detail === '9001' && !d1.hs.sheet, d1);
+  // シートの操作で閉じてすぐ詳細へ移っても、履歴は「一覧 → 詳細」の形にそろう
+  await p.evaluate(() => { go('analysis'); }); await p.waitForTimeout(300);
+  await p.evaluate(() => sheetAddStock()); await p.waitForTimeout(200);
+  await p.evaluate(() => { closeSheet(); openStock('9001'); }); await p.waitForTimeout(400);
+  const e1 = await st();
+  ok('シートを閉じてすぐ詳細を開くと、履歴の現在地は詳細(シートは残らない)', e1.sid === '9001' && e1.hs && e1.hs.detail === '9001' && !e1.hs.sheet, e1);
+  await p.goBack(); await p.waitForTimeout(300);
+  ok('その「戻る」で一覧に戻る(アプリの外へ出ない)', await p.evaluate(() => typeof STATE !== 'undefined' && STATE.stockId === null && STATE.tab === 'analysis'));
+  // 入力中のシートで「戻る」→ 確認を出し、シートの履歴は積み直す(「編集を続ける」後にもう一度「戻る」できる)
+  await p.evaluate(() => { openStock('9001'); sheetTheme('9001'); document.querySelector('#sheet input, #sheet textarea').value = '書きかけ2'; }); await p.waitForTimeout(250);
+  await p.goBack(); await p.waitForTimeout(300);
+  ok('入力中のシートで「戻る」→ 確認が出て、履歴の現在地はシートに戻る', await p.evaluate(() => document.querySelector('#exitConfirm').classList.contains('show') && history.state && history.state.sheet === true));
+  await p.evaluate(() => cancelCloseSheet()); await p.waitForTimeout(100);
+  await p.goBack(); await p.waitForTimeout(300);
+  ok('「編集を続ける」の後も、「戻る」でもう一度確認が出る', await p.evaluate(() => document.querySelector('#exitConfirm').classList.contains('show')));
+  await p.evaluate(() => confirmCloseSheet()); await p.waitForTimeout(300);
+  ok('破棄して閉じた後は、詳細のまま・履歴の現在地は詳細', await p.evaluate(() => STATE.stockId === '9001' && history.state && history.state.detail === '9001' && !history.state.sheet));
+
   console.log('JSエラー:', JSON.stringify(errs));
 
   // ---- 9. ホーム画面に追加したアプリ表示(standalone)では、アプリ独自の戻るスワイプが動く ----

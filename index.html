@@ -322,12 +322,11 @@
   /* modal */
   .scrim{position:fixed; inset:0; background:rgba(20,30,40,.4); z-index:40; display:none; align-items:flex-end; justify-content:center;}
   .scrim.show{display:flex;}
-  .sheet{position:relative; background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto;}
-  /* 画面端スワイプで閉じるための帯。ここだけtouch-action:pan-yにして、
-     ブラウザ自身の「画面端スワイプで戻る」機能に横方向の操作を渡さないようにする。
-     判定が狭すぎるとの指摘を受け、左端30%まで広げている */
-  .edge-swipe-zone{position:fixed; top:0; bottom:0; left:0; width:30%; z-index:41; touch-action:pan-y; pointer-events:none;}
-  .edge-swipe-zone.show{pointer-events:auto;}
+  .sheet{position:relative; background:var(--app); width:100%; max-width:430px; border-radius:18px 18px 0 0; padding:16px 16px 26px; max-height:88vh; overflow-y:auto; overscroll-behavior:contain;}
+  /* 下へ引いて閉じられることの手がかり(iOS・Android のシートと同じ上端中央のつまみ)。
+     押す場所ではなく目印なので、当たり判定はシート全体(中身が一番上までスクロールされているとき)。
+     上端に貼り付く操作バー(.headbar、z-index:2)より手前に出す */
+  .sheet-grip{position:absolute; top:6px; left:50%; width:36px; height:5px; margin-left:-18px; border-radius:3px; background:var(--line2); pointer-events:none; z-index:3;}
   .sheet h3{font-size:15px; font-weight:700; margin:2px 0 12px; text-align:center;}
   /* 操作をシートの上端に集める形。全幅ボタンを何段も積むより軽く、
      空いた高さを本文の入力欄に回せる。スクロールしても操作が隠れない */
@@ -505,7 +504,6 @@
   </div>
 </div>
 <div class="scrim" id="scrim" onclick="if(event.target===this)requestCloseSheet()"><div class="sheet" id="sheet"></div></div>
-<div class="edge-swipe-zone" id="edgeSwipeZone"></div>
 <div class="exit-confirm" id="exitConfirm">
   <div class="exit-confirm-card">
     <div class="exit-confirm-msg">保存されていない変更があります。破棄しますか?</div>
@@ -943,40 +941,54 @@ function go(tab){
   if(tab==='reminder' && !STATE._remFromStock) STATE.remStockId=null;
   // 画面を移ると貼り付け欄ごと作り直されるので、取り込み先の選択も持ち越さない
   STATE._askFromStock=false; STATE._remFromStock=false; STATE._importPick=null;
-  if(STATE.stockId) leaveDetailHistory(); // 詳細から別画面へ移るときは、履歴に積んだ詳細も降ろす
   STATE.tab=tab; STATE.stockId=null; STATE.anaReorder=null; // 並べ替えの状態はタブを移ると終える
+  scheduleHistSync(); // 詳細から別画面へ移るときは、履歴に積んだ詳細も降ろす
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   render(); $('#view').scrollTop=0;
 }
 function openAsk(sid){ STATE.askStockId=sid; STATE._askFromStock=true; go('import'); }
 function openRem(sid){ STATE.remFilter=sid; STATE.remStockId=sid; STATE._remFromStock=true; go('reminder'); }
-// 詳細画面とブラウザの履歴を結びつける(2026-10-11、iPhone の Chrome での実画面報告から):
-// 詳細を開くと履歴に1つ積み、ブラウザの「戻る」(戻るスワイプ・戻るボタン)で一覧に戻す。
-// 積まないと、ブラウザの戻るでアプリの前に開いていたページへ出てしまう。
-// 詳細から詳細へ渡るときは積み増さず差し替える(「戻る」1回で最初の一覧へ)
-function inDetailHistory(){ return !!(history.state && history.state.detail); }
-// アプリ側(ヘッダーの「← 戻る」・タブ・スワイプ)で詳細を出るとき、積んだ詳細の履歴も1つ戻しておく。
-// それで起きる popstate は自分で起こしたものなので1回だけ読み飛ばす
-function leaveDetailHistory(){ if(inDetailHistory()){ STATE._popIgnore=true; history.back(); } }
+// 詳細画面・シートとブラウザの履歴を結びつける。
+// 詳細を開くと履歴に1つ、シートを開くとさらに1つ積み、ブラウザの「戻る」(戻るスワイプ・戻るボタン)で
+// シート→詳細→一覧の順に閉じる。積まないと、ブラウザの戻るでアプリの前に開いていたページへ出てしまう。
+// (詳細は2026-10-11、iPhone の Chrome での実画面報告から。シートは2026-10-15、ユーザー確認「A'で進めてください」)
+// 履歴の現在地 {detail, sheet} は、画面の状態(詳細を開いているか・シートが開いているか)から後追いで合わせる。
+// 「シートを閉じてすぐ詳細へ」のように続けて動いても、history.back() と pushState が入れ違わないよう、
+// 合わせるのは1か所(syncHistory)だけで、降ろすときは popstate が返るのを待ってから続きをやる
+let histWait=0, histQueued=false;
+function sheetOpen(){ return $('#scrim').classList.contains('show'); }
+function histBack(){ histWait++; history.back(); }
+function syncHistory(){
+  if(histWait) return; // 自分で起こした back の popstate 待ち。届いたらもう一度ここへ来る
+  const h=history.state||{}, hd=h.detail||null, hs=!!h.sheet;
+  const wd=STATE.stockId||null, ws=sheetOpen();
+  // 上に積んである層が今の画面と合わなければ、まず1つ降ろす
+  if(hs && (!ws || hd!==wd)){ histBack(); return; }
+  if(!hs && hd && !wd){ histBack(); return; }
+  if(hs) return;
+  // 詳細から詳細へ渡るときは積み増さず差し替える(「戻る」1回で最初の一覧へ)
+  if(wd && hd!==wd){ if(hd) history.replaceState({detail:wd},''); else history.pushState({detail:wd},''); }
+  // シートからシートへ渡るときは、積んだ1つをそのまま使う
+  if(ws) history.pushState({detail:wd, sheet:true},'');
+}
+function scheduleHistSync(){ if(histQueued) return; histQueued=true; setTimeout(()=>{ histQueued=false; syncHistory(); },0); }
 window.addEventListener('popstate', e=>{
-  if(STATE._popIgnore){ STATE._popIgnore=false; return; }
-  const d=e.state && e.state.detail;
-  if($('#scrim').classList.contains('show')){
-    // シートが開いているときの「戻る」は、まずシートを閉じる(入力中なら閉じる確認を出す)。詳細の履歴は積み直す
-    if(STATE.stockId && !d) history.pushState({detail:STATE.stockId},'');
-    requestCloseSheet(); return;
+  if(histWait>0){ histWait--; syncHistory(); return; }
+  const h=e.state||{};
+  if(sheetOpen()){
+    // シートが開いているときの「戻る」は、シートだけを閉じる(入力中なら閉じる確認を出す。
+    // その間はシートが残るので、下の syncHistory がシートの履歴を積み直す)
+    requestCloseSheet(); syncHistory(); return;
   }
-  if(d){ // 「進む」で詳細に戻ってきた。履歴はもう積んであるので積まない
-    if(!stock(d)){ history.replaceState(null,''); return; }
-    if(!STATE.stockId) STATE._prevScroll=viewScroll();
-    STATE.stockId=d; render(); setViewScroll(0); return;
-  }
-  if(STATE.stockId) closeDetail();
+  if(h.detail && stock(h.detail)){ // 「進む」で詳細に戻ってきた。履歴はもう積んであるので積まない
+    if(STATE.stockId!==h.detail){ if(!STATE.stockId) STATE._prevScroll=viewScroll(); STATE.stockId=h.detail; render(); setViewScroll(0); }
+  } else if(STATE.stockId) closeDetail();
+  syncHistory();
 });
 // 詳細画面から一覧へ戻る。ヘッダーの「← 戻る」と画面端スワイプで同じ動きにする
-function backFromDetail(){ leaveDetailHistory(); closeDetail(); }
+function backFromDetail(){ closeDetail(); }
 function closeDetail(){
-  STATE.stockId=null; render();
+  STATE.stockId=null; render(); scheduleHistSync();
   // 一覧のどこを見ていたかに戻す。先頭に飛ばされると、長い一覧では探し直しになる
   setViewScroll(STATE._prevScroll||0);
 }
@@ -986,9 +998,8 @@ function viewScroll(){ const e=document.scrollingElement; return e?e.scrollTop:(
 function setViewScroll(y){ const e=document.scrollingElement; if(e) e.scrollTop=y; $('#view').scrollTop=y; }
 function openStock(id){
   // 一覧から詳細に入るときだけ、直前の画面を控える(詳細から詳細へ渡り歩いても最初の一覧を保つ)
-  if(!STATE.stockId){ STATE._prevScroll=viewScroll(); history.pushState({detail:id},''); }
-  else if(inDetailHistory()) history.replaceState({detail:id},'');
-  STATE.stockId=id; render(); setViewScroll(0);
+  if(!STATE.stockId){ STATE._prevScroll=viewScroll(); }
+  STATE.stockId=id; render(); setViewScroll(0); scheduleHistSync();
 }
 
 function render(){
@@ -2965,20 +2976,20 @@ function runConfirm(){ const f=window._confirmOk; window._confirmOk=null; closeS
 // noClose を渡すと右上の✕を出さない。上端に自前の操作バー(.headbar)を置くシート用で、
 // 「キャンセル」と「✕」が並ぶと同じ役目のものが2つ見えてしまうため
 function openSheet(html, noClose){
-  $('#sheet').innerHTML=(noClose?'':'<button class="sheet-close" onclick="requestCloseSheet()" aria-label="閉じる">✕</button>')+html;
-  $('#sheet').style.transform='';
+  $('#sheet').innerHTML='<div class="sheet-grip" aria-hidden="true"></div>'+(noClose?'':'<button class="sheet-close" onclick="requestCloseSheet()" aria-label="閉じる">✕</button>')+html;
+  $('#sheet').style.transform=''; $('#sheet').style.transition='';
   $('#scrim').classList.add('show');
-  $('#edgeSwipeZone').classList.add('show');
   STATE._sheetSnap=sheetSnapshot();
+  scheduleHistSync(); // ブラウザの「戻る」でシートが閉じるよう、履歴に1つ積む
 }
-function closeSheet(){ $('#scrim').classList.remove('show'); $('#edgeSwipeZone').classList.remove('show'); $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; STATE._sheetSnap=undefined; }
+function closeSheet(){ $('#scrim').classList.remove('show'); $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; $('#sheet').style.transition=''; STATE._sheetSnap=undefined; scheduleHistSync(); }
 // シート内の自由入力(テキスト)だけを対象に、開いた時点からの変更有無を見る。
 // セレクト/チェックボックスだけの画面(メニューや確認ダイアログ)は対象にならず、常に即閉じでよい
 function sheetSnapshot(){
   return [...document.querySelectorAll('#sheet textarea, #sheet input[type="text"], #sheet input:not([type])')].map(e=>e.value).join('␟');
 }
 function sheetDirty(){ return STATE._sheetSnap!==undefined && sheetSnapshot()!==STATE._sheetSnap; }
-// ✕・背景タップ・エッジスワイプの3つの「閉じる」入口はすべてここを通す。
+// ✕・背景タップ・下スワイプ・ブラウザの「戻る」の「閉じる」入口はすべてここを通す。
 // save()後などアプリ側から明示的に閉じる場合はcloseSheet()を直接呼ぶので、この確認は挟まらない
 function requestCloseSheet(){
   if(sheetDirty()){ $('#exitConfirm').classList.add('show'); }
@@ -2986,51 +2997,53 @@ function requestCloseSheet(){
 }
 function cancelCloseSheet(){ $('#exitConfirm').classList.remove('show'); $('#sheet').style.transform=''; }
 function confirmCloseSheet(){ $('#exitConfirm').classList.remove('show'); closeSheet(); }
-// 右エッジからのスワイプでシートを閉じる(ブラウザの戻るジェスチャーに合わせる)。
-// 判定域(#edgeSwipeZone、左端30%)は広めなので、単なるタップやシートの縦スクロールを
-// 巻き込まないよう、動き出しで「横方向のドラッグか」を見極めてから初めて介入する。
-// タップ/縦スクロールと判定した場合は、帯の下にある本来の要素に処理を渡す
+// シートを下へ引いて閉じる(2026-10-15、ユーザー確認「A'で進めてください」)。
+// iOS・Android とも、下から出るシートは下へ引いて閉じ、左端からの右スワイプは「前の画面に戻る」の操作。
+// 以前は左端30%に帯を重ねて右スワイプで閉じていたが、一般的な感覚と逆で、ブラウザでは Chrome 自身の
+// 戻るスワイプとも取り合っていたのでやめた(ブラウザの「戻る」は履歴で閉じる。上の syncHistory)。
+// 中身が一番上までスクロールされているときに下へ引いた場合だけシートを動かし、それ以外(中身のスクロール、
+// ページャー等の横の操作、タップ)は邪魔しない。離したとき十分に引いていれば(または素早く払えば)閉じる。
+// 書きかけがあるときは元の位置に戻して閉じる確認を出す(requestCloseSheet)
 (function(){
-  const THRESH=70, DECIDE=10;
-  let sx=0, sy=0, lastY=0, state='idle'; // idle|pending|swipe|scroll
-  let tapTarget=null;
-  const zone=$('#edgeSwipeZone'), sheet=$('#sheet');
-  function underneath(x,y){
-    zone.style.pointerEvents='none';
-    const el=document.elementFromPoint(x,y);
-    zone.style.pointerEvents='';
-    return el;
+  const THRESH=80, FLICK_MIN=30, FLICK_V=.6, DECIDE=10; // px, px, px/ms, px
+  const sheet=$('#sheet');
+  let sy=0, sx=0, dy=0, state='idle', lastY=0, lastT=0, v=0; // idle|pending|drag
+  function scrolledInside(el){ // 指の下で、まだ上へスクロールできる部品(テキスト欄など)があれば譲る
+    for(let n=el; n && n!==sheet; n=n.parentElement){ if(n.scrollTop>0) return true; }
+    return false;
   }
-  zone.addEventListener('touchstart', e=>{
-    if($('#exitConfirm').classList.contains('show')) return;
-    const t=e.touches[0];
-    sx=t.clientX; sy=lastY=t.clientY; state='pending';
-    tapTarget=underneath(sx, sy);
+  function settle(y, after){ sheet.style.transition='transform .15s ease-out'; sheet.style.transform=`translateY(${y}px)`; setTimeout(()=>{ sheet.style.transition=''; if(!y) sheet.style.transform=''; if(after) after(); },150); }
+  sheet.addEventListener('touchstart', e=>{
+    state='idle';
+    if(e.touches.length!==1 || $('#exitConfirm').classList.contains('show')) return;
+    if(sheet.scrollTop>0 || scrolledInside(e.target)) return;
+    const t=e.touches[0]; sx=t.clientX; sy=lastY=t.clientY; lastT=e.timeStamp; dy=0; v=0; state='pending';
   }, {passive:true});
-  zone.addEventListener('touchmove', e=>{
+  sheet.addEventListener('touchmove', e=>{
     if(state==='idle') return;
-    const t=e.touches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
+    const t=e.touches[0], ddx=t.clientX-sx; dy=t.clientY-sy;
     if(state==='pending'){
-      if(Math.abs(dx)<DECIDE && Math.abs(dy)<DECIDE) return; // タップかどうかまだ様子見
-      state=(dx>0 && Math.abs(dx)>Math.abs(dy)) ? 'swipe' : 'scroll';
+      if(Math.abs(ddx)<DECIDE && Math.abs(dy)<DECIDE) return;       // タップかどうかまだ様子見
+      if(!(dy>0 && dy>Math.abs(ddx)) || sheet.scrollTop>0){ state='idle'; return; } // 上方向・横方向は中身の操作
+      state='drag';
     }
-    if(state==='swipe'){ sheet.style.transform=`translateX(${dx}px)`; if(e.cancelable) e.preventDefault(); }
-    else if(state==='scroll'){ sheet.scrollTop-=(t.clientY-lastY); if(e.cancelable) e.preventDefault(); }
-    lastY=t.clientY;
+    const dt=e.timeStamp-lastT; if(dt>0) v=(t.clientY-lastY)/dt; lastY=t.clientY; lastT=e.timeStamp;
+    sheet.style.transition=''; sheet.style.transform=`translateY(${Math.max(0,dy)}px)`;
+    if(e.cancelable) e.preventDefault();
   }, {passive:false});
-  zone.addEventListener('touchend', ()=>{
-    if(state==='pending' && tapTarget) tapTarget.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
-    if(state==='swipe'){
-      const m=sheet.style.transform.match(/translateX\(([\d.]+)px\)/); const dx=m?parseFloat(m[1]):0;
-      sheet.style.transition='transform .15s ease-out'; sheet.style.transform='translateX(0)';
-      setTimeout(()=>{ sheet.style.transition=''; }, 150);
-      if(dx>THRESH) requestCloseSheet();
+  function end(){
+    if(state==='drag'){
+      const close=dy>THRESH || (dy>FLICK_MIN && v>FLICK_V);
+      if(close && !sheetDirty()) settle(sheet.offsetHeight, closeSheet);
+      else { settle(0); if(close) requestCloseSheet(); }
     }
-    state='idle'; tapTarget=null;
-  }, {passive:true});
+    state='idle';
+  }
+  sheet.addEventListener('touchend', end, {passive:true});
+  sheet.addEventListener('touchcancel', end, {passive:true});
 })();
 // 詳細画面(銘柄・市場)を、画面左側からの右スワイプで閉じて一覧に戻す。
-// シートのエッジスワイプ(#edgeSwipeZone)と違い、こちらは帯を重ねず #view 上で直接判定する。
+// シートを閉じる操作(シートを下へ引く)とは別に、こちらは #view 上で直接判定する。
 // 帯を重ねると、その下にあるメモ行・分析項目のタップや指標ページャーの横スワイプを奪ってしまうため
 //
 // 見え方はChrome(iPhone)の戻るスワイプに合わせる(2026-10-10、ユーザーが実画面のキャプチャで指定):
@@ -3906,8 +3919,8 @@ function sheetBackup(){
     <div class="hint" style="margin-top:10px">書き出したファイルはダウンロードフォルダに保存されます。復元すると現在のデータは上書きされます。</div>`);
 }
 
-// 再読み込みは一覧から始まる。前に積んだ詳細の履歴が現在地に残っていると、次の「戻る」が空振りするので消す
-if(inDetailHistory()) history.replaceState(null,'');
+// 再読み込みは一覧から始まる。前に積んだ詳細・シートの履歴が現在地に残っていると、次の「戻る」が空振りするので消す
+if(history.state && (history.state.detail || history.state.sheet)) history.replaceState(null,'');
 // スクロール位置はアプリ側で戻す(backFromDetail)。ブラウザにも戻させると、シートを閉じただけの詳細に一覧の位置が当たる
 if('scrollRestoration' in history) history.scrollRestoration='manual';
 render();
