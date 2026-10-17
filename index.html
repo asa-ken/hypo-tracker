@@ -2450,7 +2450,15 @@ function commitImport(){
   toast(n+'件を読み込みました'+(madeRem?` · リマインダー${madeRem}件を登録`:''));
   $('#mdIn').value=''; $('#parseOut').innerHTML='';
   STATE._remPick=null;
+  // 取り込んだら「市場・銘柄分析」タブの中で詳細を出す。戻る先(「← 戻る」・ブラウザの「戻る」)は
+  // 市場・銘柄分析の一覧。取り込みタブのまま詳細を出すと、戻る先が空の取り込み画面になっていた
+  // (2026-10-17 ユーザー判断「会話取り込んだら『銘柄分析』タブ移動でいい。戻るは銘柄トップにすれば自然」)。
+  // 銘柄詳細から取り込みに来たときは、その詳細を開く前に見ていた一覧の位置に戻す
+  const prevScroll=STATE.askStockId?(STATE._prevScroll||0):0;
+  STATE.askStockId=null;
+  go('analysis');
   openStock(s.id);
+  STATE._prevScroll=prevScroll;
 }
 // 取り込みの項目名解決は全マスター横断で行う(粒度を跨いだ貼り付けでも取りこぼさない)
 function allSectionMasters(){ return [DB.sectionMaster, DB.marketSectionMaster, DB.industrySectionMaster, DB.themeSectionMaster].filter(Boolean); }
